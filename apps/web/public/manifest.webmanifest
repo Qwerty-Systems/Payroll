@@ -1,12 +1,15 @@
 {
-  "name": "JengaFlow by Qwerty",
-  "short_name": "JengaFlow",
+  "id": "/",
+  "name": "CrewLedger by Qwerty Systems",
+  "short_name": "CrewLedger",
   "description": "Construction workforce, site operations and payroll management",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#f4f6f3",
   "theme_color": "#14251d",
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "/icons/app-icon.svg",
