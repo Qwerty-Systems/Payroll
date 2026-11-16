@@ -11,6 +11,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { TenantAccessGuard } from './auth/tenant-access.guard';
 import { OperationsModule } from './operations/operations.module';
 import { PayrollModule } from './payroll/payroll.module';
+import { OrganizationModule } from './organization/organization.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { PayrollModule } from './payroll/payroll.module';
     StorageModule,
     OperationsModule,
     PayrollModule,
+    OrganizationModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
