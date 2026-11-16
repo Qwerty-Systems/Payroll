@@ -2,7 +2,7 @@ import {
   AppBar, Box, Button, Card, CardContent, Chip, Container, Divider, Stack,
   Toolbar, Typography, useMediaQuery, useTheme,
 } from '@mui/material';
-import Grid from '@mui/material/Grid2';
+import Grid from '@mui/material/Grid';
 import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import ConstructionRounded from '@mui/icons-material/ConstructionRounded';
 import OfflineBoltRounded from '@mui/icons-material/OfflineBoltRounded';
