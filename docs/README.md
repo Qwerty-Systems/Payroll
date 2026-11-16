@@ -18,3 +18,4 @@
 - [16 Implementation status](16-IMPLEMENTATION-STATUS.md)
 - [17 Kenya statutory baseline](17-KENYA-STATUTORY-BASELINE.md)
 - [18 Offline-first and Coolify](18-OFFLINE-FIRST-AND-COOLIFY.md)
+- [19 Production operations](19-PRODUCTION-OPERATIONS.md)
