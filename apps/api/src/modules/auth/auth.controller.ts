@@ -3,9 +3,11 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
+import { Public } from './public.decorator';
 import { GoogleSignInDto } from './auth.dto';
 
 @ApiTags('authentication')
+@Public()
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
