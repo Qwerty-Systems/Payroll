@@ -1,12 +1,13 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { IsDateString } from 'class-validator';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
 import { CreateBranchDto, CreateCostCentreDto, CreateDepartmentDto, CreateWorkerAssignmentDto } from './organization.dto';
 import { OrganizationService } from './organization.service';
 
 type TenantRequest=Request & {tenant:{id:string;userId:string}};
-class EndAssignmentDto { effectiveTo!:string; }
+class EndAssignmentDto { @IsDateString() effectiveTo!:string; }
 @ApiTags('organization')
 @ApiBearerAuth()
 @Controller('tenant/organization')
