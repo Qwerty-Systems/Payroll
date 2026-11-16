@@ -4,6 +4,7 @@ import { Auth0Provider } from '@auth0/auth0-react';
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import App from './App';
 import { auth0Config } from './config';
+import { navigateTo } from './navigation';
 
 const theme = createTheme({
   palette: {
@@ -50,7 +51,10 @@ function Root() {
       const returnTo = typeof appState?.returnTo === 'string' && appState.returnTo.startsWith('/')
         ? appState.returnTo
         : '/app';
-      window.location.replace(returnTo);
+
+      // Keep the callback transition inside the SPA. A document reload clears
+      // Auth0's in-memory cache before the authenticated route can use it.
+      navigateTo(returnTo, true);
     }}
   >{app}</Auth0Provider>;
 }
