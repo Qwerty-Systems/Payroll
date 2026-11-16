@@ -69,19 +69,33 @@ Use MIGRATIONS_DATABASE_USERNAME and MIGRATIONS_DATABASE_PASSWORD only for migra
 
 The current managed Redis connection is supplied as REDIS_HOST=157.245.160.198 and REDIS_PORT=6399. Set REDIS_PASSWORD only if that Redis instance requires authentication. The application builds a Redis connection URL from these fields and URL-encodes the password. Leave REDIS_URL empty to use the host/port settings. The default is non-TLS; enable REDIS_TLS only after confirming TLS is enabled on the Redis listener. Keep the Redis port restricted to the API server/network and do not expose it publicly.
 
-## 3. Google sign-in setup
+## 3. Auth0 and Google social sign-in
 
-Create an OAuth 2.0 Web application client in Google Cloud Console and enable Google Identity Services. Configure:
-- Authorized JavaScript origin: https://jengaflow.qwerty.co.ke
-- Add each actual tenant origin only if Google sign-in is intentionally offered there.
-- Do not add wildcard origins.
-- No redirect URI is needed for the GIS JavaScript credential flow used here.
+JengaFlow's current web application uses the Auth0 React SDK. Google is configured as an Auth0 social connection; the browser does not exchange Google ID tokens directly with the JengaFlow API.
 
-Set the same Web client ID in GOOGLE_CLIENT_ID for API verification and VITE_GOOGLE_CLIENT_ID for the frontend build. Set VITE_API_BASE_URL to the API origin only if the browser is not using the same-origin Nginx API proxy. Rebuild the web image after changing Vite variables because they are compiled into the static bundle.
+Create:
+- One Auth0 **Single Page Application** client for the React/Vite frontend.
+- One Auth0 API resource whose identifier is exactly the API audience configured in JengaFlow.
 
-The API verifies the Google ID token signature, audience, subject and verified email. It stores the Google subject, creates a server-side session, returns a short-lived access JWT and sets a random refresh token in an HttpOnly, Secure, SameSite=Lax cookie. Refresh tokens are stored only as HMAC hashes and rotated on refresh. Access tokens must be held in memory by the client, not localStorage.
+Configure the SPA application:
+- Allowed Callback URLs: `https://jengaflow.qwerty.co.ke/auth/callback`
+- Allowed Logout URLs: `https://jengaflow.qwerty.co.ke`
+- Allowed Web Origins: `https://jengaflow.qwerty.co.ke`
+- Use the SPA client ID in `VITE_AUTH0_CLIENT_ID`. Do not use the API identifier or a different Auth0 application's client ID.
 
-**Important current scope:** this creates and authenticates a global JengaFlow identity. It does not yet create a company/tenant, link an existing password account, enforce tenant membership, or grant tenant roles. Those must be completed before any payroll/workforce endpoints are exposed. Never infer tenant access from a subdomain or email address.
+Configure the Google OAuth client used by the Auth0 Google connection with the callback URI shown by Auth0 for that connection. For a standard Auth0 tenant domain this is `https://<AUTH0_DOMAIN>/login/callback`; if Auth0 displays a custom or regional callback domain, use that exact URI. Google must return to Auth0, not directly to the JengaFlow `/auth/callback` URL.
+
+Set:
+- `AUTH0_ISSUER_URL` to the Auth0 issuer including its trailing slash.
+- `AUTH0_AUDIENCE` to the API resource identifier.
+- `VITE_AUTH0_DOMAIN` and `VITE_AUTH0_CLIENT_ID` to the same Auth0 tenant and SPA application.
+- `VITE_AUTH0_AUDIENCE` to the API resource identifier.
+- `VITE_AUTH0_REDIRECT_URI=https://jengaflow.qwerty.co.ke/auth/callback`.
+- `VITE_API_BASE_URL=https://apijengaflow.qwerty.co.ke`.
+
+The frontend obtains access tokens through `getAccessTokenSilently()`. The API validates Auth0 RS256 access tokens against the tenant JWKS, issuer and audience. Do not put an Auth0 client secret in the browser or frontend build. Vite variables are embedded in static assets unless runtime configuration overrides them; rebuild the web image when build-time values change and verify the deployed `window.__JENGAFLOW_CONFIG__` values after deployment.
+
+After changing Auth0 settings, test a fresh login, callback processing, API `/auth/me`, refresh/silent token renewal, logout and a second login. Never share callback URLs containing `code`, `state` or tokens.
 
 ## 4. Secrets and environment
 
@@ -152,10 +166,10 @@ Before production, additionally:
 
 ## 8. Deployment sequence
 
-1. Configure Coolify variables and Google authorized origins.
+1. Configure Coolify variables, the Auth0 SPA callback/origin allowlists, and the Google OAuth callback URI shown by Auth0.
 2. Provision least-privilege database roles; run migrations with the migrator role.
 3. Build and deploy API/web/backup services.
-4. Confirm liveness and readiness, Google sign-in, session refresh and logout.
+4. Confirm liveness and readiness, Auth0/Google sign-in, silent token renewal, API identity loading and logout.
 5. Trigger a manual backup, verify the encrypted object and checksum, and perform an isolated restore.
 6. Check application logs and monitor 5xx rate, latency, database connections, Redis availability, object storage failures, queue depth and backup age.
 7. Deploy only after CI, migrations, security review and restore drill pass.
