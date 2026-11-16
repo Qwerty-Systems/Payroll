@@ -16,11 +16,11 @@ The product name should be:
 - Not so generic that it is difficult to distinguish in app stores or search results.
 
 ## 14.4 Candidate names
-1. **CrewLedger** — clear construction association with a broad workflow/operations meaning. Suggested primary candidate.
+1. **JengaFlow** — alternate name with a clear construction association and broad workflow/operations meaning.
 2. **JengaWorks** — friendly and broad; suitable for workforce and site operations.
 3. **SiteLedger** — professional and finance-oriented; strongest if payroll and labour costing remain the centre.
 4. **FundiFlow** — memorable local feel; may sound more worker-focused than enterprise software.
-5. **CrewLedger** — clear connection between workforce and money; less explicitly Kenyan.
+5. **CrewLedger** — selected name; clearly connects workforce and financial accountability.
 6. **BuildDesk** — broad construction business workspace; simple but more generic.
 7. **JengaSuite** — signals a larger suite of connected business modules.
 8. **SitePilot** — modern operations feel; does not immediately communicate payroll.
