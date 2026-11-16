@@ -179,9 +179,9 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     finally { setBusy(false); }
   }
 
-  const currentRows = section === 'workers' ? data.workers : section === 'projects' ? data.projects :
+  const currentRows = (section === 'workers' ? data.workers : section === 'projects' ? data.projects :
     section === 'attendance' ? data.attendance : section === 'payroll' ? data.periods :
-    section === 'people' ? data.members : section === 'organization' ? data.branches : [];
+    section === 'people' ? data.members : section === 'organization' ? data.branches : []) ?? [];
 
   return <Box sx={{ minHeight: '100vh', bgcolor: '#F7F5EF', color: '#17372B' }}>
     <AppBar position="sticky" elevation={0} sx={{ bgcolor: '#17372B' }}>
