@@ -24,6 +24,25 @@ Create a dedicated runtime role and a separate migration/owner role. Adapt the d
 
 Run migrations with the migrator/owner identity. Grant the runtime role only the required schema/table/sequence privileges after migrations. Do not grant it SUPERUSER, BYPASSRLS, CREATEDB, CREATEROLE, or ownership of tenant tables. Enable and FORCE RLS on tenant-owned tables and ensure the runtime role is subject to those policies. Keep platform/global reference data access narrowly scoped.
 
+
+For a fresh database, grant the migrator schema creation rights and make it the owner of the application schema before running migrations:
+
+    GRANT CONNECT ON DATABASE "JengaFlow" TO jengaflow_app, jengaflow_migrator, jengaflow_backup;
+    GRANT USAGE, CREATE ON SCHEMA public TO jengaflow_migrator;
+    ALTER SCHEMA public OWNER TO jengaflow_migrator;
+
+After migrations, grant the runtime role access to the application tables and sequences. Repeat for any additional application schemas:
+
+    GRANT USAGE ON SCHEMA public TO jengaflow_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO jengaflow_app;
+    GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO jengaflow_app;
+    ALTER DEFAULT PRIVILEGES FOR ROLE jengaflow_migrator IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO jengaflow_app;
+    ALTER DEFAULT PRIVILEGES FOR ROLE jengaflow_migrator IN SCHEMA public
+      GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO jengaflow_app;
+
+Review grants against the actual schema before applying them. Do not grant ownership of tenant tables or BYPASSRLS to the runtime role. The migrator is a privileged deployment identity and must never be used by the running API.
+
 The DATABASE_USERNAME template is jengaflow_app. Set DATABASE_PASSWORD to that role password. Do not use the postgres administrative account in the API container.
 
 
