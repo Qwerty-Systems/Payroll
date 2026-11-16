@@ -40,3 +40,15 @@ All tenant-owned repository access must run through TenantTransactionService aft
 
 ## Not yet production-ready
 Authentication and tenant provisioning endpoints, authorization guards, worker/project/site/attendance CRUD, full payroll calculation and finalization, statutory approval screens, authenticated sync endpoint, conflict review UI, Qwerty sales workspace, billing/payment integrations and production end-to-end validation are not complete. Do not load real personal or payroll data into this foundation.
+
+
+## Production hardening additions (in progress)
+
+- Google Identity Services ID-token verification and refresh-session rotation foundations added.
+- Global default-deny JWT guard and explicit public route metadata added.
+- API throttling, Helmet headers, strict DTO validation and production environment checks added.
+- SeaweedFS S3 private-object service and dependency readiness check added.
+- Scheduled encrypted PostgreSQL backup container, checksum sidecar and retention configuration added.
+- PostgreSQL 17 migration validation added to CI.
+
+These additions do not make the application production-ready by themselves. Tenant provisioning/membership authorization, tenant-aware file controllers, payroll workflows, full application UI, offline sync API, observability/alerting, dependency scanning, end-to-end tests and a successful backup restore drill remain release blockers. See docs/19-PRODUCTION-OPERATIONS.md.
