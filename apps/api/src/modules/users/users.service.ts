@@ -19,7 +19,7 @@ export class UsersService {
     const tokenHash=createHash('sha256').update(token).digest('hex');
     return this.tenantDb.run(tenantId,async m=>{
       const email=dto.email.trim().toLowerCase();
-      const existing=await m.query("SELECT id FROM tenant_memberships tm JOIN platform_users u ON u.id=tm.user_id WHERE tm.tenant_id=$1 AND lower(u.email)=$2 AND tm.status='active' LIMIT 1",[tenantId,email]);
+      const existing=await m.query("SELECT tm.id FROM tenant_memberships tm JOIN platform_users u ON u.id=tm.user_id WHERE tm.tenant_id=$1 AND lower(u.email)=$2 AND tm.status='active' LIMIT 1",[tenantId,email]);
       if(existing.length)throw new ConflictException('This person is already an active member of the company.');
       const rows=await m.query("INSERT INTO tenant_invitations(tenant_id,email,role,token_hash,expires_at,invited_by) VALUES($1,$2,$3,$4,now()+interval '7 days',$5) RETURNING id,email,role,expires_at AS \"expiresAt\",created_at AS \"createdAt\"",[tenantId,email,dto.role,tokenHash,actorId]);
       await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'user.invitation.created','tenant_invitation',$3,$4::jsonb)",[tenantId,actorId,rows[0].id,JSON.stringify({email,role:dto.role})]);
