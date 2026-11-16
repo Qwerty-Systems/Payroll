@@ -26,6 +26,26 @@ Run migrations with the migrator/owner identity. Grant the runtime role only the
 
 The DATABASE_USERNAME template is jengaflow_app. Set DATABASE_PASSWORD to that role password. Do not use the postgres administrative account in the API container.
 
+
+### Dedicated backup and migration roles
+
+Use a third identity for backups. The backup process only needs to read the database:
+
+    CREATE ROLE jengaflow_backup LOGIN PASSWORD 'GENERATE_ANOTHER_LONG_PASSWORD';
+    GRANT CONNECT ON DATABASE "JengaFlow" TO jengaflow_backup;
+    GRANT USAGE ON SCHEMA public TO jengaflow_backup;
+    GRANT SELECT ON ALL TABLES IN SCHEMA public TO jengaflow_backup;
+    GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO jengaflow_backup;
+
+Configure default privileges for the role that owns newly created tables, so future migrations remain dumpable:
+
+    ALTER DEFAULT PRIVILEGES FOR ROLE jengaflow_migrator IN SCHEMA public
+      GRANT SELECT ON TABLES TO jengaflow_backup;
+    ALTER DEFAULT PRIVILEGES FOR ROLE jengaflow_migrator IN SCHEMA public
+      GRANT SELECT ON SEQUENCES TO jengaflow_backup;
+
+Use MIGRATIONS_DATABASE_USERNAME and MIGRATIONS_DATABASE_PASSWORD only for migration commands. Use DATABASE_USERNAME and DATABASE_PASSWORD for the API runtime. Use BACKUP_DATABASE_USERNAME and BACKUP_DATABASE_PASSWORD for the scheduled backup container. The backup identity must not have write privileges.
+
 ## 3. Google sign-in setup
 
 Create an OAuth 2.0 Web application client in Google Cloud Console and enable Google Identity Services. Configure:
