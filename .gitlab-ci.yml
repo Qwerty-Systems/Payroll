@@ -7,9 +7,14 @@ variables:
   DOCKER_TLS_VERIFY: "1"
   DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
   DOCKER_DRIVER: overlay2
+  DOCKER_BUILDKIT: "1"
   QWERTY_REGISTRY: "registry.qwerty.co.ke"
   REGISTRY_NAMESPACE: "jengaflow"
+  IMAGE_PLATFORM: "linux/amd64"
 
+# One pipeline job builds all three deployable images from the repository root.
+# Only the default branch and Git release tags publish to the registry.
+# Merge requests and feature branches still build the images as validation.
 build-and-publish-images:
   stage: build
   image: docker:27.5.1-cli
@@ -17,65 +22,114 @@ build-and-publish-images:
     - name: docker:27.5.1-dind
       alias: docker
       command: ["--tls=true"]
+  interruptible: true
+  timeout: 60m
   before_script:
     - |
-      if [ "${CI_COMMIT_BRANCH:-}" = "$CI_DEFAULT_BRANCH" ] || [ -n "${CI_COMMIT_TAG:-}" ]; then
-        if [ -z "${DOCKER_REGISTRY_USER:-}" ] || [ -z "${DOCKER_REGISTRY_PASS:-}" ]; then
-          echo "Publishing requires DOCKER_REGISTRY_USER and DOCKER_REGISTRY_PASS GitLab CI/CD variables."
-          exit 1
-        fi
-        echo "$DOCKER_REGISTRY_PASS" | docker login "$QWERTY_REGISTRY" --username "$DOCKER_REGISTRY_USER" --password-stdin
+      set -eu
+      echo "Registry: $QWERTY_REGISTRY"
+      echo "Namespace: $REGISTRY_NAMESPACE"
+      echo "Commit: $CI_COMMIT_SHA"
+      echo "Default branch: ${CI_DEFAULT_BRANCH:-<unset>}"
+      echo "Branch: ${CI_COMMIT_BRANCH:-<none>}"
+      echo "Tag: ${CI_COMMIT_TAG:-<none>}"
+
+      if [ "${PUBLISH_IMAGES:-false}" = "true" ]; then
+        : "${DOCKER_REGISTRY_USER:?Missing GitLab CI/CD variable DOCKER_REGISTRY_USER}"
+        : "${DOCKER_REGISTRY_PASS:?Missing GitLab CI/CD variable DOCKER_REGISTRY_PASS}"
+        echo "$DOCKER_REGISTRY_PASS" | docker login "$QWERTY_REGISTRY" \
+          --username "$DOCKER_REGISTRY_USER" --password-stdin
+      else
+        echo "Non-release pipeline: images will be built for validation but not pushed."
       fi
-    - docker buildx create --name jengaflow-builder --driver docker-container --use
+    - docker version
+    - docker buildx version
+    - docker buildx create --name "jengaflow-${CI_JOB_ID}" --driver docker-container --use
     - docker buildx inspect --bootstrap
   script:
     - |
       set -eu
 
       PREFIX="$QWERTY_REGISTRY/$REGISTRY_NAMESPACE"
-      PUSH_IMAGES="false"
-      if [ "${CI_COMMIT_BRANCH:-}" = "$CI_DEFAULT_BRANCH" ] || [ -n "${CI_COMMIT_TAG:-}" ]; then
-        PUSH_IMAGES="true"
-      fi
 
-      for COMPONENT in api web backup; do
-        case "$COMPONENT" in
-          api) DOCKERFILE="apps/api/Dockerfile" ;;
-          web) DOCKERFILE="apps/web/Dockerfile" ;;
-          backup) DOCKERFILE="docker/backup/Dockerfile" ;;
-        esac
-
+      build_image() {
+        COMPONENT="$1"
+        DOCKERFILE="$2"
         IMAGE="$PREFIX/$COMPONENT"
-        TAG_ARGS="--tag $IMAGE:$CI_COMMIT_SHA"
 
-        if [ -n "${CI_COMMIT_TAG:-}" ]; then
-          TAG_ARGS="$TAG_ARGS --tag $IMAGE:$CI_COMMIT_TAG"
-        elif [ "${CI_COMMIT_BRANCH:-}" = "$CI_DEFAULT_BRANCH" ]; then
-          TAG_ARGS="$TAG_ARGS --tag $IMAGE:$CI_COMMIT_REF_SLUG"
-        fi
+        echo "============================================================"
+        echo "Building $IMAGE:$CI_COMMIT_SHA using $DOCKERFILE"
+        echo "============================================================"
 
-        echo "Building $IMAGE for commit $CI_COMMIT_SHA"
-        if [ "$PUSH_IMAGES" = "true" ]; then
-          # shellcheck disable=SC2086
-          docker buildx build --platform linux/amd64 --file "$DOCKERFILE" $TAG_ARGS \
-            --build-arg VITE_AUTH0_DOMAIN="${VITE_AUTH0_DOMAIN:-}" \
-            --build-arg VITE_AUTH0_CLIENT_ID="${VITE_AUTH0_CLIENT_ID:-}" \
-            --build-arg VITE_AUTH0_AUDIENCE="${VITE_AUTH0_AUDIENCE:-}" \
-            --build-arg VITE_AUTH0_REDIRECT_URI="${VITE_AUTH0_REDIRECT_URI:-}" \
-            --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-}" --push .
+        if [ "${PUBLISH_IMAGES:-false}" = "true" ]; then
+          if [ -n "${CI_COMMIT_TAG:-}" ]; then
+            docker buildx build \
+              --platform "$IMAGE_PLATFORM" \
+              --file "$DOCKERFILE" \
+              --tag "$IMAGE:$CI_COMMIT_SHA" \
+              --tag "$IMAGE:$CI_COMMIT_TAG" \
+              --build-arg VITE_AUTH0_DOMAIN="${VITE_AUTH0_DOMAIN:-}" \
+              --build-arg VITE_AUTH0_CLIENT_ID="${VITE_AUTH0_CLIENT_ID:-}" \
+              --build-arg VITE_AUTH0_AUDIENCE="${VITE_AUTH0_AUDIENCE:-}" \
+              --build-arg VITE_AUTH0_REDIRECT_URI="${VITE_AUTH0_REDIRECT_URI:-}" \
+              --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-}" \
+              --provenance=false \
+              --push .
+          else
+            docker buildx build \
+              --platform "$IMAGE_PLATFORM" \
+              --file "$DOCKERFILE" \
+              --tag "$IMAGE:$CI_COMMIT_SHA" \
+              --tag "$IMAGE:$CI_COMMIT_REF_SLUG" \
+              --build-arg VITE_AUTH0_DOMAIN="${VITE_AUTH0_DOMAIN:-}" \
+              --build-arg VITE_AUTH0_CLIENT_ID="${VITE_AUTH0_CLIENT_ID:-}" \
+              --build-arg VITE_AUTH0_AUDIENCE="${VITE_AUTH0_AUDIENCE:-}" \
+              --build-arg VITE_AUTH0_REDIRECT_URI="${VITE_AUTH0_REDIRECT_URI:-}" \
+              --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-}" \
+              --provenance=false \
+              --push .
+          fi
+
+          echo "Verifying pushed image: $IMAGE:$CI_COMMIT_SHA"
+          docker buildx imagetools inspect "$IMAGE:$CI_COMMIT_SHA"
         else
-          # Merge requests and feature branches validate builds but do not publish deployable tags.
-          docker buildx build --platform linux/amd64 --file "$DOCKERFILE" --tag "$IMAGE:$CI_COMMIT_SHA" \
+          docker buildx build \
+            --platform "$IMAGE_PLATFORM" \
+            --file "$DOCKERFILE" \
+            --tag "$IMAGE:$CI_COMMIT_SHA" \
             --build-arg VITE_AUTH0_DOMAIN="${VITE_AUTH0_DOMAIN:-}" \
             --build-arg VITE_AUTH0_CLIENT_ID="${VITE_AUTH0_CLIENT_ID:-}" \
             --build-arg VITE_AUTH0_AUDIENCE="${VITE_AUTH0_AUDIENCE:-}" \
             --build-arg VITE_AUTH0_REDIRECT_URI="${VITE_AUTH0_REDIRECT_URI:-}" \
-            --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-}" --load .
+            --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-}" \
+            --provenance=false \
+            --load .
         fi
-      done
+      }
+
+      # Keep the build context at the repository root: all three Dockerfiles
+      # copy files using repository-root-relative paths.
+      build_image api apps/api/Dockerfile
+      build_image web apps/web/Dockerfile
+      build_image backup docker/backup/Dockerfile
+
+      if [ "${PUBLISH_IMAGES:-false}" = "true" ]; then
+        echo "All three images were pushed and their commit-SHA manifests were verified."
+        echo "Coolify IMAGE_TAG=$CI_COMMIT_SHA"
+      fi
   after_script:
     - docker logout "$QWERTY_REGISTRY" || true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH'
+      variables:
+        PUBLISH_IMAGES: "false"
     - if: '$CI_COMMIT_TAG'
+      variables:
+        PUBLISH_IMAGES: "true"
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      variables:
+        PUBLISH_IMAGES: "true"
+    - if: '$CI_COMMIT_BRANCH'
+      variables:
+        PUBLISH_IMAGES: "false"
+    - when: never
