@@ -21,7 +21,7 @@ export class AuthService {
 
   private accessTtlSeconds(): number {
     const raw = process.env.JWT_ACCESS_TTL ?? '15m';
-    const match = /^(\\d+)(s|m|h|d)$/.exec(raw);
+    const match = /^(\d+)(s|m|h|d)$/.exec(raw);
     if (!match) return 900;
     const amount = Number(match[1]);
     const multiplier = { s: 1, m: 60, h: 3600, d: 86400 }[match[2] as 's' | 'm' | 'h' | 'd'];
