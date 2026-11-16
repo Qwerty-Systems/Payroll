@@ -73,6 +73,31 @@ describe('AuthenticatedApp', () => {
     expect(screen.getByText(/owner · trial/i)).toBeInTheDocument();
   });
 
+  it('generates a workspace slug from the display name and preserves a manual edit', async () => {
+    auth.isAuthenticated = true;
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ authenticated: true, provisioned: false, identity: { email: 'owner@example.test' }, memberships: [] }),
+    } as Response);
+
+    render(<AuthenticatedApp />);
+    await screen.findByText(/your identity is ready for company setup/i);
+
+    const displayName = screen.getByLabelText(/display name/i);
+    const slug = screen.getByLabelText(/workspace url slug/i);
+
+    await import('@testing-library/user-event').then(async ({ default: userEvent }) => {
+      const user = userEvent.setup();
+      await user.type(displayName, 'Test Company');
+      expect(slug).toHaveValue('test-company');
+      await user.clear(slug);
+      await user.type(slug, 'custom-workspace');
+      await user.clear(displayName);
+      await user.type(displayName, 'Another Company');
+      expect(slug).toHaveValue('custom-workspace');
+    });
+  });
+
   it('shows an actionable message when the API rejects the access token', async () => {
     auth.isAuthenticated = true;
     vi.mocked(fetch).mockResolvedValue({ ok: false, status: 401 } as Response);
