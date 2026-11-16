@@ -55,7 +55,7 @@ export class AuthService {
       await runner.commitTransaction();
       const accessToken = await this.jwt.signAsync(
         { sub: user.id, email: user.email },
-        { secret: process.env.JWT_ACCESS_SECRET, expiresIn: process.env.JWT_ACCESS_TTL ?? '15m' },
+        { secret: process.env.JWT_ACCESS_SECRET, expiresIn: process.env.JWT_ACCESS_TTL ?? '15m', issuer: 'jengaflow-api', audience: 'jengaflow-web' },
       );
       return {
         result: {
@@ -99,7 +99,7 @@ export class AuthService {
       await runner.commitTransaction();
       const accessToken = await this.jwt.signAsync(
         { sub: user.id, email: user.email },
-        { secret: process.env.JWT_ACCESS_SECRET, expiresIn: process.env.JWT_ACCESS_TTL ?? '15m' },
+        { secret: process.env.JWT_ACCESS_SECRET, expiresIn: process.env.JWT_ACCESS_TTL ?? '15m', issuer: 'jengaflow-api', audience: 'jengaflow-web' },
       );
       return {
         result: { accessToken, expiresIn: 900, user: { id: user.id, email: user.email, name: user.display_name, avatarUrl: user.avatar_url } },
