@@ -50,7 +50,9 @@ async function bootstrap(): Promise<void> {
       throw new Error('Use a dedicated least-privilege DATABASE_USERNAME; do not run JengaFlow as postgres or root.');
     }
     if (!process.env.DATABASE_URL && !process.env.DATABASE_PASSWORD) throw new Error('DATABASE_PASSWORD is required for the runtime database role.');
-    for (const key of ['REDIS_URL', 'SEAWEEDFS_ACCESS_KEY', 'SEAWEEDFS_SECRET_KEY', 'SEAWEEDFS_BUCKET']) {
+    if (!process.env.REDIS_URL && !process.env.REDIS_HOST) throw new Error('Configure REDIS_URL or REDIS_HOST/REDIS_PORT for production.');
+    if (process.env.REDIS_HOST && (!Number.isInteger(Number(process.env.REDIS_PORT ?? 6379)) || Number(process.env.REDIS_PORT ?? 6379) < 1 || Number(process.env.REDIS_PORT ?? 6379) > 65535)) throw new Error('REDIS_PORT must be a valid TCP port.');
+    for (const key of ['SEAWEEDFS_ACCESS_KEY', 'SEAWEEDFS_SECRET_KEY', 'SEAWEEDFS_BUCKET']) {
       if (!process.env[key]) throw new Error(key + ' is required in production.');
     }
     if (!process.env.DATABASE_URL && !(process.env.DATABASE_HOST && process.env.DATABASE_USERNAME && process.env.DATABASE_NAME)) {
