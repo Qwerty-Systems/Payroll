@@ -19,8 +19,10 @@ file="$plain.age"
 export PGPASSWORD="$BACKUP_DATABASE_PASSWORD"
 pg_dump --host="$DATABASE_HOST" --port="${DATABASE_PORT:-5432}" \
   --username="$BACKUP_DATABASE_USERNAME" --dbname="$DATABASE_NAME" \
-  --format=custom --no-owner --no-acl --verbose 2>"$tmp/pg_dump.log" \
-  | age --recipient "$BACKUP_AGE_RECIPIENT" --output "$file"
+  --format=custom --no-owner --no-acl --verbose --file="$plain" 2>"$tmp/pg_dump.log"
+pg_restore --list "$plain" >/dev/null
+age --recipient "$BACKUP_AGE_RECIPIENT" --output "$file" "$plain"
+rm -f "$plain"
 
 endpoint="${SEAWEEDFS_USE_SSL:-true}"
 scheme=http
