@@ -4,6 +4,7 @@ import { Auth0Provider } from '@auth0/auth0-react';
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import App from './App';
 import { auth0Config } from './config';
+import { navigateTo } from './navigation';
 
 const theme = createTheme({
   palette: {
@@ -46,6 +47,12 @@ function Root() {
     }}
     useRefreshTokens
     cacheLocation="memory"
+    onRedirectCallback={(appState) => {
+      const returnTo = typeof appState?.returnTo === 'string' && appState.returnTo.startsWith('/')
+        ? appState.returnTo
+        : '/app';
+      navigateTo(returnTo, true);
+    }}
   >{app}</Auth0Provider>;
 }
 

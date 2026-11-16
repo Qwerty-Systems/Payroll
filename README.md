@@ -2,7 +2,7 @@
 
 A mobile-first, multi-tenant construction workforce, site operations, payroll and business management platform for Kenya. Designed for cloud SaaS and standalone PC/site deployments with offline-first workflows and controlled cloud synchronization.
 
-> Current delivery stage: database and API foundation. Authentication, worker workflows, payroll calculation and full offline sync are still under development; do not use it for production payroll yet.
+> Current delivery stage: database and API foundation. Auth0 sign-in and an authenticated API diagnostic workspace are implemented; company provisioning, membership/authorization workflows, worker operations, payroll calculation and full offline sync remain under development. Do not use it for production payroll yet.
 
 ## Product goals
 - Manage construction companies, projects, sites, workers and employment arrangements.
@@ -46,7 +46,8 @@ See [docs/README.md](docs/README.md) for the complete requirements, architecture
 - [x] Tenant-row RLS policies and transaction-scoped tenant context helper.
 - [x] Liveness and database readiness endpoints.
 - [x] Responsive JengaFlow shell, PWA manifest and install guidance.
-- [ ] Authentication, tenant provisioning and authorization guards.
+- [x] Auth0 SPA sign-in, protected workspace entry and authenticated API identity check.
+- [ ] Auth0-to-platform-user provisioning, tenant membership and application authorization.
 - [ ] Worker, project, site and attendance APIs.
 - [x] Effective-dated Kenya statutory starter pack and tenant deduction/allowance defaults.
 - [ ] Payroll calculation and finalization engine.

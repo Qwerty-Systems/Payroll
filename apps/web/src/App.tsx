@@ -13,6 +13,8 @@ import PhoneIphoneRounded from '@mui/icons-material/PhoneIphoneRounded';
 import SyncRounded from '@mui/icons-material/SyncRounded';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import SignInPage from './auth/SignInPage';
+import AuthenticatedApp from './auth/AuthenticatedApp';
+import { useEffect, useState } from 'react';
 
 const features = [
   { icon: <Groups2Rounded />, title: 'Your whole workforce', text: 'Keep worker profiles, contracts, pay rates and site assignments together.' },
@@ -30,8 +32,7 @@ const steps = [
   ['04', 'Review and pay', 'Check the payroll preview, approve it and keep a permanent record.'],
 ];
 
-export default function App() {
-  if (window.location.pathname === '/signin' || window.location.pathname === '/auth/callback') return <SignInPage />;
+function LandingPage() {
   const theme = useTheme();
   const compact = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -214,4 +215,19 @@ export default function App() {
       </Box>
     </Box>
   );
+}
+
+
+export default function App() {
+  const [pathname, setPathname] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const syncPath = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', syncPath);
+    return () => window.removeEventListener('popstate', syncPath);
+  }, []);
+
+  if (pathname === '/signin' || pathname === '/auth/callback') return <SignInPage />;
+  if (pathname === '/app' || pathname.startsWith('/app/')) return <AuthenticatedApp />;
+  return <LandingPage />;
 }
