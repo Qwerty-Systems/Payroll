@@ -19,11 +19,13 @@ build-and-publish-images:
       command: ["--tls=true"]
   before_script:
     - |
-      if [ -z "${QWERTY_REGISTRY_USER:-}" ] || [ -z "${QWERTY_REGISTRY_PASSWORD:-}" ]; then
-        echo "Missing QWERTY_REGISTRY_USER or QWERTY_REGISTRY_PASSWORD GitLab CI/CD variables."
-        exit 1
+      if [ "${CI_COMMIT_BRANCH:-}" = "$CI_DEFAULT_BRANCH" ] || [ -n "${CI_COMMIT_TAG:-}" ]; then
+        if [ -z "${QWERTY_REGISTRY_USER:-}" ] || [ -z "${QWERTY_REGISTRY_PASSWORD:-}" ]; then
+          echo "Publishing requires QWERTY_REGISTRY_USER and QWERTY_REGISTRY_PASSWORD GitLab CI/CD variables."
+          exit 1
+        fi
+        echo "$QWERTY_REGISTRY_PASSWORD" | docker login "$QWERTY_REGISTRY" --username "$QWERTY_REGISTRY_USER" --password-stdin
       fi
-    - echo "$QWERTY_REGISTRY_PASSWORD" | docker login "$QWERTY_REGISTRY" --username "$QWERTY_REGISTRY_USER" --password-stdin
     - docker buildx create --name jengaflow-builder --driver docker-container --use
     - docker buildx inspect --bootstrap
   script:
@@ -55,10 +57,20 @@ build-and-publish-images:
         echo "Building $IMAGE for commit $CI_COMMIT_SHA"
         if [ "$PUSH_IMAGES" = "true" ]; then
           # shellcheck disable=SC2086
-          docker buildx build --platform linux/amd64 --file "$DOCKERFILE" $TAG_ARGS --push .
+          docker buildx build --platform linux/amd64 --file "$DOCKERFILE" $TAG_ARGS \
+            --build-arg VITE_AUTH0_DOMAIN="${VITE_AUTH0_DOMAIN:-}" \
+            --build-arg VITE_AUTH0_CLIENT_ID="${VITE_AUTH0_CLIENT_ID:-}" \
+            --build-arg VITE_AUTH0_AUDIENCE="${VITE_AUTH0_AUDIENCE:-}" \
+            --build-arg VITE_AUTH0_REDIRECT_URI="${VITE_AUTH0_REDIRECT_URI:-}" \
+            --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-}" --push .
         else
           # Merge requests and feature branches validate builds but do not publish deployable tags.
-          docker buildx build --platform linux/amd64 --file "$DOCKERFILE" --tag "$IMAGE:$CI_COMMIT_SHA" --load .
+          docker buildx build --platform linux/amd64 --file "$DOCKERFILE" --tag "$IMAGE:$CI_COMMIT_SHA" \
+            --build-arg VITE_AUTH0_DOMAIN="${VITE_AUTH0_DOMAIN:-}" \
+            --build-arg VITE_AUTH0_CLIENT_ID="${VITE_AUTH0_CLIENT_ID:-}" \
+            --build-arg VITE_AUTH0_AUDIENCE="${VITE_AUTH0_AUDIENCE:-}" \
+            --build-arg VITE_AUTH0_REDIRECT_URI="${VITE_AUTH0_REDIRECT_URI:-}" \
+            --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-}" --load .
         fi
       done
   after_script:
