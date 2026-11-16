@@ -70,7 +70,8 @@ describe('AuthenticatedApp', () => {
       }),
     );
     expect(screen.getByText('Example Company')).toBeInTheDocument();
-    expect(screen.getByText(/owner · trial/i)).toBeInTheDocument();
+    expect(screen.getByText(/owner workspace/i)).toBeInTheDocument();
+    expect(screen.getByText('trial')).toBeInTheDocument();
   });
 
   it('generates a workspace slug from the display name and preserves a manual edit', async () => {
