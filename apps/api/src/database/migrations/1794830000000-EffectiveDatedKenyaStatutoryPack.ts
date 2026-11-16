@@ -191,12 +191,6 @@ export class EffectiveDatedKenyaStatutoryPack1794830000000 implements MigrationI
       `, [packId,rule.code,rule.label,rule.category,rule.method,JSON.stringify(rule.config),rule.from,rule.source,rule.url,rule.notes ?? null]);
     }
 
-    await q.query(`
-      INSERT INTO tenant_statutory_assignments(tenant_id,rule_set_id,effective_from)
-      SELECT id,$1,'2026-02-01'::date FROM tenants
-      ON CONFLICT(tenant_id,rule_set_id,effective_from) DO NOTHING
-    `, [packId]);
-
   }
 
   public async down(q: QueryRunner): Promise<void> {
