@@ -22,6 +22,8 @@ export class JwtAuthGuard implements CanActivate {
       const payload = await this.jwt.verifyAsync(header.slice(7), {
         secret: process.env.JWT_ACCESS_SECRET,
         algorithms: ['HS256'],
+        issuer: 'jengaflow-api',
+        audience: 'jengaflow-web',
       });
       if (!payload.sub || !payload.email) throw new Error('Invalid token claims');
       request.user = { id: payload.sub, email: payload.email };
