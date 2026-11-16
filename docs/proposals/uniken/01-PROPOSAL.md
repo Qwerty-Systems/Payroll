@@ -11,7 +11,7 @@
 
 ## 1. Executive summary
 
-Qwerty Systems proposes to work with Uniken to assess, configure and implement JengaFlow, a workforce and payroll management platform designed around multi-site operations. The proposed solution brings company and worker records, project/site assignments, attendance and timesheets, payroll preparation, reporting and controlled administration into one platform.
+Qwerty Systems proposes onboarding Uniken onto JengaFlow, its existing workforce, site-operations and payroll platform. JengaFlow is already in operational use across organizations and projects including Dominion Outdoor, Nifunze, SakaTaka and View Academy. The Uniken engagement is therefore an implementation of an established platform: configure Uniken's workspace, adapt agreed workflows, migrate approved data, train users and validate the required processes. The exact modules and capabilities enabled for Uniken will be confirmed during discovery.
 
 The intended outcome is a more consistent operating process: workforce information is maintained centrally; attendance and work records are captured against the correct site and period; payroll inputs are reviewed before calculation; and authorized users can trace approvals and changes.
 
