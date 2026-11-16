@@ -1,17 +1,17 @@
 {
-  "name": "crewledger-workspace",
+  "name": "jengaflow-workspace",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.20.0",
   "engines": { "node": ">=22.0.0" },
   "scripts": {
-    "dev": "pnpm --parallel --filter @crewledger/api --filter @crewledger/web dev",
+    "dev": "pnpm --parallel --filter @jengaflow/api --filter @jengaflow/web dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "db:migrate": "pnpm --filter @crewledger/api migration:run",
-    "db:seed:demo": "pnpm --filter @crewledger/api seed:demo"
+    "db:migrate": "pnpm --filter @jengaflow/api migration:run",
+    "db:seed:demo": "pnpm --filter @jengaflow/api seed:demo"
   },
   "devDependencies": {
     "prettier": "^3.6.2",
