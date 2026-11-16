@@ -36,7 +36,7 @@ export default function AuthenticatedApp() {
       try {
         if (!auth0Config.apiBaseUrl) throw new Error('The API base URL is not configured for this deployment.');
         const token = await getAccessTokenSilently();
-        const response = await fetch(`${auth0Config.apiBaseUrl.replace(/\\/+$/, '')}/api/v1/auth/me`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: controller.signal });
+        const response = await fetch(`${auth0Config.apiBaseUrl.replace(/\/+$/, '')}/api/v1/auth/me`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: controller.signal });
         if (!response.ok) throw new Error(response.status === 401 ? 'The API rejected the access token. Verify its issuer and audience.' : `The JengaFlow API returned HTTP ${response.status}.`);
         setApiState({ status: 'ready', identity: await response.json() as ApiIdentity });
       } catch (cause) {
@@ -52,7 +52,7 @@ export default function AuthenticatedApp() {
     setSubmitting(true); setOnboardError('');
     try {
       const token = await getAccessTokenSilently();
-      const response = await fetch(`${auth0Config.apiBaseUrl.replace(/\\/+$/, '')}/api/v1/auth/onboarding/company`, {
+      const response = await fetch(`${auth0Config.apiBaseUrl.replace(/\/+$/, '')}/api/v1/auth/onboarding/company`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(company),
