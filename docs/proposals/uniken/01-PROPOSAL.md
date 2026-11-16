@@ -33,7 +33,7 @@ The following are discovery items, not assumed facts: Uniken's industry and oper
 
 ## 3. Proposed solution
 
-JengaFlow is designed as a responsive web application with an installable Progressive Web App (PWA). The target architecture uses a React frontend, NestJS API, PostgreSQL database and controlled background processing. The platform is intended to support cloud hosting and, where justified, a local site deployment with a separately designed synchronization process.
+JengaFlow is delivered as a responsive web platform with an installable Progressive Web App (PWA). The current deployment architecture uses a React frontend, NestJS API, PostgreSQL and supporting background services. The hosting model, integrations, storage and any offline/site synchronization requirements for Uniken will be confirmed during technical discovery.
 
 ### 3.1 Workforce and company administration
 - Company profile, organizational units, departments and cost centres.
