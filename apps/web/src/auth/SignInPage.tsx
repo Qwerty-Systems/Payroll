@@ -2,12 +2,7 @@ import { useAuth0 } from '@auth0/auth0-react';
 import { Alert, Box, Button, CircularProgress, Container, Paper, Stack, Typography } from '@mui/material';
 import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import GoogleIcon from '@mui/icons-material/Google';
-
-const auth0Configured = Boolean(
-  import.meta.env.VITE_AUTH0_DOMAIN &&
-  import.meta.env.VITE_AUTH0_CLIENT_ID &&
-  import.meta.env.VITE_AUTH0_AUDIENCE,
-);
+import { auth0Configured } from '../config';
 
 function ConfiguredSignInPage() {
   const { isLoading, isAuthenticated, user, error, loginWithRedirect, logout } = useAuth0();
@@ -23,7 +18,7 @@ function ConfiguredSignInPage() {
         <Typography variant="h4" fontWeight={900} color="#17372B">Welcome back</Typography>
         <Typography color="text.secondary" sx={{ mt: 1, mb: 3 }}>Sign in securely to your JengaFlow account.</Typography>
 
-        {!auth0Configured && <Alert severity="warning">This frontend image was built without its Auth0 settings. Add VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID and VITE_AUTH0_AUDIENCE as GitLab CI/CD variables, then rebuild and redeploy the web image.</Alert>}
+        {!auth0Configured && <Alert severity="warning">Auth0 is not configured for this deployment. Set VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID and VITE_AUTH0_AUDIENCE in the web service environment in Coolify, then restart the web service.</Alert>}
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error.message}</Alert>}
 
         {isLoading ? <Stack alignItems="center" spacing={1}><CircularProgress /><Typography color="text.secondary">Checking your session…</Typography></Stack>
@@ -51,7 +46,7 @@ export default function SignInPage() {
       <Container maxWidth="xs"><Paper sx={{ p: 4, borderRadius: 4 }}>
         <Button href="/" startIcon={<ArrowBackRounded />} sx={{ mb: 2 }}>Back to JengaFlow</Button>
         <Typography variant="h4" fontWeight={900} color="#17372B">Welcome back</Typography>
-        <Alert severity="warning" sx={{ mt: 2 }}>This frontend image was built without its Auth0 settings. Add VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID and VITE_AUTH0_AUDIENCE as GitLab CI/CD variables, then rebuild and redeploy the web image.</Alert>
+        <Alert severity="warning" sx={{ mt: 2 }}>Auth0 is not configured for this deployment. Set VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID and VITE_AUTH0_AUDIENCE in the web service environment in Coolify, then restart the web service.</Alert>
       </Paper></Container>
     </Box>;
   }
