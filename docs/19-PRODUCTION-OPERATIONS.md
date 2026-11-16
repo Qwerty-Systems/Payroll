@@ -65,6 +65,10 @@ Configure default privileges for the role that owns newly created tables, so fut
 
 Use MIGRATIONS_DATABASE_USERNAME and MIGRATIONS_DATABASE_PASSWORD only for migration commands. Use DATABASE_USERNAME and DATABASE_PASSWORD for the API runtime. Use BACKUP_DATABASE_USERNAME and BACKUP_DATABASE_PASSWORD for the scheduled backup container. The backup identity must not have write privileges.
 
+### Redis connection configuration
+
+The current managed Redis connection is supplied as REDIS_HOST=157.245.160.198 and REDIS_PORT=6399. Set REDIS_PASSWORD only if that Redis instance requires authentication. The application builds a Redis connection URL from these fields and URL-encodes the password. Leave REDIS_URL empty to use the host/port settings. The default is non-TLS; enable REDIS_TLS only after confirming TLS is enabled on the Redis listener. Keep the Redis port restricted to the API server/network and do not expose it publicly.
+
 ## 3. Google sign-in setup
 
 Create an OAuth 2.0 Web application client in Google Cloud Console and enable Google Identity Services. Configure:
@@ -85,7 +89,7 @@ Set real values in Coolify, not in Git:
 - independent random values of at least 48 characters for JWT_ACCESS_SECRET and JWT_REFRESH_SECRET;
 - Google Web client ID;
 - runtime PostgreSQL credentials;
-- Redis URL and credentials;
+- Redis host (157.245.160.198), port (6399), and password if authentication is enabled. Set REDIS_TLS=true only if the Redis listener on that port is configured for TLS. REDIS_URL, when supplied, takes precedence over the host/port/password fields;
 - SeaweedFS S3 access/secret keys and bucket;
 - BACKUP_AGE_RECIPIENT generated from an offline age identity.
 
