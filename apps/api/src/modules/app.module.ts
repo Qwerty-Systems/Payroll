@@ -11,6 +11,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { TenantAccessGuard } from './auth/tenant-access.guard';
 import { OperationsModule } from './operations/operations.module';
 import { PayrollModule } from './payroll/payroll.module';
+import { UsersModule } from './users/users.module';
 import { OrganizationModule } from './organization/organization.module';
 
 @Module({
@@ -24,6 +25,7 @@ import { OrganizationModule } from './organization/organization.module';
     StorageModule,
     OperationsModule,
     PayrollModule,
+    UsersModule,
     OrganizationModule,
   ],
   providers: [
