@@ -7,8 +7,9 @@ import { AppModule } from './modules/app.module';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api/v1');
+  const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? process.env.APP_URL ?? 'http://localhost:8080').split(',').map((origin) => origin.trim());
   app.enableCors({
-    origin: process.env.APP_URL ?? 'http://localhost:8080',
+    origin: allowedOrigins,
     credentials: true,
   });
   app.useGlobalPipes(
