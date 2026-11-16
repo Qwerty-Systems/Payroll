@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { StorageModule } from './storage/storage.module';
+import { UsersModule } from './users/users.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { TenantAccessGuard } from './auth/tenant-access.guard';
 import { OperationsModule } from './operations/operations.module';
@@ -21,6 +22,7 @@ import { PayrollModule } from './payroll/payroll.module';
     HealthModule,
     AuthModule,
     StorageModule,
+    UsersModule,
     OperationsModule,
     PayrollModule,
   ],
