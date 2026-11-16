@@ -39,7 +39,7 @@ export class TenantStatutoryService {
     await this.tenantTransactions.run(tenantId, async (manager) => {
       const packs = await manager.query(
         `SELECT id FROM statutory_rule_sets
-         WHERE country_code = 'KE' AND status = 'published' AND version = 'KE-2026.02'
+         WHERE country_code = 'KE' AND status = 'published' AND version = 'KE-2026.11'
          LIMIT 1`,
       );
       if (!packs.length) throw new NotFoundException('The Kenya statutory baseline has not been installed.');
