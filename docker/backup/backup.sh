@@ -6,7 +6,7 @@ if [[ "${BACKUP_ENABLED:-false}" != "true" ]]; then
   exit 0
 fi
 
-required=(DATABASE_HOST DATABASE_USERNAME DATABASE_NAME SEAWEEDFS_ENDPOINT SEAWEEDFS_BUCKET SEAWEEDFS_ACCESS_KEY SEAWEEDFS_SECRET_KEY BACKUP_AGE_RECIPIENT)
+required=(DATABASE_HOST DATABASE_USERNAME DATABASE_PASSWORD DATABASE_NAME SEAWEEDFS_ENDPOINT SEAWEEDFS_BUCKET SEAWEEDFS_ACCESS_KEY SEAWEEDFS_SECRET_KEY BACKUP_AGE_RECIPIENT)
 for name in "${required[@]}"; do
   if [[ -z "${!name:-}" ]]; then echo "Missing required backup setting: $name" >&2; exit 1; fi
 done
@@ -14,7 +14,8 @@ done
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-file="$tmp/jengaflow-${DATABASE_NAME}-$stamp.dump.age"
+plain="$tmp/jengaflow-${DATABASE_NAME}-$stamp.dump"
+file="$plain.age"
 export PGPASSWORD="${DATABASE_PASSWORD:-}"
 pg_dump --host="$DATABASE_HOST" --port="${DATABASE_PORT:-5432}" \
   --username="$DATABASE_USERNAME" --dbname="$DATABASE_NAME" \
