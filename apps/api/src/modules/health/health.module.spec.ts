@@ -4,7 +4,7 @@ describe('HealthService', () => {
   const redis = { ping: jest.fn().mockResolvedValue(true), isConfigured: jest.fn().mockReturnValue(true) };
 
   it('returns liveness without requiring external dependencies', () => {
-    const service = new HealthService({} as never, redis as never);
+    const service = new HealthService({} as never, redis as never, { check: jest.fn() } as never);
     expect(service.getLiveness()).toEqual({ status: 'ok', service: 'jengaflow-api' });
   });
 
