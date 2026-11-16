@@ -25,10 +25,16 @@ export class IdentityService {
     if (typeof claims.sub !== 'string' || !claims.sub.trim()) throw new UnauthorizedException('A valid identity subject is required.');
     const email = claims.email ?? claims[EMAIL_CLAIM] ?? null;
     const name = claims.name ?? claims[NAME_CLAIM] ?? null;
-    const rows = await this.dataSource.query(
-      "SELECT u.id, u.email, u.full_name, u.status, COALESCE(json_agg(json_build_object('tenantId', t.id, 'slug', t.slug, 'displayName', t.display_name, 'legalName', t.legal_name, 'tenantStatus', t.status, 'membershipId', m.id, 'role', m.role)) FILTER (WHERE m.id IS NOT NULL), '[]'::json) AS memberships FROM platform_users u LEFT JOIN tenant_memberships m ON m.user_id = u.id AND m.status = 'active' LEFT JOIN tenants t ON t.id = m.tenant_id AND t.status IN ('trial','active') WHERE u.auth0_subject = $1 GROUP BY u.id",
-      [claims.sub],
-    );
+    const rows = await this.dataSource.transaction(async manager => {
+      // The membership table is protected by forced RLS. Scope this read to
+      // the verified Auth0 subject so /auth/me can list only this user's
+      // memberships without granting cross-tenant table access.
+      await manager.query("SELECT set_config('app.auth0_subject', $1, true)", [claims.sub]);
+      return manager.query(
+        "SELECT u.id, u.email, u.full_name, u.status, COALESCE(json_agg(json_build_object('tenantId', t.id, 'slug', t.slug, 'displayName', t.display_name, 'legalName', t.legal_name, 'tenantStatus', t.status, 'membershipId', m.id, 'role', m.role)) FILTER (WHERE m.id IS NOT NULL), '[]'::json) AS memberships FROM platform_users u LEFT JOIN tenant_memberships m ON m.user_id = u.id AND m.status = 'active' LEFT JOIN tenants t ON t.id = m.tenant_id AND t.status IN ('trial','active') WHERE u.auth0_subject = $1 GROUP BY u.id",
+        [claims.sub],
+      );
+    });
     if (!rows.length) return { authenticated: true, provisioned: false, identity: { email, name }, memberships: [] };
     return { authenticated: true, provisioned: true, user: { id: rows[0].id, email: rows[0].email, fullName: rows[0].full_name, status: rows[0].status }, memberships: rows[0].memberships };
   }
