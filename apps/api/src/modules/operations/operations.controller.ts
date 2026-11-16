@@ -7,7 +7,8 @@ import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto }
 import { OperationsService } from './operations.service';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
-class StatusDto { @IsIn(['active','inactive','suspended','archived','planning','on_hold','completed','cancelled']) status!: string; }\nclass RejectionDto { @IsString() @MinLength(3) reason!: string; }
+class StatusDto { @IsIn(['active','inactive','suspended','archived','planning','on_hold','completed','cancelled']) status!: string; }
+class RejectionDto { @IsString() @MinLength(3) reason!: string; }
 
 @ApiTags('tenant-operations')
 @ApiBearerAuth()
