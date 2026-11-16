@@ -123,4 +123,66 @@ export class PayrollService {
   }
 
   getRun(tenantId: string, runId: string) { return this.tenantDb.run(tenantId,async m=>{const runs=await m.query('SELECT id,period_id AS "periodId",run_number AS "runNumber",status,engine_version AS "engineVersion",totals,warnings,input_hash AS "inputHash",created_at AS "createdAt",calculated_at AS "calculatedAt",submitted_at AS "submittedAt",approved_at AS "approvedAt",finalized_at AS "finalizedAt" FROM payroll_runs WHERE tenant_id=$1 AND id=$2',[tenantId,runId]);if(!runs.length)throw new NotFoundException('Payroll run not found.');const items=await m.query('SELECT id,worker_id AS "workerId",earnings,employee_deductions AS "employeeDeductions",employer_contributions AS "employerContributions",net_pay AS "netPay",calculation_snapshot AS snapshot FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2 ORDER BY created_at',[tenantId,runId]);return {...runs[0],items};}); }
+
+  listPayslips(tenantId: string, runId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const run = await m.query("SELECT status FROM payroll_runs WHERE tenant_id=$1 AND id=$2",[tenantId,runId]);
+      if (!run.length) throw new NotFoundException('Payroll run not found.');
+      if (run[0].status !== 'finalized') throw new ConflictException('Payslips are issued only after payroll finalization.');
+      return m.query('SELECT id,worker_id AS "workerId",payslip_number AS "payslipNumber",snapshot,issued_at AS "issuedAt" FROM payslips WHERE tenant_id=$1 AND payroll_run_id=$2 ORDER BY payslip_number',[tenantId,runId]);
+    });
+  }
+
+  getPayslip(tenantId: string, payslipId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT id,worker_id AS "workerId",payslip_number AS "payslipNumber",snapshot,issued_at AS "issuedAt" FROM payslips WHERE tenant_id=$1 AND id=$2',[tenantId,payslipId]);
+      if (!rows.length) throw new NotFoundException('Payslip not found.');
+      return rows[0];
+    });
+  }
+
+  createPaymentBatch(tenantId: string, actorId: string, runId: string, paymentMethod: 'bank_transfer'|'mpesa'|'manual') {
+    return this.tenantDb.run(tenantId, async m => {
+      const runs = await m.query("SELECT id,status FROM payroll_runs WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[tenantId,runId]);
+      if (!runs.length) throw new NotFoundException('Payroll run not found.');
+      if (runs[0].status !== 'finalized') throw new ConflictException('Payment batches can only be created for finalized payroll runs.');
+      const settings = await m.query('SELECT currency FROM tenant_payroll_settings WHERE tenant_id=$1',[tenantId]);
+      const currency = settings[0]?.currency ?? 'KES';
+      const items = await m.query('SELECT worker_id,net_pay FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2 ORDER BY worker_id',[tenantId,runId]);
+      const total = round(items.reduce((sum:any,item:any)=>sum+Number(item.net_pay),0));
+      const batches = await m.query("INSERT INTO payroll_payment_batches (tenant_id,payroll_run_id,status,payment_method,currency,total_amount,created_by) VALUES ($1,$2,'draft',$3,$4,$5,$6) RETURNING id,status,payment_method AS \"paymentMethod\",currency,total_amount AS \"totalAmount\",created_at AS \"createdAt\"",[tenantId,runId,paymentMethod,currency,total,actorId]);
+      for (const item of items) await m.query("INSERT INTO payroll_payment_batch_items (tenant_id,batch_id,worker_id,amount) VALUES ($1,$2,$3,$4)",[tenantId,batches[0].id,item.worker_id,item.net_pay]);
+      await m.query("INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,'payroll.payment_batch.created','payment_batch',$3,$4::jsonb)",[tenantId,actorId,batches[0].id,JSON.stringify({runId,itemCount:items.length,total,currency,paymentMethod})]);
+      return batches[0];
+    });
+  }
+
+  approvePaymentBatch(tenantId: string, actorId: string, batchId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows=await m.query('SELECT id,status,created_by FROM payroll_payment_batches WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,batchId]);
+      if(!rows.length) throw new NotFoundException('Payment batch not found.');
+      if(rows[0].status!=='draft') throw new ConflictException('Only a draft payment batch can be approved.');
+      if(rows[0].created_by===actorId) throw new BadRequestException('Separation of duties: the payment batch creator cannot approve it.');
+      const updated=await m.query("UPDATE payroll_payment_batches SET status='approved',approved_by=$3,approved_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status,approved_at AS \"approvedAt\"",[tenantId,batchId,actorId]);
+      await m.query("INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id) VALUES ($1,$2,'payroll.payment_batch.approved','payment_batch',$3)",[tenantId,actorId,batchId]);
+      return updated[0];
+    });
+  }
+
+  confirmPayment(tenantId: string, actorId: string, batchId: string, itemId: string, providerReference: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows=await m.query("SELECT i.id,i.status,b.status AS batch_status FROM payroll_payment_batch_items i JOIN payroll_payment_batches b ON b.tenant_id=i.tenant_id AND b.id=i.batch_id WHERE i.tenant_id=$1 AND b.id=$2 AND i.id=$3 FOR UPDATE",[tenantId,batchId,itemId]);
+      if(!rows.length) throw new NotFoundException('Payment batch item not found.');
+      if(rows[0].batch_status!=='approved' && rows[0].batch_status!=='partially_paid') throw new ConflictException('Only an approved payment batch can accept payment confirmations.');
+      if(rows[0].status==='paid') throw new ConflictException('This payment item has already been confirmed as paid.');
+      if(!providerReference.trim()) throw new BadRequestException('A bank or payment provider reference is required.');
+      const updated=await m.query("UPDATE payroll_payment_batch_items SET status='paid',provider_reference=$4,paid_at=now() WHERE tenant_id=$1 AND batch_id=$2 AND id=$3 RETURNING id,status,provider_reference AS \"providerReference\",paid_at AS \"paidAt\"",[tenantId,batchId,itemId,providerReference.trim()]);
+      const counts=await m.query("SELECT count(*) FILTER (WHERE status='paid')::int AS paid,count(*)::int AS total FROM payroll_payment_batch_items WHERE tenant_id=$1 AND batch_id=$2",[tenantId,batchId]);
+      const batchStatus=counts[0].paid===counts[0].total?'paid':'partially_paid';
+      await m.query('UPDATE payroll_payment_batches SET status=$3 WHERE tenant_id=$1 AND id=$2',[tenantId,batchId,batchStatus]);
+      await m.query("INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,'payroll.payment.confirmed','payment_batch_item',$3,$4::jsonb)",[tenantId,actorId,itemId,JSON.stringify({batchId,providerReference:providerReference.trim()})]);
+      return {...updated[0],batchStatus};
+    });
+  }
+
 }
