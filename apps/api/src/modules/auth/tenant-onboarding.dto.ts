@@ -9,10 +9,12 @@ export class CreateTenantDto {
   @Length(2, 160)
   displayName!: string;
 
+  // Optional for API clients that rely on server-side slug generation.
+  @IsOptional()
   @IsString()
   @Length(3, 63)
   @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
-  slug!: string;
+  slug?: string;
 
   @IsOptional()
   @IsString()
