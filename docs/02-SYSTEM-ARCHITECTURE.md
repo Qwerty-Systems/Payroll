@@ -80,3 +80,11 @@ Expose liveness/readiness endpoints; structured JSON logs; metrics for request l
 - No cross-tenant query without an explicit platform-level permission and audit record.
 - No destructive updates to finalized payroll or settled invoices.
 - No secrets in source control, image layers or frontend bundles.
+
+
+## 2.10 Responsive PWA and domain routing
+The web client is a responsive PWA with mobile-first navigation and task layouts. Desktop uses navigation rails and dense tables; mobile uses compact navigation, card/list layouts, focused forms and large touch targets. PWA installation, service-worker updates, offline cache and IndexedDB outbox are explicit application capabilities. The app must not cache authenticated API responses indiscriminately.
+
+Route customer workspaces through verified tenant slugs such as tenant-slug.qwerty.co.ke. Reserve control.qwerty.co.ke for Qwerty platform administration and sales. Wildcard DNS/TLS is an infrastructure configuration, not a tenant security boundary. Resolve the tenant from the verified host, then validate the authenticated user's membership on every request.
+
+Add a Qwerty commercial workspace bounded context for leads, organizations, contacts, opportunities, proposals, quotations, service agreements, delivery projects, maintenance contracts and platform invoices. Keep this data in the control plane, distinct from tenant operational/payroll data.
