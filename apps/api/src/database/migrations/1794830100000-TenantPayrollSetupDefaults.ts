@@ -96,7 +96,6 @@ export class TenantPayrollSetupDefaults1794830100000 implements MigrationInterfa
         USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
         WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
 
-      FOREACH_TABLE: BEGIN
         ALTER TABLE tenant_deduction_types ENABLE ROW LEVEL SECURITY;
         ALTER TABLE tenant_deduction_types FORCE ROW LEVEL SECURITY;
         CREATE POLICY tenant_isolation ON tenant_deduction_types
@@ -117,7 +116,6 @@ export class TenantPayrollSetupDefaults1794830100000 implements MigrationInterfa
         CREATE POLICY tenant_isolation ON worker_allowance_assignments
           USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
           WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
-      END FOREACH_TABLE;
     `);
   }
 
