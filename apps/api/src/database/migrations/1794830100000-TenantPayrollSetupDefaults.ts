@@ -35,6 +35,7 @@ export class TenantPayrollSetupDefaults1794830100000 implements MigrationInterfa
         effective_to date,
         created_at timestamptz NOT NULL DEFAULT now(),
         CHECK (effective_to IS NULL OR effective_to >= effective_from),
+        UNIQUE(tenant_id, id),
         UNIQUE(tenant_id, code, effective_from)
       );
 
@@ -52,6 +53,7 @@ export class TenantPayrollSetupDefaults1794830100000 implements MigrationInterfa
         effective_to date,
         created_at timestamptz NOT NULL DEFAULT now(),
         CHECK (effective_to IS NULL OR effective_to >= effective_from),
+        UNIQUE(tenant_id, id),
         UNIQUE(tenant_id, code, effective_from)
       );
 
