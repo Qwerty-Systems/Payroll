@@ -1,6 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from './tenant-transaction.service';
 
+export interface StatutoryRuleOverrideInput {
+  ruleCode: string;
+  label: string;
+  category: string;
+  calculationMethod: string;
+  configuration: Record<string, unknown>;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  reason: string;
+  approvedBy: string;
+}
+
 export interface EffectiveStatutoryRule {
   code: string;
   label: string;
@@ -82,6 +94,23 @@ export class TenantStatutoryService {
           [tenantId, code, name, method, effectiveFrom],
         );
       }
+    });
+  }
+
+  async createApprovedOverride(tenantId: string, input: StatutoryRuleOverrideInput): Promise<void> {
+    if (!input.reason.trim() || !input.approvedBy) {
+      throw new Error('A reason and approving user are required for a statutory override.');
+    }
+    await this.tenantTransactions.run(tenantId, async (manager) => {
+      await manager.query(
+        `INSERT INTO tenant_statutory_rule_overrides(
+          tenant_id, rule_code, label, category, calculation_method,
+          configuration, effective_from, effective_to, reason, approved_by
+        ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)`,
+        [tenantId, input.ruleCode, input.label, input.category, input.calculationMethod,
+          JSON.stringify(input.configuration), input.effectiveFrom, input.effectiveTo ?? null,
+          input.reason, input.approvedBy],
+      );
     });
   }
 
