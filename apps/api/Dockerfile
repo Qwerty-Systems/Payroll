@@ -9,10 +9,12 @@ RUN pnpm --filter @payroll/api build
 
 FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
-WORKDIR /app
-COPY --from=build /workspace/apps/api/package.json ./package.json
-COPY --from=build /workspace/apps/api/dist ./dist
+WORKDIR /workspace
 COPY --from=build /workspace/node_modules ./node_modules
+COPY --from=build /workspace/apps/api/package.json ./apps/api/package.json
+COPY --from=build /workspace/apps/api/node_modules ./apps/api/node_modules
+COPY --from=build /workspace/apps/api/dist ./apps/api/dist
+WORKDIR /workspace/apps/api
 EXPOSE 3001
 USER node
 CMD ["node", "dist/main.js"]
