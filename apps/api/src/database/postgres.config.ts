@@ -3,23 +3,23 @@ type PostgresConfigOptions = { migrations?: boolean };
 export function getPostgresConfig(options: PostgresConfigOptions = {}) {
   const migration = options.migrations === true;
   const url = migration
-    ? process.env.MIGRATIONS_DATABASE_URL ?? process.env.DATABASE_URL
+    ? process.env.MIGRATIONS_DATABASE_URL || process.env.DATABASE_URL
     : process.env.DATABASE_URL;
   const host = migration
-    ? process.env.MIGRATIONS_DATABASE_HOST ?? process.env.DATABASE_HOST
+    ? process.env.MIGRATIONS_DATABASE_HOST || process.env.DATABASE_HOST
     : process.env.DATABASE_HOST;
   const username = migration
-    ? process.env.MIGRATIONS_DATABASE_USERNAME ?? process.env.DATABASE_USERNAME
+    ? process.env.MIGRATIONS_DATABASE_USERNAME || process.env.DATABASE_USERNAME
     : process.env.DATABASE_USERNAME;
   const password = migration
-    ? process.env.MIGRATIONS_DATABASE_PASSWORD ?? process.env.DATABASE_PASSWORD
+    ? process.env.MIGRATIONS_DATABASE_PASSWORD || process.env.DATABASE_PASSWORD
     : process.env.DATABASE_PASSWORD;
   const database = migration
-    ? process.env.MIGRATIONS_DATABASE_NAME ?? process.env.DATABASE_NAME
+    ? process.env.MIGRATIONS_DATABASE_NAME || process.env.DATABASE_NAME
     : process.env.DATABASE_NAME;
   const port = Number(migration
-    ? process.env.MIGRATIONS_DATABASE_PORT ?? process.env.DATABASE_PORT ?? 5432
-    : process.env.DATABASE_PORT ?? 5432);
+    ? process.env.MIGRATIONS_DATABASE_PORT || process.env.DATABASE_PORT || 5432
+    : process.env.DATABASE_PORT || 5432);
 
   if (!url && (!host || !username || !database)) {
     throw new Error(
