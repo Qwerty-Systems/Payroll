@@ -146,6 +146,15 @@ export class PayrollService {
       const runs = await m.query("SELECT id,status FROM payroll_runs WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[tenantId,runId]);
       if (!runs.length) throw new NotFoundException('Payroll run not found.');
       if (runs[0].status !== 'finalized') throw new ConflictException('Payment batches can only be created for finalized payroll runs.');
+      // The payroll_runs row is locked above. Checking active batches while holding
+      // that lock serializes concurrent requests and prevents duplicate payout batches.
+      const existingBatches = await m.query(
+        "SELECT id,status FROM payroll_payment_batches WHERE tenant_id=$1 AND payroll_run_id=$2 AND status NOT IN ('cancelled','failed') LIMIT 1",
+        [tenantId,runId],
+      );
+      if (existingBatches.length) {
+        throw new ConflictException('An active payment batch already exists for this payroll run.');
+      }
       const settings = await m.query('SELECT currency FROM tenant_payroll_settings WHERE tenant_id=$1',[tenantId]);
       const currency = settings[0]?.currency ?? 'KES';
       const items = await m.query('SELECT worker_id,net_pay FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2 ORDER BY worker_id',[tenantId,runId]);
