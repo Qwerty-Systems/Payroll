@@ -31,7 +31,7 @@ const steps = [
 ];
 
 export default function App() {
-  if (window.location.pathname === '/signin') return <SignInPage />;
+  if (window.location.pathname === '/signin' || window.location.pathname === '/auth/callback') return <SignInPage />;
   const theme = useTheme();
   const compact = useMediaQuery(theme.breakpoints.down('md'));
 
