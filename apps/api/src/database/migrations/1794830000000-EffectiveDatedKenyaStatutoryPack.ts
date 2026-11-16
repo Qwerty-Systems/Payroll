@@ -197,26 +197,10 @@ export class EffectiveDatedKenyaStatutoryPack1794830000000 implements MigrationI
       ON CONFLICT(tenant_id,rule_set_id,effective_from) DO NOTHING
     `, [packId]);
 
-    await q.query(`
-      CREATE FUNCTION assign_default_statutory_pack() RETURNS trigger AS $$
-      BEGIN
-        INSERT INTO tenant_statutory_assignments(tenant_id,rule_set_id,effective_from)
-        SELECT NEW.id,id,'2026-02-01'::date FROM statutory_rule_sets
-        WHERE country_code='KE' AND version='KE-2026.02'
-        ON CONFLICT(tenant_id,rule_set_id,effective_from) DO NOTHING;
-        RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql;
-      CREATE TRIGGER tenants_assign_default_statutory_pack
-      AFTER INSERT ON tenants
-      FOR EACH ROW EXECUTE FUNCTION assign_default_statutory_pack();
-    `);
   }
 
   public async down(q: QueryRunner): Promise<void> {
     await q.query(`
-      DROP TRIGGER IF EXISTS tenants_assign_default_statutory_pack ON tenants;
-      DROP FUNCTION IF EXISTS assign_default_statutory_pack();
       DROP TABLE IF EXISTS tenant_statutory_rule_overrides, tenant_statutory_assignments, statutory_rules, statutory_rule_sets CASCADE;
     `);
   }
