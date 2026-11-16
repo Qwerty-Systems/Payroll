@@ -9,6 +9,7 @@ import { TenantTransactionService } from './tenant-transaction.service';
     TypeOrmModule.forRoot({
       type: 'postgres',
       url: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' } : undefined,
       autoLoadEntities: true,
       synchronize: false,
       migrationsRun: false,
