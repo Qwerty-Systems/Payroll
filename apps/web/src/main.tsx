@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import App from './App';
+import { auth0Config } from './config';
 
 const theme = createTheme({
   palette: {
@@ -31,10 +32,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => { void navigator.serviceWorker.register('/sw.js'); });
 }
 
-const auth0Domain = import.meta.env.VITE_AUTH0_DOMAIN as string | undefined;
-const auth0ClientId = import.meta.env.VITE_AUTH0_CLIENT_ID as string | undefined;
-const auth0Audience = import.meta.env.VITE_AUTH0_AUDIENCE as string | undefined;
-const auth0RedirectUri = (import.meta.env.VITE_AUTH0_REDIRECT_URI as string | undefined) ?? window.location.origin + '/auth/callback';
+const { domain: auth0Domain, clientId: auth0ClientId, audience: auth0Audience, redirectUri: auth0RedirectUri } = auth0Config;
 
 function Root() {
   const app = <ThemeProvider theme={theme}><CssBaseline /><App /></ThemeProvider>;
