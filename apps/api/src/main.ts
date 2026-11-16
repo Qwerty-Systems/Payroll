@@ -21,8 +21,8 @@ async function bootstrap(): Promise<void> {
   );
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Qwerty Construction Payroll API')
-    .setDescription('Multi-tenant construction workforce and payroll API')
+    .setTitle('JengaFlow API')
+    .setDescription('Multi-tenant construction workforce, site operations and payroll API')
     .setVersion('1.0.0')
     .addBearerAuth()
     .build();
