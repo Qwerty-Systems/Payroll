@@ -112,7 +112,7 @@ export default function AuthenticatedApp() {
         userName={user?.name}
         userPicture={user?.picture}
         apiBaseUrl={auth0Config.apiBaseUrl}
-        getToken={() => getAccessTokenSilently({ authorizationParams: { audience: auth0Config.audience, scope: 'openid profile email' } })}
+        getToken={async () => { const token = await getAccessTokenSilently({ authorizationParams: { audience: auth0Config.audience, scope: 'openid profile email' } }); if (!token) throw new Error('The identity provider did not return an API access token.'); return token; }}
         onSignOut={() => void logout({ logoutParams: { returnTo: window.location.origin } })}
       />}
     </Container>
