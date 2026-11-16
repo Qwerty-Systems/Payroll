@@ -15,7 +15,7 @@ const config = (rules: Map<string, StatutoryRule>, code: string) => {
 export function calculateKenyaMonthlyPayroll(grossInput: number, sourceRules: StatutoryRule[]): KenyaPayrollResult {
   if (!Number.isFinite(grossInput) || grossInput < 0) throw new Error('Gross earnings must be a finite non-negative amount.');
   const gross = money(grossInput);
-  const rules = new Map(sourceRules.map(rule => [rule.code, rule]));
+  const rules = new Map<string, StatutoryRule>(sourceRules.map(rule => [rule.code, rule] as const));
   const payeCfg = config(rules,'PAYE');
   const shifCfg = config(rules,'SHIF');
   const nssfCfg = config(rules,'NSSF');
