@@ -92,7 +92,7 @@ export class PayrollService {
 
   async transitionRun(tenantId: string, actorId: string, runId: string, action: 'submit'|'approve'|'finalize') {
     return this.tenantDb.run(tenantId,async m=>{
-      const rows=await m.query('SELECT r.*,p.code AS period_code,s.compliance_approved_at FROM payroll_runs r JOIN payroll_periods p ON p.tenant_id=r.tenant_id AND p.id=r.period_id LEFT JOIN statutory_rule_sets s ON s.id=r.ruleset_id WHERE r.tenant_id=$1 AND r.id=$2 FOR UPDATE',[tenantId,runId]);
+      const rows=await m.query('SELECT r.*,p.code AS period_code,s.compliance_approved_at FROM payroll_runs r JOIN payroll_periods p ON p.tenant_id=r.tenant_id AND p.id=r.period_id LEFT JOIN statutory_rule_sets s ON s.id=r.ruleset_id WHERE r.tenant_id=$1 AND r.id=$2 FOR UPDATE OF r',[tenantId,runId]);
       if(!rows.length) throw new NotFoundException('Payroll run not found.');
       const run=rows[0];
       if(action==='submit') {
