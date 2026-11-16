@@ -1,7 +1,7 @@
 name: jengaflow
 services:
   api:
-    image: ${REGISTRY_IMAGE_PREFIX:-registry.qwerty.co.ke/jengaflow}/api:${IMAGE_TAG:?Set IMAGE_TAG in Coolify}
+    image: ${REGISTRY_IMAGE_PREFIX:-registry.qwerty.co.ke/jengaflow}/api:production
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -80,7 +80,7 @@ services:
     networks: [jengaflow]
 
   web:
-    image: ${REGISTRY_IMAGE_PREFIX:-registry.qwerty.co.ke/jengaflow}/web:${IMAGE_TAG:?Set IMAGE_TAG in Coolify}
+    image: ${REGISTRY_IMAGE_PREFIX:-registry.qwerty.co.ke/jengaflow}/web:production
     restart: unless-stopped
     expose:
       - "80"
@@ -95,7 +95,7 @@ services:
     networks: [jengaflow]
 
   backup:
-    image: ${REGISTRY_IMAGE_PREFIX:-registry.qwerty.co.ke/jengaflow}/backup:${IMAGE_TAG:?Set IMAGE_TAG in Coolify}
+    image: ${REGISTRY_IMAGE_PREFIX:-registry.qwerty.co.ke/jengaflow}/backup:production
     restart: unless-stopped
     environment:
       TZ: Africa/Nairobi
