@@ -29,7 +29,6 @@ type Props = {
   onSignOut: () => void;
 };
 
-const fieldSx = { minWidth: { xs: '100%', sm: 180 }, flex: 1 };
 const asRows = (value: unknown): RowData[] => Array.isArray(value) ? value as RowData[] : [];
 const label = (value: unknown) => value == null || value === '' ? '—' : String(value);
 const dateToday = () => new Date().toISOString().slice(0, 10);
@@ -222,7 +221,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
             ['Active projects', counts.projects, 'Projects currently marked active'],
             ['Pending attendance', counts.attendance, 'Submitted records awaiting review'],
             ['Payroll periods', counts.periods, 'Configured pay periods'],
-          ].map(([title, value, description]) => <Grid item xs={12} sm={6} lg={3} key={String(title)}>
+          ].map(([title, value, description]) => <Grid size={{ xs: 12, sm: 6, lg: 3 }} key={String(title)}>
             <Card variant="outlined" sx={{ height: '100%', borderColor: '#E3E0D6' }}><CardContent><Typography color="text.secondary" variant="body2">{title}</Typography><Typography variant="h3" fontWeight={900} sx={{ my: 1 }}>{value}</Typography><Typography color="text.secondary" variant="caption">{description}</Typography></CardContent></Card>
           </Grid>)}
         </Grid>
@@ -255,7 +254,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
             section === 'people' ? ['Name','Email','Role','Status'] :
             ['Code','Name','Status']).map(x => <TableCell key={x}>{x}</TableCell>)}
         </TableRow></TableHead><TableBody>
-          {currentRows.map(row => <TableRow key={String(row.id ?? Math.random())} hover>
+          {currentRows.map(row => <TableRow key={String(row.id ?? JSON.stringify(row))} hover>
             {section === 'workers' && <><TableCell>{label(row.workerNumber)}</TableCell><TableCell>{label(row.firstName)} {label(row.lastName)}</TableCell><TableCell>{label(row.phone)}</TableCell><TableCell>{label(row.email)}</TableCell><TableCell>{label(row.status)}</TableCell><TableCell><Button size="small" onClick={() => setSelectedWorker(String(row.id))}>{selectedWorker === row.id ? 'Selected' : 'Select'}</Button></TableCell></>}
             {section === 'projects' && <><TableCell>{label(row.projectCode)}</TableCell><TableCell>{label(row.name)}</TableCell><TableCell>{label(row.clientName)}</TableCell><TableCell>{label(row.status)}</TableCell><TableCell><Button size="small" onClick={() => setSelectedProject(String(row.id))}>{selectedProject === row.id ? 'Selected' : 'Select'}</Button></TableCell></>}
             {section === 'attendance' && <><TableCell>{label(row.workDate)}</TableCell><TableCell>{label(row.workerId)}</TableCell><TableCell>{label(row.projectId)}</TableCell><TableCell>{label(row.minutesWorked)}</TableCell><TableCell><Chip size="small" label={label(row.status)} /></TableCell></>}
