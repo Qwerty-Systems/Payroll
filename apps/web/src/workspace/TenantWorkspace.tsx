@@ -56,7 +56,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const membership = memberships.find(item => item.tenantId === tenantId) ?? memberships[0];
   const request = useCallback(async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
     const token = await getToken();
-    const response = await fetch(`${apiBaseUrl.replace(/\/+$/, '')}/api/v1/${path.replace(/^\\/+/, '')}`, {
+    const response = await fetch(`${apiBaseUrl.replace(/\/+$/, '')}/api/v1/${path.replace(/^\/+/, '')}`, {
       ...init,
       headers: {
         Authorization: `Bearer ${token}`,
