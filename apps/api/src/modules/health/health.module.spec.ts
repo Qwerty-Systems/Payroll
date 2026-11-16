@@ -10,11 +10,13 @@ describe('HealthService', () => {
 
   it('reports readiness after database and Redis checks', async () => {
     const dataSource = { query: jest.fn().mockResolvedValue([{ result: 1 }]) };
-    const service = new HealthService(dataSource as never, redis as never);
+    const storage = { check: jest.fn().mockResolvedValue('connected') };
+    const service = new HealthService(dataSource as never, redis as never, storage as never);
     await expect(service.getReadiness()).resolves.toEqual({
       status: 'ready',
       database: 'connected',
       redis: 'connected',
+      storage: 'connected',
     });
     expect(dataSource.query).toHaveBeenCalledWith('SELECT 1');
     expect(redis.ping).toHaveBeenCalledTimes(1);
