@@ -130,7 +130,17 @@ export class InitialTenantFoundation1760000000000 implements MigrationInterface 
       );
       CREATE TABLE audit_events (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        tenant_id uuid REFERENCES tenants(id) ON DELETE RESTRICT,
+        tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+        actor_user_id uuid REFERENCES platform_users(id) ON DELETE SET NULL,
+        action varchar(120) NOT NULL,
+        entity_type varchar(100) NOT NULL,
+        entity_id uuid,
+        request_id varchar(100),
+        metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE TABLE platform_audit_events (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         actor_user_id uuid REFERENCES platform_users(id) ON DELETE SET NULL,
         action varchar(120) NOT NULL,
         entity_type varchar(100) NOT NULL,
@@ -157,11 +167,11 @@ export class InitialTenantFoundation1760000000000 implements MigrationInterface 
     await queryRunner.query(`ALTER TABLE audit_events ENABLE ROW LEVEL SECURITY`);
     await queryRunner.query(`ALTER TABLE audit_events FORCE ROW LEVEL SECURITY`);
     await queryRunner.query(`CREATE POLICY audit_tenant_isolation ON audit_events
-      USING (tenant_id IS NULL OR tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
-      WITH CHECK (tenant_id IS NULL OR tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)`);
+      USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
+      WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE IF EXISTS audit_events, attendance_records, worker_contracts, workers, sites, projects, tenant_memberships, platform_users, tenants CASCADE`);
+    await queryRunner.query(`DROP TABLE IF EXISTS platform_audit_events, audit_events, attendance_records, worker_contracts, workers, sites, projects, tenant_memberships, platform_users, tenants CASCADE`);
   }
 }
