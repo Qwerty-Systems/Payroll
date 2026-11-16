@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { IsIn } from 'class-validator';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
@@ -6,7 +7,7 @@ import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto }
 import { OperationsService } from './operations.service';
 
 type TenantRequest = Request & { tenant: { id: string } };
-class StatusDto { status!: string; }
+class StatusDto { @IsIn(['active','inactive','suspended','archived','planning','on_hold','completed','cancelled']) status!: string; }
 
 @ApiTags('tenant-operations')
 @ApiBearerAuth()
