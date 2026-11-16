@@ -30,7 +30,7 @@
     "ioredis": "^5.6.1",
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/throttler": "^6.4.0",
-    "google-auth-library": "^10.3.0",
+    "jose": "^6.1.0",
     "helmet": "^8.1.0",
     "@aws-sdk/client-s3": "^3.900.0",
     "@aws-sdk/s3-request-presigner": "^3.900.0",
