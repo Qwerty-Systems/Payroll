@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { TenantTransactionService } from './tenant-transaction.service';
 
 @Module({
+  providers: [TenantTransactionService],
+  exports: [TenantTransactionService],
   imports: [
     TypeOrmModule.forRoot({
       type: 'postgres',
