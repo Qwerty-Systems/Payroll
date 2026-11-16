@@ -19,12 +19,14 @@ Every published build receives the immutable Git commit SHA tag. Default-branch 
 
 ## GitLab CI/CD variables
 
-In GitLab, open **Settings → CI/CD → Variables** and add:
+The pipeline uses the existing GitLab CI/CD variables; do not create duplicate credentials:
 
-| Variable | Value | Flags |
-|---|---|---|
-| `QWERTY_REGISTRY_USER` | Registry account with push permission | Masked; Protected |
-| `QWERTY_REGISTRY_PASSWORD` | Registry token/password with push permission | Masked; Protected |
+| Existing variable | Purpose |
+|---|---|
+| `DOCKER_REGISTRY_USER` | Registry username |
+| `DOCKER_REGISTRY_PASS` | Registry password/token |
+
+Ensure both variables are available to protected default-branch and release pipelines. Keep them masked and protected where the GitLab project settings permit. The pipeline passes the password through `docker login --password-stdin` and does not print it.
 
 The pipeline uses `registry.qwerty.co.ke` and namespace `jengaflow` by default. Change the top-level variables in `.gitlab-ci.yml` if the registry's repository namespace differs.
 
