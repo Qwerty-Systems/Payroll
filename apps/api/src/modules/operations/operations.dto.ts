@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
+import { IsDateString, IsEmail, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 
 export class CreateProjectDto {
   @IsString() @Length(1, 40) projectCode!: string;
@@ -31,4 +31,32 @@ export class CreateAttendanceDto {
   @IsOptional() @IsDateString() clockOut?: string;
   @IsOptional() @IsInt() @Min(0) @Max(1440) minutesWorked?: number;
   @IsOptional() @IsIn(['web','mobile','offline_sync','import']) source?: string;
+}
+
+export class CreateWorkerContractDto {
+  @IsIn(['permanent','fixed_term','casual','piece_rate','subcontractor'])
+  engagementType!: string;
+
+  @IsIn(['hourly','daily','weekly','monthly','per_unit'])
+  payBasis!: string;
+
+  @IsNumber({ maxDecimalPlaces: 4 }) @Min(0.01) @Max(1000000000)
+  rateAmount!: number;
+
+  @IsOptional() @IsString() @Length(3, 3)
+  currency?: string;
+
+  @IsDateString()
+  effectiveFrom!: string;
+
+  @IsOptional() @IsDateString()
+  effectiveTo?: string;
+
+  @IsOptional() @IsObject()
+  terms?: Record<string, unknown>;
+}
+
+export class EndWorkerContractDto {
+  @IsDateString()
+  effectiveTo!: string;
 }
