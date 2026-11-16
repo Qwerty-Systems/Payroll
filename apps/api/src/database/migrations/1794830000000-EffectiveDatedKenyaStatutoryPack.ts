@@ -90,7 +90,19 @@ export class EffectiveDatedKenyaStatutoryPack1794830000000 implements MigrationI
     `);
     const packId = pack[0].id as string;
 
-    const rules = [
+    type StatutoryRuleSeed = {
+      code: string;
+      label: string;
+      category: string;
+      method: string;
+      from: string;
+      source: string;
+      url: string;
+      config: Record<string, unknown>;
+      notes?: string;
+    };
+
+    const rules: StatutoryRuleSeed[] = [
       {
         code: 'PAYE',
         label: 'Pay As You Earn',
