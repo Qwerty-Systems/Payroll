@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import jwt, { type JwtPayload, type SigningKeyCallback } from 'jsonwebtoken';
+import jwt, { type GetPublicKeyOrSecret, type JwtPayload } from 'jsonwebtoken';
 import jwksRsa from 'jwks-rsa';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
@@ -45,7 +45,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const client = this.jwks;
-    const getKey: SigningKeyCallback = (header, callback) => {
+    const getKey: GetPublicKeyOrSecret = (header, callback) => {
       if (!header.kid) return callback(new Error('JWT signing key id is missing.'));
       client.getSigningKey(header.kid, (error, key) => {
         if (error) return callback(error);
