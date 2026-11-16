@@ -4,12 +4,13 @@ import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import GoogleIcon from '@mui/icons-material/Google';
 import { useEffect } from 'react';
 import { auth0Configured } from '../config';
+import { navigateTo } from '../navigation';
 
 function ConfiguredSignInPage() {
   const { isLoading, isAuthenticated, user, error, loginWithRedirect, logout } = useAuth0();
 
   useEffect(() => {
-    if (isAuthenticated) window.location.replace('/app');
+    if (isAuthenticated) navigateTo('/app', true);
   }, [isAuthenticated]);
 
   const signInWithGoogle = () => loginWithRedirect({
@@ -31,7 +32,7 @@ function ConfiguredSignInPage() {
           : isAuthenticated ? <Stack spacing={2}>
             <Alert severity="success">Signed in as {user?.email ?? user?.name ?? user?.sub}.</Alert>
             <Typography variant="body2" color="text.secondary">Your identity is verified by Auth0. JengaFlow will now initialize your authenticated workspace.</Typography>
-            <Button variant="contained" onClick={() => window.location.assign('/app')}>Continue to JengaFlow</Button>
+            <Button variant="contained" onClick={() => navigateTo('/app')}>Continue to JengaFlow</Button>
             <Button variant="outlined" onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}>Sign out</Button>
           </Stack>
           : <Button fullWidth size="large" variant="contained" disabled={!auth0Configured}
