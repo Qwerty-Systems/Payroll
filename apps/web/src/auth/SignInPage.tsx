@@ -9,7 +9,7 @@ const auth0Configured = Boolean(
   import.meta.env.VITE_AUTH0_AUDIENCE,
 );
 
-export default function SignInPage() {
+function ConfiguredSignInPage() {
   const { isLoading, isAuthenticated, user, error, loginWithRedirect, logout } = useAuth0();
 
   const signInWithGoogle = () => loginWithRedirect({
@@ -43,4 +43,17 @@ export default function SignInPage() {
       </Paper>
     </Container>
   </Box>;
+}
+
+export default function SignInPage() {
+  if (!auth0Configured) {
+    return <Box sx={{ minHeight: '100vh', bgcolor: '#0a192f', display: 'grid', placeItems: 'center', p: 2 }}>
+      <Container maxWidth="xs"><Paper sx={{ p: 4, borderRadius: 4 }}>
+        <Button href="/" startIcon={<ArrowBackRounded />} sx={{ mb: 2 }}>Back to JengaFlow</Button>
+        <Typography variant="h4" fontWeight={900} color="#0a192f">Welcome back</Typography>
+        <Alert severity="warning" sx={{ mt: 2 }}>Auth0 is not configured. Set the VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID and VITE_AUTH0_AUDIENCE build variables.</Alert>
+      </Paper></Container>
+    </Box>;
+  }
+  return <ConfiguredSignInPage />;
 }
