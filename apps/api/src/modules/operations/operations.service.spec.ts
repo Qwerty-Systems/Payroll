@@ -52,14 +52,14 @@ describe('OperationsService worker contracts', () => {
     expect(query).toHaveBeenCalledTimes(2);
   });
 
-  it('rejects an end date before the contract start date', async () => {
+  it('rejects an end date before the contract start date', () => {
     const query = jest.fn();
     const { service } = makeService(query);
 
-    await expect(service.createWorkerContract(tenantId, actorId, workerId, {
+    expect(() => service.createWorkerContract(tenantId, actorId, workerId, {
       ...dto,
       effectiveTo: '2026-10-31',
-    })).rejects.toBeInstanceOf(BadRequestException);
+    })).toThrow(BadRequestException);
     expect(query).not.toHaveBeenCalled();
   });
 
