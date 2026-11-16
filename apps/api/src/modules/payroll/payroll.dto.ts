@@ -7,4 +7,4 @@ export class CreatePayrollPeriodDto {
   @IsOptional() @IsDateString() paymentDate?: string;
 }
 export class CreatePayrollRunDto { @IsUUID() periodId!: string; }
-export class PayrollPaymentBatchDto { @IsIn(['bank_transfer','mpesa','manual']) paymentMethod!: string; }
+export class PayrollPaymentBatchDto { @IsIn(['bank_transfer','mpesa','manual']) paymentMethod!: 'bank_transfer'|'mpesa'|'manual'; }\nexport class ConfirmPayrollPaymentDto { @IsString() @Length(3,160) providerReference!: string; }
