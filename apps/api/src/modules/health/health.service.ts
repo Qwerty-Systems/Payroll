@@ -21,6 +21,7 @@ export class HealthService {
         status: 'ready',
         database: 'connected',
         redis: this.redisService.isConfigured() ? 'connected' : 'not_configured',
+        storage: 'not_configured',
       };
     } catch {
       throw new ServiceUnavailableException({
