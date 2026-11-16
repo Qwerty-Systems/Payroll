@@ -112,3 +112,14 @@ Permissions are capability-based and scoped by tenant, project and site. Roles a
 - Approval thresholds and dual-control requirements.
 - Retention periods and worker self-service availability.
 - Local-only mode policy and permitted offline actions.
+
+
+## 1.8 Mobile, PWA and Qwerty sales requirements
+- All core workflows must be responsive and usable on phones, tablets and desktops; mobile is a first-class design target.
+- The web application must be installable as a PWA on supported Android, iOS and desktop browsers, with platform-specific install guidance.
+- Mobile navigation, forms, worker/site lookup, attendance capture, camera/document selection and status feedback must be touch-optimized.
+- Offline capability must be defined per workflow. Attendance capture and draft timesheets are initial offline candidates; payroll finalization, payments, billing and permission changes require online authorization.
+- Qwerty internal operations require a separate sales/customer workspace for leads, customer contacts, discovery, proposals, quotations, service agreements, statements of work, change requests, delivery handover, recurring maintenance contracts, invoices and payment tracking.
+- Proposal and quotation versions must be retained. Accepted commercial documents can initiate a delivery project and billing schedule.
+- Qwerty internal sales data, proposal margins and delivery notes must be isolated from customer tenant payroll data.
+- Tenant workspace URLs follow {tenant-slug}.qwerty.co.ke; platform administration uses a reserved control subdomain. A hostname is a workspace selector, not an authorization mechanism.
