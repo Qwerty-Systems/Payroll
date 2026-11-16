@@ -64,7 +64,7 @@ export default function App() {
         <Box sx={{ position: 'absolute', width: 540, height: 540, borderRadius: '50%', bgcolor: 'rgba(100,255,218,.10)', filter: 'blur(90px)', right: '-12%', top: '-20%' }} />
         <Container maxWidth="xl" sx={{ position: 'relative', py: { xs: 8, md: 13 } }}>
           <Grid container spacing={6} alignItems="center">
-            <Grid item xs={12} md={7}>
+            <Grid size={{ xs: 12, md: 7 }}>
               <Chip label="CONSTRUCTION WORKFORCE & PAYROLL" sx={{ bgcolor: 'rgba(100,255,218,.12)', color: '#64ffda', fontWeight: 800, letterSpacing: '.08em', mb: 3 }} />
               <Typography component="h1" fontWeight={900} letterSpacing="-.055em" sx={{ fontSize: { xs: '2.8rem', sm: '3.8rem', lg: '5rem' }, lineHeight: 1.02, maxWidth: 850 }}>
                 Build with confidence. <Box component="span" sx={{ color: '#64ffda' }}>Account for every hour.</Box>
@@ -90,7 +90,7 @@ export default function App() {
                 ))}
               </Stack>
             </Grid>
-            <Grid item xs={12} md={5}>
+            <Grid size={{ xs: 12, md: 5 }}>
               <Box sx={{ maxWidth: 480, ml: 'auto', p: { xs: 2, sm: 3 }, border: '1px solid rgba(100,255,218,.22)', borderRadius: 4, bgcolor: 'rgba(255,255,255,.055)', boxShadow: '0 30px 100px rgba(0,0,0,.25)' }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
                   <Box>
@@ -101,7 +101,7 @@ export default function App() {
                 </Stack>
                 <Grid container spacing={1.5}>
                   {[['ACTIVE SITES','08'],['ON-SITE TEAM','126'],['TIMESHEETS','94%']].map(([label,value]) => (
-                    <Grid item xs={4} key={label}>
+                    <Grid size={{ xs: 4 }} key={label}>
                       <Box sx={{ p: 1.5, bgcolor: 'rgba(255,255,255,.07)', borderRadius: 2 }}>
                         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,.55)', fontSize: '.62rem' }}>{label}</Typography>
                         <Typography variant="h5" fontWeight={850} color="white" sx={{ mt: .5 }}>{value}</Typography>
@@ -140,7 +140,7 @@ export default function App() {
         </Typography>
         <Grid container spacing={2} sx={{ mt: 4 }}>
           {features.map((feature) => (
-            <Grid item xs={12} sm={6} lg={4} key={feature.title}>
+            <Grid size={{ xs: 12, sm: 6, lg: 4 }} key={feature.title}>
               <Card variant="outlined" sx={{ height: '100%', borderColor: '#e4eaf0', borderRadius: 3, boxShadow: 'none', transition: 'transform .2s, box-shadow .2s', '&:hover': { transform: 'translateY(-4px)', boxShadow: '0 16px 40px rgba(10,25,47,.08)' } }}>
                 <CardContent sx={{ p: 3 }}>
                   <Box sx={{ width: 48, height: 48, borderRadius: 2, display: 'grid', placeItems: 'center', bgcolor: '#e8fbf6', color: '#087e69', '& svg': { fontSize: 26 } }}>{feature.icon}</Box>
@@ -156,7 +156,7 @@ export default function App() {
       <Box sx={{ bgcolor: '#edf3f6' }} id="how-it-works">
         <Container maxWidth="xl" sx={{ py: { xs: 8, md: 11 } }}>
           <Grid container spacing={6}>
-            <Grid item xs={12} md={4}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Typography variant="overline" color="primary" fontWeight={850} letterSpacing=".16em">SIMPLE BY DESIGN</Typography>
               <Typography variant="h2" fontWeight={900} letterSpacing="-.045em" sx={{ mt: 1, fontSize: { xs: '2.2rem', md: '3.1rem' } }}>
                 From first setup to payday.
@@ -165,7 +165,7 @@ export default function App() {
                 A guided flow keeps the important work clear, with permissions and approvals where they matter.
               </Typography>
             </Grid>
-            <Grid item xs={12} md={8}>
+            <Grid size={{ xs: 12, md: 8 }}>
               <Stack spacing={0}>
                 {steps.map(([number,title,text], index) => (
                   <Stack key={number} direction="row" spacing={2.5} sx={{ py: 2.5, borderBottom: index === steps.length - 1 ? 0 : '1px solid #d7e1e7' }}>
@@ -185,7 +185,7 @@ export default function App() {
       <Box sx={{ bgcolor: '#0a192f', color: 'white' }} id="contact">
         <Container maxWidth="xl" sx={{ py: { xs: 7, md: 9 } }}>
           <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} md={8}>
+            <Grid size={{ xs: 12, md: 8 }}>
               <Typography variant="overline" sx={{ color: '#64ffda', letterSpacing: '.16em', fontWeight: 850 }}>DESIGN → INNOVATE → TRANSFORM</Typography>
               <Typography variant="h2" fontWeight={900} letterSpacing="-.045em" sx={{ mt: 1, fontSize: { xs: '2.1rem', md: '3.3rem' } }}>
                 Ready to make site operations simpler?
@@ -194,7 +194,7 @@ export default function App() {
                 JengaFlow is built by Qwerty Systems. Let’s talk about how your teams work.
               </Typography>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Button fullWidth size="large" variant="contained" href="mailto:contact@qwerty.co.ke?subject=JengaFlow%20enquiry"
                 endIcon={<ArrowForwardRounded />} sx={{ py: 1.7, bgcolor: '#64ffda', color: '#0a192f', fontWeight: 850, '&:hover': { bgcolor: '#8fffe7' } }}>
                 Contact Qwerty Systems
