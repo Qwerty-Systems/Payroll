@@ -1,0 +1,81 @@
+stages:
+  - build
+
+variables:
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_TLS_VERIFY: "1"
+  DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  DOCKER_DRIVER: overlay2
+  QWERTY_REGISTRY: "registry.qwerty.co.ke"
+  REGISTRY_NAMESPACE: "jengaflow"
+
+build-and-publish-images:
+  stage: build
+  image: docker:27.5.1-cli
+  services:
+    - name: docker:27.5.1-dind
+      alias: docker
+      command: ["--tls=true"]
+  before_script:
+    - |
+      if [ "${CI_COMMIT_BRANCH:-}" = "$CI_DEFAULT_BRANCH" ] || [ -n "${CI_COMMIT_TAG:-}" ]; then
+        if [ -z "${DOCKER_REGISTRY_USER:-}" ] || [ -z "${DOCKER_REGISTRY_PASS:-}" ]; then
+          echo "Publishing requires DOCKER_REGISTRY_USER and DOCKER_REGISTRY_PASS GitLab CI/CD variables."
+          exit 1
+        fi
+        echo "$DOCKER_REGISTRY_PASS" | docker login "$QWERTY_REGISTRY" --username "$DOCKER_REGISTRY_USER" --password-stdin
+      fi
+    - docker buildx create --name jengaflow-builder --driver docker-container --use
+    - docker buildx inspect --bootstrap
+  script:
+    - |
+      set -eu
+
+      PREFIX="$QWERTY_REGISTRY/$REGISTRY_NAMESPACE"
+      PUSH_IMAGES="false"
+      if [ "${CI_COMMIT_BRANCH:-}" = "$CI_DEFAULT_BRANCH" ] || [ -n "${CI_COMMIT_TAG:-}" ]; then
+        PUSH_IMAGES="true"
+      fi
+
+      for COMPONENT in api web backup; do
+        case "$COMPONENT" in
+          api) DOCKERFILE="apps/api/Dockerfile" ;;
+          web) DOCKERFILE="apps/web/Dockerfile" ;;
+          backup) DOCKERFILE="docker/backup/Dockerfile" ;;
+        esac
+
+        IMAGE="$PREFIX/$COMPONENT"
+        TAG_ARGS="--tag $IMAGE:$CI_COMMIT_SHA"
+
+        if [ -n "${CI_COMMIT_TAG:-}" ]; then
+          TAG_ARGS="$TAG_ARGS --tag $IMAGE:$CI_COMMIT_TAG"
+        elif [ "${CI_COMMIT_BRANCH:-}" = "$CI_DEFAULT_BRANCH" ]; then
+          TAG_ARGS="$TAG_ARGS --tag $IMAGE:$CI_COMMIT_REF_SLUG"
+        fi
+
+        echo "Building $IMAGE for commit $CI_COMMIT_SHA"
+        if [ "$PUSH_IMAGES" = "true" ]; then
+          # shellcheck disable=SC2086
+          docker buildx build --platform linux/amd64 --file "$DOCKERFILE" $TAG_ARGS \
+            --build-arg VITE_AUTH0_DOMAIN="${VITE_AUTH0_DOMAIN:-}" \
+            --build-arg VITE_AUTH0_CLIENT_ID="${VITE_AUTH0_CLIENT_ID:-}" \
+            --build-arg VITE_AUTH0_AUDIENCE="${VITE_AUTH0_AUDIENCE:-}" \
+            --build-arg VITE_AUTH0_REDIRECT_URI="${VITE_AUTH0_REDIRECT_URI:-}" \
+            --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-}" --push .
+        else
+          # Merge requests and feature branches validate builds but do not publish deployable tags.
+          docker buildx build --platform linux/amd64 --file "$DOCKERFILE" --tag "$IMAGE:$CI_COMMIT_SHA" \
+            --build-arg VITE_AUTH0_DOMAIN="${VITE_AUTH0_DOMAIN:-}" \
+            --build-arg VITE_AUTH0_CLIENT_ID="${VITE_AUTH0_CLIENT_ID:-}" \
+            --build-arg VITE_AUTH0_AUDIENCE="${VITE_AUTH0_AUDIENCE:-}" \
+            --build-arg VITE_AUTH0_REDIRECT_URI="${VITE_AUTH0_REDIRECT_URI:-}" \
+            --build-arg VITE_API_BASE_URL="${VITE_API_BASE_URL:-}" --load .
+        fi
+      done
+  after_script:
+    - docker logout "$QWERTY_REGISTRY" || true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_TAG'
