@@ -1,15 +1,28 @@
 import { TenantTransactionService } from './tenant-transaction.service';
 
 describe('TenantTransactionService', () => {
-  const createRunner = () => ({
-    connect: jest.fn().mockResolvedValue(undefined),
-    startTransaction: jest.fn().mockResolvedValue(undefined),
-    query: jest.fn().mockResolvedValue(undefined),
-    manager: {},
-    commitTransaction: jest.fn().mockResolvedValue(undefined),
-    rollbackTransaction: jest.fn().mockResolvedValue(undefined),
-    release: jest.fn().mockResolvedValue(undefined),
-  });
+  const createRunner = () => {
+    let transactionActive = false;
+
+    return {
+      connect: jest.fn().mockResolvedValue(undefined),
+      startTransaction: jest.fn().mockImplementation(async () => {
+        transactionActive = true;
+      }),
+      query: jest.fn().mockResolvedValue(undefined),
+      manager: {},
+      commitTransaction: jest.fn().mockImplementation(async () => {
+        transactionActive = false;
+      }),
+      rollbackTransaction: jest.fn().mockImplementation(async () => {
+        transactionActive = false;
+      }),
+      release: jest.fn().mockResolvedValue(undefined),
+      get isTransactionActive() {
+        return transactionActive;
+      },
+    };
+  };
 
   it('sets tenant context transaction-locally before executing work', async () => {
     const runner = createRunner();
