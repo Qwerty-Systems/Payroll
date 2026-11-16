@@ -34,4 +34,13 @@ export AWS_EC2_METADATA_DISABLED=true
 sha256sum "$file" > "$file.sha256"
 aws --endpoint-url "$aws_endpoint" s3 cp "$file" "s3://$SEAWEEDFS_BUCKET/backups/postgres/$(basename "$file")" --only-show-errors
 aws --endpoint-url "$aws_endpoint" s3 cp "$file.sha256" "s3://$SEAWEEDFS_BUCKET/backups/postgres/$(basename "$file").sha256" --only-show-errors
-echo "Encrypted backup uploaded: $(basename "$file")"
+retention_days="${BACKUP_RETENTION_DAYS:-35}"
+cutoff=$(( $(date -u +%s) - retention_days * 86400 ))
+aws --endpoint-url "$aws_endpoint" s3 ls "s3://$SEAWEEDFS_BUCKET/backups/postgres/" --recursive | while read -r day clock size object; do
+  [[ -z "${object:-}" ]] && continue
+  created=$(date -u -d "$day $clock" +%s 2>/dev/null || echo 0)
+  if (( created > 0 && created < cutoff )); then
+    aws --endpoint-url "$aws_endpoint" s3 rm "s3://$SEAWEEDFS_BUCKET/$object" --only-show-errors
+  fi
+done
+echo "Encrypted backup uploaded and retention applied: $(basename "$file")"
