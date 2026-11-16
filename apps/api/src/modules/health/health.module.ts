@@ -1,15 +1,24 @@
 import { Controller, Get, Module } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { HealthService } from './health.service';
 
 @ApiTags('health')
 @Controller('health')
 class HealthController {
-  @Get()
+  constructor(private readonly healthService: HealthService) {}
+
+  @Get('live')
   @ApiOperation({ summary: 'Application liveness check' })
-  getHealth(): { status: string; service: string } {
-    return { status: 'ok', service: 'construction-payroll-api' };
+  getLiveness(): { status: 'ok'; service: string } {
+    return this.healthService.getLiveness();
+  }
+
+  @Get('ready')
+  @ApiOperation({ summary: 'Database readiness check' })
+  getReadiness(): Promise<{ status: 'ready'; database: 'connected' }> {
+    return this.healthService.getReadiness();
   }
 }
 
-@Module({ controllers: [HealthController] })
+@Module({ controllers: [HealthController], providers: [HealthService] })
 export class HealthModule {}
