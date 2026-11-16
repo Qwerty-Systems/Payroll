@@ -18,16 +18,21 @@ export class TenantTransactionService {
     }
 
     const runner = this.dataSource.createQueryRunner();
-    await runner.connect();
-    await runner.startTransaction();
+    let transactionStarted = false;
 
     try {
+      await runner.connect();
+      await runner.startTransaction();
+      transactionStarted = true;
       await runner.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
       const result = await work(runner.manager);
       await runner.commitTransaction();
+      transactionStarted = false;
       return result;
     } catch (error) {
-      await runner.rollbackTransaction();
+      if (transactionStarted && runner.isTransactionActive) {
+        await runner.rollbackTransaction();
+      }
       throw error;
     } finally {
       await runner.release();
