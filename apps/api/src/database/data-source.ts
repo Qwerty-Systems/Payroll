@@ -12,4 +12,3 @@ export const AppDataSource = new DataSource({
   migrationsRun: false,
   logging: process.env.NODE_ENV === 'development',
 });
-export default AppDataSource;
