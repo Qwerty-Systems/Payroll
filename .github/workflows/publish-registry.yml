@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -23,6 +21,7 @@ env:
 jobs:
   publish:
     name: Build and push production images
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -45,10 +44,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/api
           tags: |
-            type=raw,value=${{ github.sha }}
-            type=ref,event=branch
-            type=ref,event=tag
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=production
+            type=raw,value=latest
 
       - name: Build and push API
         id: api
@@ -69,10 +66,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web
           tags: |
-            type=raw,value=${{ github.sha }}
-            type=ref,event=branch
-            type=ref,event=tag
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=production
+            type=raw,value=latest
 
       - name: Build and push web
         id: web
@@ -99,10 +94,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backup
           tags: |
-            type=raw,value=${{ github.sha }}
-            type=ref,event=branch
-            type=ref,event=tag
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=production
+            type=raw,value=latest
 
       - name: Build and push backup
         id: backup
@@ -121,9 +114,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SHA_TAG="${GITHUB_SHA}"
           for image in api web backup; do
-            ref="${REGISTRY}/${IMAGE_NAMESPACE}/${image}:${SHA_TAG}"
+            ref="${REGISTRY}/${IMAGE_NAMESPACE}/${image}:production"
             echo "Checking ${ref}"
             docker buildx imagetools inspect "${ref}"
           done
@@ -131,8 +123,8 @@ jobs:
       - name: Print Coolify image tag
         run: |
           echo "All three image builds and pushes completed."
-          echo "Set IMAGE_TAG=${GITHUB_SHA} in Coolify."
+          echo "Coolify should pull the production tag."
           echo "Images:"
-          echo "  ${REGISTRY}/${IMAGE_NAMESPACE}/api:${GITHUB_SHA}"
-          echo "  ${REGISTRY}/${IMAGE_NAMESPACE}/web:${GITHUB_SHA}"
-          echo "  ${REGISTRY}/${IMAGE_NAMESPACE}/backup:${GITHUB_SHA}"
+          echo "  ${REGISTRY}/${IMAGE_NAMESPACE}/api:production"
+          echo "  ${REGISTRY}/${IMAGE_NAMESPACE}/web:production"
+          echo "  ${REGISTRY}/${IMAGE_NAMESPACE}/backup:production"
