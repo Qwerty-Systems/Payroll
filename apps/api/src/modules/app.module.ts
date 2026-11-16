@@ -8,6 +8,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { StorageModule } from './storage/storage.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { TenantAccessGuard } from './auth/tenant-access.guard';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: TenantAccessGuard },
   ],
 })
 export class AppModule {}
