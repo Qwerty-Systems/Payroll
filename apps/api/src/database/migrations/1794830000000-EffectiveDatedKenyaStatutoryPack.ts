@@ -84,7 +84,7 @@ export class EffectiveDatedKenyaStatutoryPack1794830000000 implements MigrationI
 
     const pack = await q.query(`
       INSERT INTO statutory_rule_sets(country_code,name,version,status,is_system,published_at)
-      VALUES ('KE','Kenya statutory payroll baseline','KE-2026.02','published',true,now())
+      VALUES ('KE','Kenya statutory payroll baseline','KE-2026.11','published',true,now())
       ON CONFLICT(country_code,version) DO UPDATE SET name=EXCLUDED.name
       RETURNING id
     `);
@@ -150,7 +150,7 @@ export class EffectiveDatedKenyaStatutoryPack1794830000000 implements MigrationI
         label: 'National Industrial Training Authority levy',
         category: 'employer_contribution',
         method: 'fixed_per_employee_per_month',
-        from: '2026-01-01',
+        from: '2026-11-16',
         source: 'NITA Levy Inspectorate',
         url: 'https://www.nita.go.ke/our-services/levy-inspectorate.html',
         config: { amount: 50, currency: 'KES', frequency: 'monthly', employeePayrollDeduction: false, due: 'last_working_day_of_month' }
@@ -160,7 +160,7 @@ export class EffectiveDatedKenyaStatutoryPack1794830000000 implements MigrationI
         label: 'PAYE allowable deductions',
         category: 'allowable_deduction',
         method: 'capped_components',
-        from: '2024-01-01',
+        from: '2026-11-16',
         source: 'Kenya Revenue Authority - PAYE',
         url: 'https://www.kra.go.ke/individual/filing-paying/types-of-taxes/paye',
         config: { components: [
