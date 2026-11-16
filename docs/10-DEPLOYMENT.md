@@ -32,3 +32,12 @@ Health endpoints, structured logs, request IDs, database/queue metrics, disk usa
 - Admin MFA enabled.
 - Rate limits and upload limits configured.
 - Error reporting excludes personal/payroll secrets.
+
+
+## 10.9 Customer subdomains and PWA hosting
+- Customer workspaces use a normalized tenant slug, for example https://tenant-slug.qwerty.co.ke.
+- Reserve control.qwerty.co.ke for Qwerty platform administration and internal sales. Reserve api.qwerty.co.ke for the API if a shared API hostname is used.
+- Configure wildcard DNS to the reverse proxy and automate wildcard TLS certificate renewal using a supported DNS challenge. Confirm DNS provider and hosting capabilities before deployment.
+- Validate the request Host header against registered tenant domains; do not treat a wildcard match as proof of tenant membership.
+- Serve the PWA over HTTPS, publish manifest/icons, configure service-worker scope and test install/update behavior on Android, iOS and desktop.
+- Use customer-specific branding only from validated tenant configuration. Keep Qwerty legal/vendor identity and support details in the application shell.
