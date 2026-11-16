@@ -71,12 +71,13 @@ services:
       SENTRY_DSN: ${SENTRY_DSN}
     expose:
       - "3001"
+    # Readiness includes database, Redis and object-storage connectivity.
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 40s
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 60s
     networks: [jengaflow]
 
   web:
@@ -88,7 +89,8 @@ services:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
       interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
+      start_period: 15s
     depends_on:
       api:
         condition: service_healthy
@@ -117,11 +119,13 @@ services:
       SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY:-}
       SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY:-}
       S3_REGION: ${S3_REGION:-us-east-1}
+    # The entrypoint execs crond as PID 1; verify the scheduler is actually running.
     healthcheck:
-      test: ["CMD-SHELL", "test -f /etc/crontabs/root"]
+      test: ["CMD-SHELL", "test \"$(cat /proc/1/comm)\" = crond && test -s /etc/crontabs/root"]
       interval: 60s
       timeout: 5s
       retries: 3
+      start_period: 15s
     networks: [jengaflow]
 
 networks:
