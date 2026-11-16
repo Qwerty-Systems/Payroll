@@ -41,6 +41,12 @@ async function bootstrap(): Promise<void> {
       if (!value || value.length < 48 || value.startsWith('REPLACE_')) throw new Error(key + ' must be set to a strong unique secret (48+ characters).');
     }
     if (!process.env.GOOGLE_CLIENT_ID) throw new Error('GOOGLE_CLIENT_ID is required in production.');
+    for (const key of ['REDIS_URL', 'SEAWEEDFS_ACCESS_KEY', 'SEAWEEDFS_SECRET_KEY', 'SEAWEEDFS_BUCKET']) {
+      if (!process.env[key]) throw new Error(key + ' is required in production.');
+    }
+    if (!process.env.DATABASE_URL && !(process.env.DATABASE_HOST && process.env.DATABASE_USERNAME && process.env.DATABASE_NAME)) {
+      throw new Error('Configure DATABASE_URL or DATABASE_HOST, DATABASE_USERNAME and DATABASE_NAME.');
+    }
   }
 
   const port = Number(process.env.API_PORT ?? 3001);
