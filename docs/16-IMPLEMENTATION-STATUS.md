@@ -16,8 +16,8 @@
 
 ## Current API health endpoints
 - GET /api/v1/health/live — process liveness.
-- GET /api/v1/health/ready — checks PostgreSQL and Redis (Redis may be omitted in local development).
-- GET /api/docs — Swagger UI.
+- GET /api/v1/health/ready — checks PostgreSQL, Redis and SeaweedFS object storage.
+- GET /api/docs — Swagger UI in development; disabled in production unless explicitly enabled.
 
 ## Coolify configuration
 Set DATABASE_URL and REDIS_URL in Coolify. Set DATABASE_SSL=true when the managed PostgreSQL service requires TLS. Use rediss:// for Redis TLS. Do not commit real .env files or secrets. The main docker-compose.yml intentionally does not create PostgreSQL or Redis.
