@@ -19,6 +19,15 @@ export class AuthService {
     return createHmac('sha256', process.env.JWT_REFRESH_SECRET ?? '').update(value).digest('hex');
   }
 
+  private accessTtlSeconds(): number {
+    const raw = process.env.JWT_ACCESS_TTL ?? '15m';
+    const match = /^(\\d+)(s|m|h|d)$/.exec(raw);
+    if (!match) return 900;
+    const amount = Number(match[1]);
+    const multiplier = { s: 1, m: 60, h: 3600, d: 86400 }[match[2] as 's' | 'm' | 'h' | 'd'];
+    return Math.min(Math.max(amount * multiplier, 60), 3600);
+  }
+
   async signInWithGoogle(credential: string): Promise<{ result: SessionResult; refreshToken: string }> {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) throw new ServiceUnavailableException('Google sign-in is not configured.');
@@ -55,11 +64,11 @@ export class AuthService {
       await runner.commitTransaction();
       const accessToken = await this.jwt.signAsync(
         { sub: user.id, email: user.email },
-        { secret: process.env.JWT_ACCESS_SECRET, expiresIn: process.env.JWT_ACCESS_TTL ?? '15m', issuer: 'jengaflow-api', audience: 'jengaflow-web' },
+        { secret: process.env.JWT_ACCESS_SECRET, expiresIn: this.accessTtlSeconds(), issuer: 'jengaflow-api', audience: 'jengaflow-web' },
       );
       return {
         result: {
-          accessToken, expiresIn: 900,
+          accessToken, expiresIn: this.accessTtlSeconds(),
           user: { id: user.id, email: user.email, name: user.display_name, avatarUrl: user.avatar_url },
         },
         refreshToken,
@@ -102,7 +111,7 @@ export class AuthService {
         { secret: process.env.JWT_ACCESS_SECRET, expiresIn: process.env.JWT_ACCESS_TTL ?? '15m', issuer: 'jengaflow-api', audience: 'jengaflow-web' },
       );
       return {
-        result: { accessToken, expiresIn: 900, user: { id: user.id, email: user.email, name: user.display_name, avatarUrl: user.avatar_url } },
+        result: { accessToken, expiresIn: this.accessTtlSeconds(), user: { id: user.id, email: user.email, name: user.display_name, avatarUrl: user.avatar_url } },
         refreshToken: next,
       };
     } catch (error) {
