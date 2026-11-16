@@ -13,6 +13,7 @@ import { OperationsModule } from './operations/operations.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { UsersModule } from './users/users.module';
 import { OrganizationModule } from './organization/organization.module';
+import { SyncModule } from './sync/sync.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { OrganizationModule } from './organization/organization.module';
     PayrollModule,
     UsersModule,
     OrganizationModule,
+    SyncModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
