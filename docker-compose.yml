@@ -85,6 +85,30 @@ services:
         condition: service_healthy
     networks: [jengaflow]
 
+  backup:
+    build:
+      context: .
+      dockerfile: docker/backup/Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: Africa/Nairobi
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-false}
+      BACKUP_CRON: ${BACKUP_CRON:-0 2 * * *}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+      DATABASE_HOST: ${DATABASE_HOST:-}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-}
+      DATABASE_NAME: ${DATABASE_NAME:-}
+      SEAWEEDFS_ENDPOINT: ${SEAWEEDFS_ENDPOINT:-s3.qwerty.co.ke}
+      SEAWEEDFS_PORT: ${SEAWEEDFS_PORT:-443}
+      SEAWEEDFS_USE_SSL: ${SEAWEEDFS_USE_SSL:-true}
+      SEAWEEDFS_BUCKET: ${SEAWEEDFS_BUCKET:-jenga-flow}
+      SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY:-}
+      SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+    networks: [jengaflow]
+
 networks:
   jengaflow:
     driver: bridge
