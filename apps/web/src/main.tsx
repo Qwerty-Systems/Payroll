@@ -4,7 +4,28 @@ import { Auth0Provider } from '@auth0/auth0-react';
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import App from './App';
 
-const theme = createTheme({ palette: { mode: 'light', primary: { main: '#1d513b', dark: '#14251d' }, secondary: { main: '#c28b43' }, background: { default: '#f4f6f3', paper: '#ffffff' } }, shape: { borderRadius: 10 }, typography: { fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' } });
+const theme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: { main: '#2F6B4F', dark: '#17372B', light: '#E7F0E9', contrastText: '#FFFFFF' },
+    secondary: { main: '#B77932', dark: '#855322', light: '#F5E9D6', contrastText: '#FFFFFF' },
+    background: { default: '#F7F5EF', paper: '#FFFFFF' },
+    text: { primary: '#24332B', secondary: '#68756D' },
+    divider: '#E8E4D9',
+    success: { main: '#2F7655' },
+    warning: { main: '#B77932' },
+  },
+  shape: { borderRadius: 12 },
+  typography: {
+    fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    button: { textTransform: 'none', fontWeight: 700 },
+  },
+  components: {
+    MuiButton: { styleOverrides: { root: { borderRadius: 10, boxShadow: 'none' }, containedPrimary: { '&:hover': { boxShadow: '0 6px 18px rgba(23,55,43,.16)' } } } },
+    MuiPaper: { styleOverrides: { rounded: { borderRadius: 16 } } },
+    MuiCard: { styleOverrides: { root: { borderRadius: 16 } } },
+  },
+});
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => { void navigator.serviceWorker.register('/sw.js'); });
