@@ -13,7 +13,7 @@
 
 ## 1. Scope basis
 
-This quotation structure covers the proposed discovery, implementation, configuration, testing, training and handover described in the accompanying proposal and project requirements.
+This quotation structure covers Uniken onboarding to the existing JengaFlow platform: discovery, workspace setup, configuration of agreed modules, approved data migration, any specifically scoped customization/integration, testing, training and handover. It is not priced as the development of an entirely new platform.
 
 The final amount cannot responsibly be fixed until Uniken confirms its user/workforce volumes, number of sites, data migration needs, integrations, deployment requirements, support expectations and approved functional scope.
 

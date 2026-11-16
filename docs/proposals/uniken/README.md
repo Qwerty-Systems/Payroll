@@ -19,9 +19,11 @@
 
 ## Important status and commercial notes
 
-This pack is a proposal for a potential engagement. It is not an executed contract, purchase order, statement of work or commitment to a delivery date.
+This pack proposes an Uniken onboarding and implementation engagement on JengaFlow, an existing platform already in operational use across organizations/projects including Dominion Outdoor, Nifunze, SakaTaka and View Academy. These are existing deployments/use contexts, not a claim that each organization uses every JengaFlow module. Uniken's exact modules, configuration, integrations, migration and service levels will be agreed during discovery.
 
-JengaFlow is an active product foundation. The repository records a number of implemented infrastructure and data foundations, while authentication and tenant authorization, workforce and attendance workflows, payroll calculation/finalization, complete offline synchronization, billing workflows and production validation remain incomplete. The proposed work must therefore be treated as implementation and configuration, not as a claim that a complete production payroll product is already available.
+The repository is the technical source of truth for the code currently present. Existing deployments do not automatically establish that every feature, integration or security control is enabled in every environment. All Uniken-critical workflows—especially access control, tenant isolation, attendance approvals and payroll calculations—must be demonstrated and accepted against the agreed scope before production use.
+
+This pack is not an executed contract, purchase order, statement of work or commitment to a delivery date.
 
 No Uniken-specific operating model, headcount, sites, payroll rules, integrations, budget or implementation dates have been supplied. Those items are marked **To be confirmed (TBC)** and should be agreed during discovery.
 

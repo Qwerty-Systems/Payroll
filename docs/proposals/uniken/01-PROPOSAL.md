@@ -11,13 +11,13 @@
 
 ## 1. Executive summary
 
-Qwerty Systems proposes to work with Uniken to assess, configure and implement JengaFlow, a workforce and payroll management platform designed around multi-site operations. The proposed solution brings company and worker records, project/site assignments, attendance and timesheets, payroll preparation, reporting and controlled administration into one platform.
+Qwerty Systems proposes onboarding Uniken onto JengaFlow, its existing workforce, site-operations and payroll platform. JengaFlow is already in operational use across organizations and projects including Dominion Outdoor, Nifunze, SakaTaka and View Academy. The Uniken engagement is therefore an implementation of an established platform: configure Uniken's workspace, adapt agreed workflows, migrate approved data, train users and validate the required processes. The exact modules and capabilities enabled for Uniken will be confirmed during discovery.
 
 The intended outcome is a more consistent operating process: workforce information is maintained centrally; attendance and work records are captured against the correct site and period; payroll inputs are reviewed before calculation; and authorized users can trace approvals and changes.
 
 The engagement will begin with discovery and process mapping. This is important because Uniken's actual workforce structure, payroll calendar, pay arrangements, approval chain, statutory treatment, integrations, reporting needs and deployment constraints have not yet been confirmed.
 
-**Product maturity disclosure:** JengaFlow is under active development. Its repository currently contains foundational application, database, tenant-isolation, health-check, statutory-configuration and offline-storage components. Several end-to-end business workflows and production controls remain to be completed and validated. This proposal therefore describes the target solution and a phased implementation, not a representation that every listed feature is already live.
+**Existing platform and scope note:** JengaFlow is an existing platform in operational use. The fact that the platform is in use does not mean every module, integration or workflow is automatically included or enabled for every customer. Uniken's subscribed scope, configuration, data migration, access controls, payroll rules, integrations and acceptance tests will be agreed explicitly. Any workflow that is not yet available in the agreed release will be identified as a configuration, customization or separately scheduled enhancement before commitment.
 
 ## 2. Understanding of the opportunity
 
@@ -33,7 +33,7 @@ The following are discovery items, not assumed facts: Uniken's industry and oper
 
 ## 3. Proposed solution
 
-JengaFlow is designed as a responsive web application with an installable Progressive Web App (PWA). The target architecture uses a React frontend, NestJS API, PostgreSQL database and controlled background processing. The platform is intended to support cloud hosting and, where justified, a local site deployment with a separately designed synchronization process.
+JengaFlow is delivered as a responsive web platform with an installable Progressive Web App (PWA). The current deployment architecture uses a React frontend, NestJS API, PostgreSQL and supporting background services. The hosting model, integrations, storage and any offline/site synchronization requirements for Uniken will be confirmed during technical discovery.
 
 ### 3.1 Workforce and company administration
 - Company profile, organizational units, departments and cost centres.
@@ -63,7 +63,7 @@ JengaFlow is designed as a responsive web application with an installable Progre
 - Payroll register, payslip outputs and payment-status tracking.
 - Adjustment/reversal records for post-finalization corrections.
 
-Payroll calculation and finalization are not represented as complete in the current product foundation. These workflows will require implementation, test cases and review against Uniken's approved policies and applicable Kenyan requirements before production use. Automated disbursement or statutory filing is not included unless separately specified and approved.
+Payroll capabilities will be demonstrated and validated against Uniken's actual pay rules, worker categories and approval process. Before live payroll use, Qwerty and Uniken will complete agreed test cases and parallel-result reconciliation, with Uniken's payroll owner approving statutory treatment and expected results. Automated disbursement or statutory filing is not included unless separately specified, technically validated and approved.
 
 ### 3.5 Reporting and audit
 - Workforce headcount and contract summaries.

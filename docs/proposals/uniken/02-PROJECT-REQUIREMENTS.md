@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-Define the proposed functional and non-functional requirements for a Uniken implementation of JengaFlow. This document is a discovery baseline. Requirements marked **TBC** require confirmation by Uniken before they become contractual acceptance criteria.
+Define the functional and non-functional requirements for onboarding Uniken onto the existing JengaFlow platform. This is a discovery and configuration baseline, not a greenfield product specification. Requirements marked **TBC** require confirmation by Uniken before they become contractual acceptance criteria. Existing platform modules will be demonstrated and mapped to requirements; gaps will be classified as configuration, customization, integration or future-phase work.
 
 ## 2. Business objectives
 
