@@ -27,7 +27,7 @@ export class UsersService {
     });
   }
   listMembers(tenantId:string){return this.tenantDb.run(tenantId,m=>m.query('SELECT m.id AS "membershipId",m.role,m.status,m.created_at AS "joinedAt",u.id AS "userId",u.email,u.full_name AS "fullName",u.status AS "userStatus" FROM tenant_memberships m JOIN platform_users u ON u.id=m.user_id WHERE m.tenant_id=$1 ORDER BY u.full_name',[tenantId]));}
-  listInvitations(tenantId:string){return this.tenantDb.run(tenantId,m=>m.query("SELECT id,email,role,expires_at AS \"expiresAt\",created_at AS \"createdAt\',accepted_at AS \"acceptedAt\",revoked_at AS \"revokedAt\" FROM tenant_invitations WHERE tenant_id=$1 ORDER BY created_at DESC",[tenantId]));}
+  listInvitations(tenantId:string){return this.tenantDb.run(tenantId,m=>m.query("SELECT id,email,role,expires_at AS \"expiresAt\",created_at AS \"createdAt\",accepted_at AS \"acceptedAt\",revoked_at AS \"revokedAt\" FROM tenant_invitations WHERE tenant_id=$1 ORDER BY created_at DESC",[tenantId]));}
   acceptInvitation(claims:Claims,dto:AcceptInvitationDto){
     if(typeof claims.sub!=='string'||!claims.sub.trim())throw new ForbiddenException('A valid Auth0 subject is required.');
     const emailValue=claims.email??claims[EMAIL];
