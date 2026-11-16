@@ -1,0 +1,42 @@
+name: qwerty-construction-payroll
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-construction_payroll}
+      POSTGRES_USER: ${DATABASE_USER:-payroll_app}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${DATABASE_PORT:-5432}:5432"
+    volumes:
+      - payroll_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-payroll_app} -d ${DATABASE_NAME:-construction_payroll}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks: [payroll_internal]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${DATABASE_USER:-payroll_app}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME:-construction_payroll}
+      API_PORT: 3001
+    ports:
+      - "127.0.0.1:${API_PORT:-3001}:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [payroll_internal]
+
+volumes:
+  payroll_postgres_data:
+
+networks:
+  payroll_internal:
+    driver: bridge
