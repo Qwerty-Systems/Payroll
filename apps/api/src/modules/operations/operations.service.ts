@@ -71,4 +71,5 @@ export class OperationsService {
       return rows[0];
     });
   }
-\n}\n
+
+}
