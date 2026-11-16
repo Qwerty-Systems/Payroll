@@ -1,22 +1,25 @@
-name: qwerty-construction-payroll
+name: crewledger
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DATABASE_NAME:-construction_payroll}
-      POSTGRES_USER: ${DATABASE_USER:-payroll_app}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in .env}
+      POSTGRES_DB: ${DATABASE_NAME:-crewledger}
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}
+      APP_DB_USER: ${DATABASE_USER:-crewledger_app}
+      APP_DB_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in .env}
     ports:
       - "127.0.0.1:${DATABASE_PORT:-5432}:5432"
     volumes:
-      - payroll_postgres_data:/var/lib/postgresql/data
+      - crewledger_postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init/01-create-app-role.sh:/docker-entrypoint-initdb.d/01-create-app-role.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-payroll_app} -d ${DATABASE_NAME:-construction_payroll}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER:-postgres} -d ${DATABASE_NAME:-crewledger}"]
       interval: 5s
       timeout: 5s
       retries: 15
-    networks: [payroll_internal]
+    networks: [crewledger_internal]
 
   api:
     build:
@@ -25,18 +28,18 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://${DATABASE_USER:-payroll_app}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME:-construction_payroll}
+      DATABASE_URL: postgresql://${DATABASE_USER:-crewledger_app}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME:-crewledger}
       API_PORT: 3001
     ports:
       - "127.0.0.1:${API_PORT:-3001}:3001"
     depends_on:
       postgres:
         condition: service_healthy
-    networks: [payroll_internal]
+    networks: [crewledger_internal]
 
 volumes:
-  payroll_postgres_data:
+  crewledger_postgres_data:
 
 networks:
-  payroll_internal:
+  crewledger_internal:
     driver: bridge
