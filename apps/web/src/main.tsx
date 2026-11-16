@@ -17,10 +17,9 @@ const auth0RedirectUri = (import.meta.env.VITE_AUTH0_REDIRECT_URI as string | un
 
 function Root() {
   const app = <ThemeProvider theme={theme}><CssBaseline /><App /></ThemeProvider>;
-  if (!auth0Domain || !auth0ClientId || !auth0Audience) return app;
   return <Auth0Provider
-    domain={auth0Domain}
-    clientId={auth0ClientId}
+    domain={auth0Domain || 'not-configured.invalid'}
+    clientId={auth0ClientId || 'not-configured'}
     authorizationParams={{
       redirect_uri: auth0RedirectUri,
       audience: auth0Audience,
