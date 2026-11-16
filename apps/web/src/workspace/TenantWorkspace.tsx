@@ -45,6 +45,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [selectedWorker, setSelectedWorker] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedRun, setSelectedRun] = useState('');
+  const [contracts, setContracts] = useState<RowData[]>([]);
   const [forms, setForms] = useState<Record<string, string>>({
     workerNumber: '', firstName: '', lastName: '', phone: '', email: '',
     engagementType: 'permanent', payBasis: 'monthly', rateAmount: '', effectiveFrom: dateToday(),
@@ -98,6 +99,15 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   }, [request, tenantId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (!selectedWorker) { setContracts([]); return; }
+    let active = true;
+    request<unknown>(`tenant/workers/${selectedWorker}/contracts`)
+      .then(value => { if (active) setContracts(asRows(value)); })
+      .catch(() => { if (active) setContracts([]); });
+    return () => { active = false; };
+  }, [request, selectedWorker]);
 
   const counts = useMemo(() => ({
     workers: (data.workers ?? []).filter(row => row.status === 'active').length,
@@ -154,6 +164,17 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The request could not be completed.');
+    } finally { setBusy(false); }
+  }
+
+  async function attendanceAction(id: string, action: 'submit' | 'approve') {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await request(`tenant/attendance/${id}/${action}`, { method: 'POST', body: '{}' });
+      setNotice(action === 'submit' ? 'Attendance submitted for approval.' : 'Attendance approved.');
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Attendance status could not be updated.');
     } finally { setBusy(false); }
   }
 
@@ -250,19 +271,33 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
         </Box> : <Table size="small"><TableHead><TableRow>
           {(section === 'workers' ? ['Worker no.','Name','Phone','Email','Status','Select'] :
             section === 'projects' ? ['Code','Project','Client','Status','Select'] :
-            section === 'attendance' ? ['Date','Worker ID','Project ID','Minutes','Status'] :
+            section === 'attendance' ? ['Date','Worker ID','Project ID','Minutes','Status','Actions'] :
             section === 'people' ? ['Name','Email','Role','Status'] :
             ['Code','Name','Status']).map(x => <TableCell key={x}>{x}</TableCell>)}
         </TableRow></TableHead><TableBody>
           {currentRows.map(row => <TableRow key={String(row.id ?? JSON.stringify(row))} hover>
             {section === 'workers' && <><TableCell>{label(row.workerNumber)}</TableCell><TableCell>{label(row.firstName)} {label(row.lastName)}</TableCell><TableCell>{label(row.phone)}</TableCell><TableCell>{label(row.email)}</TableCell><TableCell>{label(row.status)}</TableCell><TableCell><Button size="small" onClick={() => setSelectedWorker(String(row.id))}>{selectedWorker === row.id ? 'Selected' : 'Select'}</Button></TableCell></>}
             {section === 'projects' && <><TableCell>{label(row.projectCode)}</TableCell><TableCell>{label(row.name)}</TableCell><TableCell>{label(row.clientName)}</TableCell><TableCell>{label(row.status)}</TableCell><TableCell><Button size="small" onClick={() => setSelectedProject(String(row.id))}>{selectedProject === row.id ? 'Selected' : 'Select'}</Button></TableCell></>}
-            {section === 'attendance' && <><TableCell>{label(row.workDate)}</TableCell><TableCell>{label(row.workerId)}</TableCell><TableCell>{label(row.projectId)}</TableCell><TableCell>{label(row.minutesWorked)}</TableCell><TableCell><Chip size="small" label={label(row.status)} /></TableCell></>}
+            {section === 'attendance' && <><TableCell>{label(row.workDate)}</TableCell><TableCell>{label(row.workerId)}</TableCell><TableCell>{label(row.projectId)}</TableCell><TableCell>{label(row.minutesWorked)}</TableCell><TableCell><Chip size="small" label={label(row.status)} /></TableCell><TableCell>{row.status === 'draft' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'submit')}>Submit</Button> : row.status === 'submitted' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'approve')}>Approve</Button> : '—'}</TableCell></>}
             {section === 'people' && <><TableCell>{label(row.fullName)}</TableCell><TableCell>{label(row.email)}</TableCell><TableCell>{label(row.role)}</TableCell><TableCell>{label(row.status)}</TableCell></>}
             {section === 'organization' && <><TableCell>{label(row.code)}</TableCell><TableCell>{label(row.name)}</TableCell><TableCell>{label(row.status)}</TableCell></>}
           </TableRow>)}
           {!currentRows?.length && <TableRow><TableCell colSpan={6}>No records available or your role does not grant access to this section.</TableCell></TableRow>}
         </TableBody></Table>}
+        {section === 'workers' && selectedWorker && <Box sx={{ p: 2.5, borderTop: '1px solid #E3E0D6' }}>
+          <Typography fontWeight={850} sx={{ mb: 1 }}>Effective-dated contract history</Typography>
+          <Table size="small"><TableHead><TableRow>{['Engagement','Pay basis','Rate','From','To'].map(item => <TableCell key={item}>{item}</TableCell>)}</TableRow></TableHead><TableBody>
+            {contracts.map(contract => <TableRow key={String(contract.id)}><TableCell>{label(contract.engagementType)}</TableCell><TableCell>{label(contract.payBasis)}</TableCell><TableCell>{label(contract.rateAmount)} {label(contract.currency)}</TableCell><TableCell>{label(contract.effectiveFrom)}</TableCell><TableCell>{label(contract.effectiveTo)}</TableCell></TableRow>)}
+            {!contracts.length && <TableRow><TableCell colSpan={5}>No contract history is recorded for this worker.</TableCell></TableRow>}
+          </TableBody></Table>
+        </Box>}
+        {section === 'projects' && <Box sx={{ p: 2.5, borderTop: '1px solid #E3E0D6' }}>
+          <Typography fontWeight={850} sx={{ mb: 1 }}>Project sites</Typography>
+          <Table size="small"><TableHead><TableRow>{['Site code','Site','Project','Status'].map(item => <TableCell key={item}>{item}</TableCell>)}</TableRow></TableHead><TableBody>
+            {(data.sites ?? []).filter(site => !selectedProject || site.projectId === selectedProject).map(site => <TableRow key={String(site.id)}><TableCell>{label(site.siteCode)}</TableCell><TableCell>{label(site.name)}</TableCell><TableCell>{label(site.projectId)}</TableCell><TableCell>{label(site.status)}</TableCell></TableRow>)}
+            {!(data.sites ?? []).length && <TableRow><TableCell colSpan={4}>No project sites have been created.</TableCell></TableRow>}
+          </TableBody></Table>
+        </Box>}
       </Paper>}
     </Container>
     <Dialog open={Boolean(dialog)} onClose={() => setDialog('')} fullWidth maxWidth="sm">
