@@ -1,6 +1,6 @@
-# Qwerty Construction Payroll
+# JengaFlow by Qwerty
 
-A multi-tenant construction workforce, payroll and SaaS billing platform for Kenya. Designed for cloud SaaS operation and standalone PC deployments with offline-first workflows and controlled cloud synchronization.
+A mobile-first, multi-tenant construction workforce, site operations, payroll and business management platform for Kenya. Designed for cloud SaaS and standalone PC/site deployments with offline-first workflows and controlled cloud synchronization.
 
 > Current delivery stage: Product and technical specification. Application implementation follows after architecture and acceptance criteria are established.
 
@@ -15,6 +15,10 @@ A multi-tenant construction workforce, payroll and SaaS billing platform for Ken
 - Provide an installable desktop PWA with approved offline workflows.
 - Synchronize local work to a cloud tenant safely and idempotently.
 - Ship reproducible Docker-based development and production deployments.
+
+## Product identity
+
+**Working name:** JengaFlow by Qwerty (pending Qwerty approval and trademark/domain checks). Customer workspaces are planned at `https://{tenant-slug}.qwerty.co.ke`; Qwerty control-plane and internal sales workspace are planned under reserved subdomains.
 
 ## Documentation
 
@@ -33,6 +37,8 @@ A multi-tenant construction workforce, payroll and SaaS billing platform for Ken
 | [User guide](docs/11-USER-GUIDE.md) | Workflows for administrators, supervisors, finance and workers |
 | [Developer guide](docs/12-DEVELOPER-GUIDE.md) | Workspace conventions, migrations, seeds and development |
 | [Testing strategy](docs/13-TESTING.md) | Unit, integration, E2E, offline and security testing |
+| [Branding and naming](docs/14-BRANDING-AND-PRODUCT-NAMING.md) | Working name, brand architecture and subdomain plan |
+| [Responsive PWA and commercial workspace](docs/15-RESPONSIVE-PWA-AND-COMMERCIAL-WORKSPACE.md) | Mobile-first PWA and Qwerty proposals, quotations and CRM scope |
 
 ## Intended technology
 
