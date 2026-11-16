@@ -15,7 +15,7 @@ class HealthController {
 
   @Get('ready')
   @ApiOperation({ summary: 'Database readiness check' })
-  getReadiness(): Promise<{ status: 'ready'; database: 'connected' }> {
+  getReadiness(): Promise<{ status: 'ready'; database: 'connected'; redis: 'connected' | 'not_configured' }> {
     return this.healthService.getReadiness();
   }
 }
