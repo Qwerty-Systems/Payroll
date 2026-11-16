@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "JengaFlow by Qwerty Systems",
+  "short_name": "JengaFlow",
+  "description": "Construction workforce, site operations and payroll management — designed to work offline",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f7f9fc",
+  "theme_color": "#0a192f",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
