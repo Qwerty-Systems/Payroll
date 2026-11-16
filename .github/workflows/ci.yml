@@ -6,9 +6,40 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: jengaflow-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: jengaflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d jengaflow"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: jengaflow
+      DATABASE_SSL: "false"
+      JWT_ACCESS_SECRET: ci-only-access-secret-do-not-use-in-production-000000000000
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-do-not-use-in-production-000000000000
+      GOOGLE_CLIENT_ID: ci-test-client.apps.googleusercontent.com
+      REDIS_URL: ""
+      SEAWEEDFS_ENDPOINT: ""
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -17,8 +48,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+      - name: Apply database migrations
+        run: pnpm --filter @jengaflow/api migration:run
       - name: Type check
         run: pnpm typecheck
       - name: Build
