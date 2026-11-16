@@ -52,6 +52,9 @@ export class IdentityService {
         }
         const tenantRows = await manager.query("INSERT INTO tenants (slug, legal_name, display_name, status, timezone, currency) VALUES ($1, $2, $3, 'trial', $4, $5) RETURNING id, slug, legal_name, display_name, status, timezone, currency, created_at", [dto.slug.trim().toLowerCase(), dto.legalName.trim(), dto.displayName.trim(), dto.timezone ?? 'Africa/Nairobi', currency]);
         const tenant = tenantRows[0];
+        await manager.query("SELECT set_config('app.tenant_id', $1, true)", [tenant.id]);
+        await manager.query('INSERT INTO tenant_payroll_settings (tenant_id, currency, timezone) VALUES ($1, $2, $3) ON CONFLICT (tenant_id) DO NOTHING', [tenant.id, currency, dto.timezone ?? 'Africa/Nairobi']);
+        await manager.query("INSERT INTO tenant_statutory_assignments (tenant_id, rule_set_id, effective_from) SELECT $1, id, CURRENT_DATE FROM statutory_rule_sets WHERE country_code = 'KE' AND status = 'published' ORDER BY published_at DESC NULLS LAST LIMIT 1 ON CONFLICT (tenant_id, rule_set_id, effective_from) DO NOTHING", [tenant.id]);
         const membership = await manager.query("INSERT INTO tenant_memberships (tenant_id, user_id, role, status) VALUES ($1, $2, 'owner', 'active') RETURNING id, role, status", [tenant.id, userId]);
         await manager.query("INSERT INTO platform_audit_events (actor_user_id, action, entity_type, entity_id, metadata) VALUES ($1, 'tenant.created', 'tenant', $2, $3::jsonb)", [userId, tenant.id, JSON.stringify({ slug: tenant.slug, auth0Subject: identity.subject })]);
         return { provisioned: true, tenant, membership: membership[0] };
