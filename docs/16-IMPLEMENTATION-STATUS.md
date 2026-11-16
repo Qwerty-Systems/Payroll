@@ -39,7 +39,7 @@ The browser-side IndexedDB store and command outbox are foundations only. The au
 All tenant-owned repository access must run through TenantTransactionService after authenticating the actor and verifying tenant membership. The service sets PostgreSQL tenant context only for the lifetime of the transaction. Do not use session-level SET for tenant context with pooled connections.
 
 ## Not yet production-ready
-Authentication and tenant provisioning endpoints, authorization guards, worker/project/site/attendance CRUD, full payroll calculation and finalization, statutory approval screens, authenticated sync endpoint, conflict review UI, Qwerty sales workspace, billing/payment integrations and production end-to-end validation are not complete. Do not load real personal or payroll data into this foundation.
+The current implementation is still a limited foundation. The full workforce/contract management UI, complete statutory payroll support (including allowances, deductions and all pay bases), statutory review tooling, payment provider execution, payslip delivery, tenant-authorized file controllers, authenticated offline sync, billing, observability/alerting, disaster-recovery restore drill and production browser end-to-end tests remain incomplete. The existing API payroll flow deliberately blocks finalization when statutory rules are unapproved or unsupported earning components are present. Do not load live payroll data or process real payroll until the release blockers in docs/19-PRODUCTION-OPERATIONS.md are closed. Do not load real personal or payroll data into this foundation.
 
 
 ## Production hardening additions (in progress)
