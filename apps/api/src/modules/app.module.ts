@@ -9,6 +9,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { StorageModule } from './storage/storage.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { TenantAccessGuard } from './auth/tenant-access.guard';
+import { OperationsModule } from './operations/operations.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { TenantAccessGuard } from './auth/tenant-access.guard';
     HealthModule,
     AuthModule,
     StorageModule,
+    OperationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
