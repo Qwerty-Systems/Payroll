@@ -6,6 +6,7 @@ import ConstructionRounded from '@mui/icons-material/ConstructionRounded';
 import VerifiedUserRounded from '@mui/icons-material/VerifiedUserRounded';
 import ApiRounded from '@mui/icons-material/ApiRounded';
 import { auth0Config } from '../config';
+import { slugifyWorkspaceName } from './workspace-slug';
 
 type Membership = { tenantId: string; slug: string; displayName: string; legalName: string; tenantStatus: string; membershipId: string; role: string };
 type ApiIdentity = { auth0Subject?: string; email?: string | null; emailVerified?: boolean; name?: string | null; picture?: string | null; provisioned?: boolean; memberships?: Membership[]; identity?: { email?: string; name?: string } };
@@ -20,6 +21,7 @@ export default function AuthenticatedApp() {
   const redirectStarted = useRef(false);
   const [apiState, setApiState] = useState<ApiState>({ status: 'loading' });
   const [company, setCompany] = useState({ legalName: '', displayName: '', slug: '', timezone: 'Africa/Nairobi', currency: 'KES' });
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [onboardError, setOnboardError] = useState('');
 
@@ -46,6 +48,14 @@ export default function AuthenticatedApp() {
     void loadIdentity();
     return () => controller.abort();
   }, [getAccessTokenSilently, isAuthenticated, isLoading]);
+
+  function updateDisplayName(displayName: string) {
+    setCompany(current => ({
+      ...current,
+      displayName,
+      ...(!slugManuallyEdited ? { slug: slugifyWorkspaceName(displayName) } : {}),
+    }));
+  }
 
   async function createCompany(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,8 +99,8 @@ export default function AuthenticatedApp() {
         <Typography color="text.secondary" sx={{ mt: .5, mb: 2.5 }}>Your account will become the initial company owner. A trial workspace and default Kenya payroll settings will be created.</Typography>
         <Stack spacing={2}>
           <TextField required label="Legal company name" value={company.legalName} onChange={e => setCompany(v => ({ ...v, legalName: e.target.value }))} fullWidth />
-          <TextField required label="Display name" value={company.displayName} onChange={e => setCompany(v => ({ ...v, displayName: e.target.value }))} fullWidth />
-          <TextField required label="Workspace URL slug" helperText="Lowercase letters, numbers and hyphens only." value={company.slug} onChange={e => setCompany(v => ({ ...v, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))} fullWidth />
+          <TextField required label="Display name" value={company.displayName} onChange={e => updateDisplayName(e.target.value)} fullWidth />
+          <TextField required label="Workspace URL slug" helperText="Generated from the display name. You can edit it; lowercase letters, numbers and hyphens only." value={company.slug} onChange={e => { setSlugManuallyEdited(true); setCompany(v => ({ ...v, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })); }} fullWidth />
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}><TextField label="Timezone" value={company.timezone} onChange={e => setCompany(v => ({ ...v, timezone: e.target.value }))} fullWidth /><TextField label="Currency" value={company.currency} inputProps={{ maxLength: 3 }} onChange={e => setCompany(v => ({ ...v, currency: e.target.value.toUpperCase() }))} fullWidth /></Stack>
           {onboardError && <Alert severity="error">{onboardError}</Alert>}
           <Button type="submit" variant="contained" disabled={submitting || !company.legalName.trim() || !company.displayName.trim() || company.slug.length < 3} sx={{ py: 1.4, bgcolor: '#17372B', '&:hover': { bgcolor: '#2F6B4F' } }}>{submitting ? 'Creating workspace…' : 'Create company workspace'}</Button>
