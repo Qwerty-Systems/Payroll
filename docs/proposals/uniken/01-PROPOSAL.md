@@ -63,7 +63,7 @@ JengaFlow is designed as a responsive web application with an installable Progre
 - Payroll register, payslip outputs and payment-status tracking.
 - Adjustment/reversal records for post-finalization corrections.
 
-Payroll calculation and finalization are not represented as complete in the current product foundation. These workflows will require implementation, test cases and review against Uniken's approved policies and applicable Kenyan requirements before production use. Automated disbursement or statutory filing is not included unless separately specified and approved.
+Payroll capabilities will be demonstrated and validated against Uniken's actual pay rules, worker categories and approval process. Before live payroll use, Qwerty and Uniken will complete agreed test cases and parallel-result reconciliation, with Uniken's payroll owner approving statutory treatment and expected results. Automated disbursement or statutory filing is not included unless separately specified, technically validated and approved.
 
 ### 3.5 Reporting and audit
 - Workforce headcount and contract summaries.
