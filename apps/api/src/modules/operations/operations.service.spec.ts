@@ -8,9 +8,9 @@ describe('OperationsService worker contracts', () => {
   const contractId = '123e4567-e89b-42d3-a456-426614174003';
 
   function makeService(query: jest.Mock) {
-    const manager = { query };
+    const transactionManager = { query };
     const tenantDb = {
-      run: jest.fn(async (_tenantId: string, work: (manager: typeof manager) => Promise<unknown>) => work(manager)),
+      run: jest.fn(async (_tenantId: string, work: (manager: { query: jest.Mock }) => Promise<unknown>) => work(transactionManager)),
     };
     return { service: new OperationsService(tenantDb as never), tenantDb };
   }
