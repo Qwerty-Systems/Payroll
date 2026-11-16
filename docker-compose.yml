@@ -18,12 +18,22 @@ services:
       DATABASE_USERNAME: ${DATABASE_USERNAME:-}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-}
       DATABASE_NAME: ${DATABASE_NAME:-}
+      MIGRATIONS_DATABASE_URL: ${MIGRATIONS_DATABASE_URL:-}
+      MIGRATIONS_DATABASE_HOST: ${MIGRATIONS_DATABASE_HOST:-}
+      MIGRATIONS_DATABASE_PORT: ${MIGRATIONS_DATABASE_PORT:-}
+      MIGRATIONS_DATABASE_USERNAME: ${MIGRATIONS_DATABASE_USERNAME:-}
+      MIGRATIONS_DATABASE_PASSWORD: ${MIGRATIONS_DATABASE_PASSWORD:-}
+      MIGRATIONS_DATABASE_NAME: ${MIGRATIONS_DATABASE_NAME:-}
       DATABASE_SSL: ${DATABASE_SSL:-false}
       DATABASE_SSL_REJECT_UNAUTHORIZED: ${DATABASE_SSL_REJECT_UNAUTHORIZED:-true}
       DATABASE_POOL_MIN: ${DATABASE_POOL_MIN:-2}
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
       DATABASE_CONNECT_TIMEOUT_MS: ${DATABASE_CONNECT_TIMEOUT_MS:-10000}
-      REDIS_URL: ${REDIS_URL}
+      REDIS_URL: ${REDIS_URL:-}
+      REDIS_HOST: ${REDIS_HOST:-}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_TLS: ${REDIS_TLS:-false}
       REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-jengaflow:}
       REDIS_CONNECT_TIMEOUT_MS: ${REDIS_CONNECT_TIMEOUT_MS:-10000}
       REDIS_TLS: ${REDIS_TLS:-true}
@@ -34,6 +44,8 @@ services:
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-.qwerty.co.ke}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       COOKIE_SAME_SITE: ${COOKIE_SAME_SITE:-lax}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
       DEFAULT_COUNTRY: ${DEFAULT_COUNTRY:-KE}
       DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-KES}
       DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-Africa/Nairobi}
@@ -74,12 +86,52 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     restart: unless-stopped
     expose:
       - "80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
     depends_on:
       api:
         condition: service_healthy
+    networks: [jengaflow]
+
+  backup:
+    build:
+      context: .
+      dockerfile: docker/backup/Dockerfile
+    restart: unless-stopped
+    environment:
+      TZ: Africa/Nairobi
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-false}
+      BACKUP_CRON: ${BACKUP_CRON:-0 2 * * *}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-35}
+      DATABASE_HOST: ${DATABASE_HOST:-}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-}
+      DATABASE_NAME: ${DATABASE_NAME:-}
+      BACKUP_DATABASE_USERNAME: ${BACKUP_DATABASE_USERNAME:-jengaflow_backup}
+      BACKUP_DATABASE_PASSWORD: ${BACKUP_DATABASE_PASSWORD:-}
+      SEAWEEDFS_ENDPOINT: ${SEAWEEDFS_ENDPOINT:-s3.qwerty.co.ke}
+      SEAWEEDFS_PORT: ${SEAWEEDFS_PORT:-443}
+      SEAWEEDFS_USE_SSL: ${SEAWEEDFS_USE_SSL:-true}
+      SEAWEEDFS_BUCKET: ${SEAWEEDFS_BUCKET:-jenga-flow}
+      SEAWEEDFS_ACCESS_KEY: ${SEAWEEDFS_ACCESS_KEY:-}
+      SEAWEEDFS_SECRET_KEY: ${SEAWEEDFS_SECRET_KEY:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /etc/crontabs/root"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
     networks: [jengaflow]
 
 networks:

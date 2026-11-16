@@ -12,6 +12,7 @@ import InsightsRounded from '@mui/icons-material/InsightsRounded';
 import PhoneIphoneRounded from '@mui/icons-material/PhoneIphoneRounded';
 import SyncRounded from '@mui/icons-material/SyncRounded';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
+import SignInPage from './auth/SignInPage';
 
 const features = [
   { icon: <Groups2Rounded />, title: 'Your whole workforce', text: 'Keep worker profiles, contracts, pay rates and site assignments together.' },
@@ -30,6 +31,7 @@ const steps = [
 ];
 
 export default function App() {
+  if (window.location.pathname === '/signin') return <SignInPage />;
   const theme = useTheme();
   const compact = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -52,6 +54,7 @@ export default function App() {
                 <Button href="#contact" color="inherit" sx={{ color: 'rgba(255,255,255,.82)' }}>Contact</Button>
               </Stack>
             )}
+            <Button variant="outlined" href="/signin" sx={{ color: 'white', borderColor: 'rgba(255,255,255,.35)' }}>Sign in</Button>
             <Button variant="contained" href="mailto:contact@qwerty.co.ke?subject=JengaFlow%20demo%20request"
               endIcon={<ArrowForwardRounded />} sx={{ bgcolor: '#64ffda', color: '#0a192f', fontWeight: 800, '&:hover': { bgcolor: '#8fffe7' } }}>
               Request a demo

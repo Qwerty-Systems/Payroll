@@ -1,8 +1,10 @@
 import { Controller, Get, Module } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { HealthService } from './health.service';
+import { Public } from '../auth/public.decorator';
 
 @ApiTags('health')
+@Public()
 @Controller('health')
 class HealthController {
   constructor(private readonly healthService: HealthService) {}
@@ -15,7 +17,7 @@ class HealthController {
 
   @Get('ready')
   @ApiOperation({ summary: 'Database readiness check' })
-  getReadiness(): Promise<{ status: 'ready'; database: 'connected'; redis: 'connected' | 'not_configured' }> {
+  getReadiness(): Promise<{ status: 'ready'; database: 'connected'; redis: 'connected' | 'not_configured'; storage: 'connected' | 'not_configured' }> {
     return this.healthService.getReadiness();
   }
 }

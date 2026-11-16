@@ -6,7 +6,7 @@ export class RedisService implements OnModuleDestroy {
   private readonly client?: Redis;
 
   constructor() {
-    const url = process.env.REDIS_URL;
+    const url = this.connectionUrl();
     if (url) {
       this.client = new Redis(url, {
         lazyConnect: true,
@@ -20,6 +20,20 @@ export class RedisService implements OnModuleDestroy {
         if (process.env.NODE_ENV === 'development') process.stderr.write(`Redis: ${error.message}\n`);
       });
     }
+  }
+
+  private connectionUrl(): string | undefined {
+    if (process.env.REDIS_URL?.trim()) return process.env.REDIS_URL.trim();
+    const host = process.env.REDIS_HOST?.trim();
+    if (!host) return undefined;
+    const port = Number(process.env.REDIS_PORT ?? 6379);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      throw new Error('REDIS_PORT must be a valid TCP port.');
+    }
+    const password = process.env.REDIS_PASSWORD ?? '';
+    const protocol = process.env.REDIS_TLS === 'true' ? 'rediss:' : 'redis:';
+    const credentials = password ? `:${encodeURIComponent(password)}@` : '';
+    return `${protocol}//${credentials}${host}:${port}/0`;
   }
 
   isConfigured(): boolean { return Boolean(this.client); }
