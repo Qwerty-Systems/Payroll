@@ -16,7 +16,7 @@ The product name should be:
 - Not so generic that it is difficult to distinguish in app stores or search results.
 
 ## 14.4 Candidate names
-1. **JengaFlow** — clear construction association with a broad workflow/operations meaning. Suggested primary candidate.
+1. **CrewLedger** — clear construction association with a broad workflow/operations meaning. Suggested primary candidate.
 2. **JengaWorks** — friendly and broad; suitable for workforce and site operations.
 3. **SiteLedger** — professional and finance-oriented; strongest if payroll and labour costing remain the centre.
 4. **FundiFlow** — memorable local feel; may sound more worker-focused than enterprise software.
@@ -28,10 +28,10 @@ The product name should be:
 These are creative candidates, not cleared trademarks or confirmed available domains. Before choosing, check Kenyan trademark records, company-name conflicts, app-store listings, search results and domain availability. Do not assume a name is legally available because a subdomain can be configured.
 
 ## 14.5 Recommendation
-Use **JengaFlow by Qwerty** as the working name for design and code until formal name clearance. It accommodates workforce, site operations, payroll and the future commercial workspace. If a more formal enterprise tone is preferred, use **JengaWorks by Qwerty**. If the client insists the product be described primarily as payroll, use **SiteLedger by Qwerty**.
+**CrewLedger by Qwerty Systems is the selected working product name.** The name emphasizes the workforce and financial accountability at the centre of the platform while remaining broad enough for construction operations, projects, proposals and billing. Trademark, company-name and domain clearance remain separate checks.
 
 ## 14.6 Domain strategy
-- Product marketing site: qwerty.co.ke/products/jengaflow (or a product landing page chosen by Qwerty).
+- Product marketing site: qwerty.co.ke/products/crewledger (or a product landing page chosen by Qwerty).
 - Tenant workspace: {tenant-slug}.qwerty.co.ke.
 - Platform control plane: control.qwerty.co.ke.
 - Platform sales/CRM: sales.qwerty.co.ke or a module inside control.qwerty.co.ke.
