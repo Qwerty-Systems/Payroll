@@ -16,3 +16,5 @@
 - [14 Branding and product naming](14-BRANDING-AND-PRODUCT-NAMING.md)
 - [15 Responsive PWA and Qwerty commercial workspace](15-RESPONSIVE-PWA-AND-COMMERCIAL-WORKSPACE.md)
 - [16 Implementation status](16-IMPLEMENTATION-STATUS.md)
+- [17 Kenya statutory baseline](17-KENYA-STATUTORY-BASELINE.md)
+- [18 Offline-first and Coolify](18-OFFLINE-FIRST-AND-COOLIFY.md)
