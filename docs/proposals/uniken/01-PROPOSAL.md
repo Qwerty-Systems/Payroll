@@ -17,7 +17,7 @@ The intended outcome is a more consistent operating process: workforce informati
 
 The engagement will begin with discovery and process mapping. This is important because Uniken's actual workforce structure, payroll calendar, pay arrangements, approval chain, statutory treatment, integrations, reporting needs and deployment constraints have not yet been confirmed.
 
-**Product maturity disclosure:** JengaFlow is under active development. Its repository currently contains foundational application, database, tenant-isolation, health-check, statutory-configuration and offline-storage components. Several end-to-end business workflows and production controls remain to be completed and validated. This proposal therefore describes the target solution and a phased implementation, not a representation that every listed feature is already live.
+**Existing platform and scope note:** JengaFlow is an existing platform in operational use. The fact that the platform is in use does not mean every module, integration or workflow is automatically included or enabled for every customer. Uniken's subscribed scope, configuration, data migration, access controls, payroll rules, integrations and acceptance tests will be agreed explicitly. Any workflow that is not yet available in the agreed release will be identified as a configuration, customization or separately scheduled enhancement before commitment.
 
 ## 2. Understanding of the opportunity
 
