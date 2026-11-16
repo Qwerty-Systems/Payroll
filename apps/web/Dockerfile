@@ -20,4 +20,7 @@ RUN pnpm --filter @jengaflow/web build
 FROM nginx:1.27-alpine AS runtime
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /workspace/apps/web/dist /usr/share/nginx/html
+COPY apps/web/runtime-config.js.template /etc/nginx/templates/runtime-config.js.template
+COPY apps/web/40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
+RUN chmod +x /docker-entrypoint.d/40-runtime-config.sh
 EXPOSE 80
