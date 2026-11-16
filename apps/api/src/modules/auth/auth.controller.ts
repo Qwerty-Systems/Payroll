@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { GoogleSignInDto } from './auth.dto';
@@ -20,6 +21,7 @@ export class AuthController {
     };
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('google')
   @HttpCode(200)
   @ApiOperation({ summary: 'Verify Google Identity Services credential and create a session' })
@@ -29,6 +31,7 @@ export class AuthController {
     return result;
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Post('refresh')
   @HttpCode(200)
   async refresh(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
