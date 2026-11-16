@@ -15,7 +15,7 @@ export class HealthService {
     return { status: 'ok', service: 'jengaflow-api' };
   }
 
-  async getReadiness(): Promise<{ status: 'ready'; database: 'connected'; redis: 'connected' | 'not_configured' }> {
+  async getReadiness(): Promise<{ status: 'ready'; database: 'connected'; redis: 'connected' | 'not_configured'; storage: 'connected' | 'not_configured' }> {
     try {
       await this.dataSource.query('SELECT 1');
       await this.redisService.ping();
