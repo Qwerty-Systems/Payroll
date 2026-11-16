@@ -1,1 +1,18 @@
-{"name":"Qwerty Construction Payroll","short_name":"Qwerty Payroll","description":"Construction workforce and payroll management","start_url":"/","display":"standalone","background_color":"#f4f6f3","theme_color":"#14251d","icons":[]}
+{
+  "name": "JengaFlow by Qwerty",
+  "short_name": "JengaFlow",
+  "description": "Construction workforce, site operations and payroll management",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f3",
+  "theme_color": "#14251d",
+  "icons": [
+    {
+      "src": "/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
