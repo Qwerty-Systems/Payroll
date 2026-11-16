@@ -7,9 +7,9 @@ describe('PayrollService payment batch safeguards', () => {
   const runId = '123e4567-e89b-42d3-a456-426614174002';
 
   function serviceWithQuery(query: jest.Mock) {
-    const manager = { query };
+    const manager: { query: jest.Mock } = { query };
     const tenantDb = {
-      run: jest.fn(async (_tenantId: string, work: (manager: typeof manager) => Promise<unknown>) => work(manager)),
+      run: jest.fn(async (_tenantId: string, work: (transactionManager: { query: jest.Mock }) => Promise<unknown>) => work(manager)),
     };
     return { service: new PayrollService(tenantDb as never), tenantDb };
   }
