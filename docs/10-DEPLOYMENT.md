@@ -1,10 +1,10 @@
 # 10. Deployment and operations
 
 ## 10.1 Local development
-Prerequisites: supported Node.js LTS, pnpm, Docker Engine/Desktop and Git. Copy .env.example to .env, set local-only secrets, then use documented workspace scripts to start PostgreSQL and the application. Never use production secrets in development.
+Prerequisites: supported Node.js LTS, pnpm, Docker Engine/Desktop and Git. Copy .env.example to .env, set local-only secrets, then use documented workspace scripts to start PostgreSQL and the application. For the complete local stack, run docker compose up -d --build; run the TypeORM migration explicitly from the host after the database is healthy. Never use production secrets in development.
 
 ## 10.2 Docker Compose services
-Expected services: web/reverse-proxy, api, PostgreSQL, sync-worker and optional Redis. Use named persistent volumes for PostgreSQL and local object storage. Expose only the reverse proxy to host; database/cache remain on private Docker networks. Provide health checks and dependency readiness rather than relying only on startup order.
+Current Compose foundation runs web/Nginx, NestJS API and PostgreSQL. The Postgres bootstrap creates a restricted runtime/migration role with NOSUPERUSER and NOBYPASSRLS; only the bootstrap administrator is a superuser. Later stages add sync-worker and optional Redis. Use named persistent volumes for PostgreSQL and local object storage. Expose only the reverse proxy to host; database/cache remain on private Docker networks. Provide health checks and dependency readiness rather than relying only on startup order.
 
 ## 10.3 Environment configuration
 Document DATABASE_URL, JWT/session secrets, app origins, tenant domain settings, object storage endpoint/bucket/credentials, mail provider, queue configuration, payment provider sandbox settings, encryption key references, logging level and feature flags. Validate required variables at startup and fail closed.
