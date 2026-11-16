@@ -48,7 +48,8 @@ See [docs/README.md](docs/README.md) for the complete requirements, architecture
 - [x] Responsive JengaFlow shell, PWA manifest and install guidance.
 - [ ] Authentication, tenant provisioning and authorization guards.
 - [ ] Worker, project, site and attendance APIs.
-- [ ] Payroll and statutory engine.
+- [x] Effective-dated Kenya statutory starter pack and tenant deduction/allowance defaults.
+- [ ] Payroll calculation and finalization engine.
 - [x] IndexedDB local record cache and idempotent command outbox foundation.
 - [ ] Authenticated sync API, conflict review UI and complete offline workflows.
 - [ ] Qwerty sales workspace, subscriptions and billing.

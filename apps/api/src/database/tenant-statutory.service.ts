@@ -1,6 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from './tenant-transaction.service';
 
+export interface StatutoryRuleOverrideInput {
+  ruleCode: string;
+  label: string;
+  category: string;
+  calculationMethod: string;
+  configuration: Record<string, unknown>;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  reason: string;
+  approvedBy: string;
+}
+
 export interface EffectiveStatutoryRule {
   code: string;
   label: string;
@@ -27,7 +39,7 @@ export class TenantStatutoryService {
     await this.tenantTransactions.run(tenantId, async (manager) => {
       const packs = await manager.query(
         `SELECT id FROM statutory_rule_sets
-         WHERE country_code = 'KE' AND status = 'published' AND version = 'KE-2026.02'
+         WHERE country_code = 'KE' AND status = 'published' AND version = 'KE-2026.11'
          LIMIT 1`,
       );
       if (!packs.length) throw new NotFoundException('The Kenya statutory baseline has not been installed.');
@@ -36,6 +48,68 @@ export class TenantStatutoryService {
          VALUES ($1, $2, $3)
          ON CONFLICT (tenant_id, rule_set_id, effective_from) DO NOTHING`,
         [tenantId, packs[0].id, effectiveFrom],
+      );
+
+      await manager.query(
+        `INSERT INTO tenant_payroll_settings(tenant_id, currency, timezone)
+         VALUES ($1, 'KES', 'Africa/Nairobi')
+         ON CONFLICT (tenant_id) DO NOTHING`,
+        [tenantId],
+      );
+
+      const deductions = [
+        ['STAFF_ADVANCE_RECOVERY', 'Salary advance recovery', 'recovery', 'balance_recovery'],
+        ['STAFF_LOAN_RECOVERY', 'Staff loan recovery', 'recovery', 'balance_recovery'],
+        ['SACCO_CONTRIBUTION', 'SACCO contribution', 'voluntary', 'fixed_amount'],
+        ['UNION_DUES', 'Union dues', 'voluntary', 'fixed_amount'],
+        ['VOLUNTARY_PENSION', 'Voluntary pension contribution', 'voluntary', 'percentage'],
+        ['VOLUNTARY_INSURANCE', 'Voluntary insurance', 'voluntary', 'fixed_amount'],
+        ['COURT_ORDER', 'Court-ordered deduction', 'other', 'fixed_amount'],
+        ['OTHER_DEDUCTION', 'Other approved deduction', 'other', 'fixed_amount'],
+      ];
+      for (const [code, name, category, method] of deductions) {
+        await manager.query(
+          `INSERT INTO tenant_deduction_types(tenant_id,code,name,category,calculation_method,configuration,taxable_treatment,is_system,is_enabled,requires_approval,effective_from)
+           VALUES ($1,$2,$3,$4,$5,'{}'::jsonb,'review_required',true,true,true,$6)
+           ON CONFLICT(tenant_id,code,effective_from) DO NOTHING`,
+          [tenantId, code, name, category, method, effectiveFrom],
+        );
+      }
+
+      const allowances = [
+        ['TRANSPORT', 'Transport allowance', 'fixed_amount'],
+        ['HOUSING', 'Housing allowance', 'fixed_amount'],
+        ['MEALS', 'Meals allowance', 'per_day'],
+        ['SITE_ALLOWANCE', 'Site allowance', 'per_day'],
+        ['OVERTIME', 'Overtime', 'per_hour'],
+        ['NIGHT_SHIFT', 'Night shift allowance', 'per_hour'],
+        ['TRAVEL_PER_DIEM', 'Travel per diem', 'per_day'],
+        ['TOOL_ALLOWANCE', 'Tools and equipment allowance', 'fixed_amount'],
+      ];
+      for (const [code, name, method] of allowances) {
+        await manager.query(
+          `INSERT INTO tenant_allowance_types(tenant_id,code,name,calculation_method,configuration,tax_treatment,is_enabled,requires_approval,effective_from)
+           VALUES ($1,$2,$3,$4,'{}'::jsonb,'review_required',true,true,$5)
+           ON CONFLICT(tenant_id,code,effective_from) DO NOTHING`,
+          [tenantId, code, name, method, effectiveFrom],
+        );
+      }
+    });
+  }
+
+  async createApprovedOverride(tenantId: string, input: StatutoryRuleOverrideInput): Promise<void> {
+    if (!input.reason.trim() || !input.approvedBy) {
+      throw new Error('A reason and approving user are required for a statutory override.');
+    }
+    await this.tenantTransactions.run(tenantId, async (manager) => {
+      await manager.query(
+        `INSERT INTO tenant_statutory_rule_overrides(
+          tenant_id, rule_code, label, category, calculation_method,
+          configuration, effective_from, effective_to, reason, approved_by
+        ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)`,
+        [tenantId, input.ruleCode, input.label, input.category, input.calculationMethod,
+          JSON.stringify(input.configuration), input.effectiveFrom, input.effectiveTo ?? null,
+          input.reason, input.approvedBy],
       );
     });
   }

@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${LOCAL_DATABASE_NAME:-jengaflow}
+      POSTGRES_USER: ${LOCAL_DATABASE_USER:-jengaflow}
+      POSTGRES_PASSWORD: ${LOCAL_DATABASE_PASSWORD:?Set LOCAL_DATABASE_PASSWORD}
+    volumes:
+      - jengaflow_local_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LOCAL_DATABASE_USER:-jengaflow} -d ${LOCAL_DATABASE_NAME:-jengaflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [jengaflow]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$$LOCAL_REDIS_PASSWORD\""]
+    environment:
+      LOCAL_REDIS_PASSWORD: ${LOCAL_REDIS_PASSWORD:?Set LOCAL_REDIS_PASSWORD}
+    volumes:
+      - jengaflow_local_redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$LOCAL_REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [jengaflow]
+
+  api:
+    environment:
+      DATABASE_URL: postgresql://${LOCAL_DATABASE_USER:-jengaflow}:${LOCAL_DATABASE_PASSWORD}@postgres:5432/${LOCAL_DATABASE_NAME:-jengaflow}
+      DATABASE_SSL: "false"
+      REDIS_URL: redis://:${LOCAL_REDIS_PASSWORD}@redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  jengaflow_local_postgres:
+  jengaflow_local_redis:
