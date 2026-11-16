@@ -1,5 +1,5 @@
 import { Injectable, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
-import { DeleteObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
 
@@ -56,7 +56,6 @@ export class ObjectStorageService {
     await this.client.send(new PutObjectCommand({
       Bucket: this.bucket, Key: key, Body: input.body,
       ContentType: input.contentType, ContentLength: input.body.length,
-      ServerSideEncryption: 'AES256',
       Metadata: { tenantid: input.tenantId },
     }));
     return { key, size: input.body.length };
@@ -66,7 +65,7 @@ export class ObjectStorageService {
     if (!this.client || !this.bucket) throw new ServiceUnavailableException('Object storage is not configured.');
     if (!key.startsWith('private/tenants/') || key.includes('..')) throw new BadRequestException('Invalid private object key.');
     const ttl = Math.min(Math.max(expiresInSeconds, 30), 900);
-    return getSignedUrl(this.client, new (await import('@aws-sdk/client-s3')).GetObjectCommand({
+    return getSignedUrl(this.client, new GetObjectCommand({
       Bucket: this.bucket, Key: key,
     }), { expiresIn: ttl });
   }
