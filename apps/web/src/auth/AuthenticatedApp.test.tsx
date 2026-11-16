@@ -14,7 +14,7 @@ const auth = vi.hoisted(() => ({
 
 vi.mock('@auth0/auth0-react', () => ({ useAuth0: () => auth }));
 vi.mock('../config', () => ({
-  auth0Config: { apiBaseUrl: 'https://api.example.test' },
+  auth0Config: { apiBaseUrl: 'https://api.example.test', audience: 'https://api.example.test' },
 }));
 
 describe('AuthenticatedApp', () => {
