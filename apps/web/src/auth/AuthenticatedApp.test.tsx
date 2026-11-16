@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AuthenticatedApp from './AuthenticatedApp';
 
@@ -86,16 +86,11 @@ describe('AuthenticatedApp', () => {
     const displayName = screen.getByLabelText(/display name/i);
     const slug = screen.getByLabelText(/workspace url slug/i);
 
-    await import('@testing-library/user-event').then(async ({ default: userEvent }) => {
-      const user = userEvent.setup();
-      await user.type(displayName, 'Test Company');
-      expect(slug).toHaveValue('test-company');
-      await user.clear(slug);
-      await user.type(slug, 'custom-workspace');
-      await user.clear(displayName);
-      await user.type(displayName, 'Another Company');
-      expect(slug).toHaveValue('custom-workspace');
-    });
+    fireEvent.change(displayName, { target: { value: 'Test Company' } });
+    expect(slug).toHaveValue('test-company');
+    fireEvent.change(slug, { target: { value: 'custom-workspace' } });
+    fireEvent.change(displayName, { target: { value: 'Another Company' } });
+    expect(slug).toHaveValue('custom-workspace');
   });
 
   it('shows an actionable message when the API rejects the access token', async () => {
