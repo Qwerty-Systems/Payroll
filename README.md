@@ -1,4 +1,4 @@
-# CrewLedger by Qwerty Systems
+# JengaFlow by Qwerty Systems
 
 A mobile-first, multi-tenant construction workforce, site operations, payroll and business management platform for Kenya. Designed for cloud SaaS and standalone PC/site deployments with offline-first workflows and controlled cloud synchronization.
 
@@ -16,7 +16,7 @@ A mobile-first, multi-tenant construction workforce, site operations, payroll an
 - Ship reproducible Docker-based development and production deployments.
 
 ## Product identity
-**Working name:** CrewLedger by Qwerty Systems. Customer workspaces are planned at `https://{tenant-slug}.qwerty.co.ke`; Qwerty control-plane and internal sales workspace are planned under reserved subdomains.
+**Working name:** JengaFlow by Qwerty Systems. Customer workspaces are planned at `https://{tenant-slug}.qwerty.co.ke`; Qwerty control-plane and internal sales workspace are planned under reserved subdomains.
 
 ## Documentation
 See [docs/README.md](docs/README.md) for the complete requirements, architecture, database, API, payroll, multi-tenancy, offline sync, SaaS billing, security, deployment, user and developer guides, plus product branding and PWA requirements.
@@ -45,7 +45,7 @@ See [docs/README.md](docs/README.md) for the complete requirements, architecture
 - [x] PostgreSQL TypeORM integration and initial tenant/workforce schema migration.
 - [x] Tenant-row RLS policies and transaction-scoped tenant context helper.
 - [x] Liveness and database readiness endpoints.
-- [x] Responsive CrewLedger shell, PWA manifest and install guidance.
+- [x] Responsive JengaFlow shell, PWA manifest and install guidance.
 - [ ] Authentication, tenant provisioning and authorization guards.
 - [ ] Worker, project, site and attendance APIs.
 - [ ] Payroll and statutory engine.
@@ -58,8 +58,8 @@ See [docs/README.md](docs/README.md) for the complete requirements, architecture
 2. Copy `.env.example` to `.env` and set a strong local database password and unique development secrets.
 3. Run `pnpm install`.
 4. Run `docker compose up -d postgres`.
-5. Run `pnpm --filter @crewledger/api migration:run`.
-6. Run `pnpm --filter @crewledger/api dev` and `pnpm --filter @crewledger/web dev` in separate terminals.
+5. Run `pnpm --filter @jengaflow/api migration:run`.
+6. Run `pnpm --filter @jengaflow/api dev` and `pnpm --filter @jengaflow/web dev` in separate terminals.
 
 API endpoints:
 - `GET /api/v1/health/live`
