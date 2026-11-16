@@ -1,0 +1,49 @@
+import { Body, Controller, HttpCode, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Request, Response } from 'express';
+import { AuthService } from './auth.service';
+import { GoogleSignInDto } from './auth.dto';
+
+@ApiTags('authentication')
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly auth: AuthService) {}
+
+  private cookieOptions() {
+    return {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax' as const,
+      path: '/api/v1/auth',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
+    };
+  }
+
+  @Post('google')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Verify Google Identity Services credential and create a session' })
+  async google(@Body() dto: GoogleSignInDto, @Res({ passthrough: true }) response: Response) {
+    const { result, refreshToken } = await this.auth.signInWithGoogle(dto.credential);
+    response.cookie('jengaflow_refresh', refreshToken, this.cookieOptions());
+    return result;
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  async refresh(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    const token = request.cookies?.jengaflow_refresh;
+    if (typeof token !== 'string') throw new UnauthorizedException('Refresh session is missing.');
+    const { result, refreshToken } = await this.auth.rotateRefreshToken(token);
+    response.cookie('jengaflow_refresh', refreshToken, this.cookieOptions());
+    return result;
+  }
+
+  @Post('logout')
+  @HttpCode(204)
+  async logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    const token = request.cookies?.jengaflow_refresh;
+    if (typeof token === 'string') await this.auth.revokeRefreshToken(token);
+    response.clearCookie('jengaflow_refresh', { ...this.cookieOptions(), maxAge: undefined });
+  }
+}
