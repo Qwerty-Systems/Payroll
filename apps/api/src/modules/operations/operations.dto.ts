@@ -40,7 +40,7 @@ export class CreateWorkerContractDto {
   @IsIn(['hourly','daily','weekly','monthly','per_unit'])
   payBasis!: string;
 
-  @IsInt() @Min(1) @Max(1000000000)
+  @IsNumber({ maxDecimalPlaces: 4 }) @Min(0.01) @Max(1000000000)
   rateAmount!: number;
 
   @IsOptional() @IsString() @Length(3, 3)
