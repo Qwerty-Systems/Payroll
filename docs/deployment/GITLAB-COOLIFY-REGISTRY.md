@@ -15,7 +15,7 @@ The pipeline publishes these repositories:
 - `registry.qwerty.co.ke/jengaflow/web`
 - `registry.qwerty.co.ke/jengaflow/backup`
 
-Every published build receives the immutable Git commit SHA tag. Default-branch builds also receive the branch-slug tag; Git tags are also published as image tags. Feature branches and merge requests build the images for validation but do not push deployable tags.
+Every published build receives the immutable Git commit SHA tag. Default-branch builds also receive the branch-slug tag; Git tag pipelines publish both the commit-SHA and Git tag. Feature branches and merge requests build the images for validation but do not push deployable tags. The pipeline explicitly verifies each pushed commit-SHA manifest with Buildx before completing.
 
 ## GitLab CI/CD variables
 
@@ -32,7 +32,7 @@ The pipeline uses `registry.qwerty.co.ke` and namespace `jengaflow` by default. 
 
 Use a dedicated robot/service account with write access only to these three repositories. Do not place registry credentials in the repository, Dockerfiles, Compose files, or build arguments.
 
-The GitLab runner must support Docker-in-Docker and privileged mode. The included job uses the Docker 27.5.1 CLI and DinD service with TLS.
+The GitLab runner must support Docker-in-Docker and privileged mode. The included job uses the Docker 27.5.1 CLI and DinD service with TLS. The pipeline builds all three images from the repository-root context (required by the Dockerfiles), pushes release images with Buildx, and checks that each commit-SHA tag is readable from the registry. It disables BuildKit provenance attestations for straightforward compatibility with registries that do not fully support OCI attestation manifests.
 
 ## Coolify configuration
 
@@ -67,6 +67,7 @@ Do not deploy a commit SHA until all three images have been published successful
 - [ ] GitLab runner can use Docker-in-Docker.
 - [ ] Registry push account can authenticate and push to all three image repositories.
 - [ ] A default-branch pipeline completes all three image builds and pushes.
+- [ ] The job logs show a successful manifest inspection for API, web and backup commit-SHA tags.
 - [ ] The three images exist in the registry with the same commit-SHA tag.
 - [ ] Coolify can pull all three images with read-only credentials.
 - [ ] Production Compose contains no `build:` directives.
