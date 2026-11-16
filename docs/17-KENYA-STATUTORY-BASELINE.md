@@ -8,8 +8,8 @@ JengaFlow ships with a versioned Kenya baseline pack. The seed values below are 
 | SHIF salaried employees | 2.75% of gross salary/wage; minimum KES 300/month | 1 Oct 2024 | SHI Regulations 2024, reg. 17 and amendment |
 | NSSF Year 4 | 6% employee + 6% employer; LEL KES 9,000; UEL KES 108,000 | 1 Feb 2026 | NSSF Year 4 2026 notice |
 | Affordable Housing Levy | 1.5% employee + 1.5% employer of gross monthly salary | 19 Mar 2024 | Affordable Housing Act 2024 / KRA notice |
-| NITA training levy | KES 50 per employee/month; employer cost, not employee deduction | 2026 baseline | NITA Levy Inspectorate |
-| PAYE allowable deductions | SHIF, AHL, registered pension/NSSF (subject to KES 30,000/month cap), post-retirement medical fund (KES 15,000/month), mortgage interest (KES 30,000/month) | 2024 baseline | KRA PAYE page |
+| NITA training levy | KES 50 per employee/month; employer cost, not employee deduction | 16 Nov 2026 baseline snapshot (historical commencement date not established in the source) | NITA Levy Inspectorate |
+| PAYE allowable deductions | SHIF, AHL, registered pension contributions (subject to KES 30,000/month cap), post-retirement medical fund (KES 15,000/month), mortgage interest (KES 30,000/month) | 16 Nov 2026 baseline snapshot | KRA PAYE page |
 | Insurance relief | 15% of qualifying premiums, capped at KES 5,000/month | 1 Jul 2023 | KRA PAYE page |
 
 ## Calculation and governance requirements
