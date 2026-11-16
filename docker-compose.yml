@@ -1,26 +1,5 @@
-name: crewledger
+name: jengaflow
 services:
-  postgres:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DATABASE_NAME:-crewledger}
-      POSTGRES_USER: ${POSTGRES_ADMIN_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?Set POSTGRES_ADMIN_PASSWORD in .env}
-      APP_DB_USER: ${DATABASE_USER:-crewledger_app}
-      APP_DB_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in .env}
-    ports:
-      - "127.0.0.1:${DATABASE_PORT:-5432}:5432"
-    volumes:
-      - crewledger_postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init/01-create-app-role.sh:/docker-entrypoint-initdb.d/01-create-app-role.sh:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER:-postgres} -d ${DATABASE_NAME:-crewledger}"]
-      interval: 5s
-      timeout: 5s
-      retries: 15
-    networks: [crewledger_internal]
-
   api:
     build:
       context: .
@@ -28,38 +7,30 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://${DATABASE_USER:-crewledger_app}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME:-crewledger}
+      NODE_ENV: production
       API_PORT: 3001
     expose:
       - "3001"
-    ports:
-      - "127.0.0.1:${API_PORT:-3001}:3001"
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/v1/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 10s
+      interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 30s
-    networks: [crewledger_internal]
+      start_period: 40s
+    networks: [jengaflow]
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    expose:
+      - "80"
     depends_on:
       api:
         condition: service_healthy
-    networks: [crewledger_internal]
-
-volumes:
-  crewledger_postgres_data:
+    networks: [jengaflow]
 
 networks:
-  crewledger_internal:
+  jengaflow:
     driver: bridge
