@@ -13,6 +13,9 @@
 2. [Project requirements and scope (PRD)](02-PROJECT-REQUIREMENTS.md)
 3. [Commercial quotation](03-QUOTATION.md)
 4. [Cover email](04-COVER-EMAIL.md)
+5. [One-page client summary](06-ONE-PAGE-SUMMARY.md)
+6. [Demo access and account plan](05-DEMO-ACCESS-AND-ACCOUNT-PLAN.md)
+7. [Demo readiness checklist](07-DEMO-READINESS-CHECKLIST.md)
 
 ## Important status and commercial notes
 
