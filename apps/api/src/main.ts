@@ -40,7 +40,16 @@ async function bootstrap(): Promise<void> {
       const value = process.env[key];
       if (!value || value.length < 48 || value.startsWith('REPLACE_')) throw new Error(key + ' must be set to a strong unique secret (48+ characters).');
     }
+    if (process.env.JWT_ACCESS_SECRET === process.env.JWT_REFRESH_SECRET) throw new Error('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different.');
     if (!process.env.GOOGLE_CLIENT_ID) throw new Error('GOOGLE_CLIENT_ID is required in production.');
+    let runtimeDatabaseUser = process.env.DATABASE_USERNAME;
+    if (!runtimeDatabaseUser && process.env.DATABASE_URL) {
+      try { runtimeDatabaseUser = decodeURIComponent(new URL(process.env.DATABASE_URL).username); } catch { throw new Error('DATABASE_URL is invalid.'); }
+    }
+    if (!runtimeDatabaseUser || ['postgres', 'root'].includes(runtimeDatabaseUser.toLowerCase())) {
+      throw new Error('Use a dedicated least-privilege DATABASE_USERNAME; do not run JengaFlow as postgres or root.');
+    }
+    if (!process.env.DATABASE_URL && !process.env.DATABASE_PASSWORD) throw new Error('DATABASE_PASSWORD is required for the runtime database role.');
     for (const key of ['REDIS_URL', 'SEAWEEDFS_ACCESS_KEY', 'SEAWEEDFS_SECRET_KEY', 'SEAWEEDFS_BUCKET']) {
       if (!process.env[key]) throw new Error(key + ' is required in production.');
     }
