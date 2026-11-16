@@ -13,6 +13,7 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:17
@@ -50,10 +51,13 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
-      - name: Apply database migrations
-        run: pnpm --filter @jengaflow/api migration:run
       - name: Type check
         run: pnpm typecheck
+      - name: Compile API for migrations
+        run: pnpm --filter @jengaflow/api build
+      - name: Apply database migrations
+        working-directory: apps/api
+        run: pnpm exec typeorm -d dist/database/data-source.js migration:run
       - name: Build
         run: pnpm build
       - name: Test
