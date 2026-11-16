@@ -2,7 +2,7 @@
 
 A mobile-first, multi-tenant construction workforce, site operations, payroll and business management platform for Kenya. Designed for cloud SaaS and standalone PC/site deployments with offline-first workflows and controlled cloud synchronization.
 
-> Current delivery stage: database and API foundation. The application is not yet ready for production payroll.
+> Current delivery stage: database and API foundation. Authentication, worker workflows, payroll calculation and full offline sync are still under development; do not use it for production payroll yet.
 
 ## Product goals
 - Manage construction companies, projects, sites, workers and employment arrangements.
@@ -49,7 +49,8 @@ See [docs/README.md](docs/README.md) for the complete requirements, architecture
 - [ ] Authentication, tenant provisioning and authorization guards.
 - [ ] Worker, project, site and attendance APIs.
 - [ ] Payroll and statutory engine.
-- [ ] Offline IndexedDB outbox and synchronization protocol.
+- [x] IndexedDB local record cache and idempotent command outbox foundation.
+- [ ] Authenticated sync API, conflict review UI and complete offline workflows.
 - [ ] Qwerty sales workspace, subscriptions and billing.
 - [ ] Production CI, end-to-end tests and deployment hardening.
 
@@ -57,7 +58,7 @@ See [docs/README.md](docs/README.md) for the complete requirements, architecture
 1. Install Node.js 22+ and pnpm 10+.
 2. Copy `.env.example` to `.env` and set a strong local database password and unique development secrets.
 3. Run `pnpm install`.
-4. Run `docker compose up -d postgres`.
+4. Configure `DATABASE_URL` and `REDIS_URL` for your existing managed services (the main Compose file does not create databases). For an isolated local site install, use `docker-compose.local.yml`.
 5. Run `pnpm --filter @jengaflow/api migration:run`.
 6. Run `pnpm --filter @jengaflow/api dev` and `pnpm --filter @jengaflow/web dev` in separate terminals.
 
