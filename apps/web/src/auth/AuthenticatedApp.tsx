@@ -51,7 +51,7 @@ export default function AuthenticatedApp() {
     event.preventDefault();
     setSubmitting(true); setOnboardError('');
     try {
-      const token = await getAccessTokenSilently();
+      const token = await getAccessTokenSilently({ authorizationParams: { audience: auth0Config.audience, scope: 'openid profile email' } });
       const response = await fetch(`${auth0Config.apiBaseUrl.replace(/\/+$/, '')}/api/v1/auth/onboarding/company`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
