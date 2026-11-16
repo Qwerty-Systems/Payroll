@@ -37,6 +37,51 @@ export class TenantStatutoryService {
          ON CONFLICT (tenant_id, rule_set_id, effective_from) DO NOTHING`,
         [tenantId, packs[0].id, effectiveFrom],
       );
+
+      await manager.query(
+        `INSERT INTO tenant_payroll_settings(tenant_id, currency, timezone)
+         VALUES ($1, 'KES', 'Africa/Nairobi')
+         ON CONFLICT (tenant_id) DO NOTHING`,
+        [tenantId],
+      );
+
+      const deductions = [
+        ['STAFF_ADVANCE_RECOVERY', 'Salary advance recovery', 'recovery', 'balance_recovery'],
+        ['STAFF_LOAN_RECOVERY', 'Staff loan recovery', 'recovery', 'balance_recovery'],
+        ['SACCO_CONTRIBUTION', 'SACCO contribution', 'voluntary', 'fixed_amount'],
+        ['UNION_DUES', 'Union dues', 'voluntary', 'fixed_amount'],
+        ['VOLUNTARY_PENSION', 'Voluntary pension contribution', 'voluntary', 'percentage'],
+        ['VOLUNTARY_INSURANCE', 'Voluntary insurance', 'voluntary', 'fixed_amount'],
+        ['COURT_ORDER', 'Court-ordered deduction', 'other', 'fixed_amount'],
+        ['OTHER_DEDUCTION', 'Other approved deduction', 'other', 'fixed_amount'],
+      ];
+      for (const [code, name, category, method] of deductions) {
+        await manager.query(
+          `INSERT INTO tenant_deduction_types(tenant_id,code,name,category,calculation_method,configuration,taxable_treatment,is_system,is_enabled,requires_approval,effective_from)
+           VALUES ($1,$2,$3,$4,$5,'{}'::jsonb,'review_required',true,true,true,$6)
+           ON CONFLICT(tenant_id,code,effective_from) DO NOTHING`,
+          [tenantId, code, name, category, method, effectiveFrom],
+        );
+      }
+
+      const allowances = [
+        ['TRANSPORT', 'Transport allowance', 'fixed_amount'],
+        ['HOUSING', 'Housing allowance', 'fixed_amount'],
+        ['MEALS', 'Meals allowance', 'per_day'],
+        ['SITE_ALLOWANCE', 'Site allowance', 'per_day'],
+        ['OVERTIME', 'Overtime', 'per_hour'],
+        ['NIGHT_SHIFT', 'Night shift allowance', 'per_hour'],
+        ['TRAVEL_PER_DIEM', 'Travel per diem', 'per_day'],
+        ['TOOL_ALLOWANCE', 'Tools and equipment allowance', 'fixed_amount'],
+      ];
+      for (const [code, name, method] of allowances) {
+        await manager.query(
+          `INSERT INTO tenant_allowance_types(tenant_id,code,name,calculation_method,configuration,tax_treatment,is_enabled,requires_approval,effective_from)
+           VALUES ($1,$2,$3,$4,'{}'::jsonb,'review_required',true,true,$5)
+           ON CONFLICT(tenant_id,code,effective_from) DO NOTHING`,
+          [tenantId, code, name, method, effectiveFrom],
+        );
+      }
     });
   }
 
