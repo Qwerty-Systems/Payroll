@@ -14,5 +14,5 @@
 - [12 Developer guide](12-DEVELOPER-GUIDE.md)
 - [13 Testing](13-TESTING.md)
 - [14 Branding and product naming](14-BRANDING-AND-PRODUCT-NAMING.md)
-- [16 Implementation status](16-IMPLEMENTATION-STATUS.md)
 - [15 Responsive PWA and Qwerty commercial workspace](15-RESPONSIVE-PWA-AND-COMMERCIAL-WORKSPACE.md)
+- [16 Implementation status](16-IMPLEMENTATION-STATUS.md)
