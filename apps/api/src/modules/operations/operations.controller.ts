@@ -1,13 +1,13 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
-import { IsIn } from 'class-validator';
+import { IsIn, IsString, MinLength } from 'class-validator';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
 import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto } from './operations.dto';
 import { OperationsService } from './operations.service';
 
-type TenantRequest = Request & { tenant: { id: string } };
-class StatusDto { @IsIn(['active','inactive','suspended','archived','planning','on_hold','completed','cancelled']) status!: string; }
+type TenantRequest = Request & { tenant: { id: string; userId: string } };
+class StatusDto { @IsIn(['active','inactive','suspended','archived','planning','on_hold','completed','cancelled']) status!: string; }\nclass RejectionDto { @IsString() @MinLength(3) reason!: string; }
 
 @ApiTags('tenant-operations')
 @ApiBearerAuth()
@@ -27,8 +27,8 @@ export class OperationsController {
   @Patch('workers/:id/status') @TenantPermissions('workers.manage') updateWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:StatusDto) { return this.operations.setWorkerStatus(req.tenant.id,id,dto.status); }
 
   @Get('attendance') @TenantPermissions('attendance.read') attendance(@Req() req:TenantRequest,@Query('workDate') workDate?:string) { return this.operations.listAttendance(req.tenant.id,workDate); }
-  @Post('attendance') @TenantPermissions('attendance.capture') createAttendance(@Req() req:TenantRequest,@Body() dto:CreateAttendanceDto) { return this.operations.createAttendance(req.tenant.id,dto); }
-  @Post('attendance/:id/submit') @TenantPermissions('attendance.capture') submitAttendance(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.transitionAttendance(req.tenant.id,id,'submit'); }
-  @Post('attendance/:id/approve') @TenantPermissions('attendance.approve') approveAttendance(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.transitionAttendance(req.tenant.id,id,'approve'); }
-  @Post('attendance/:id/reject') @TenantPermissions('attendance.approve') rejectAttendance(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.transitionAttendance(req.tenant.id,id,'reject'); }
+  @Post('attendance') @TenantPermissions('attendance.capture') createAttendance(@Req() req:TenantRequest,@Body() dto:CreateAttendanceDto) { return this.operations.createAttendance(req.tenant.id,req.tenant.userId,dto); }
+  @Post('attendance/:id/submit') @TenantPermissions('attendance.capture') submitAttendance(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.transitionAttendance(req.tenant.id,req.tenant.userId,id,'submit'); }
+  @Post('attendance/:id/approve') @TenantPermissions('attendance.approve') approveAttendance(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.transitionAttendance(req.tenant.id,req.tenant.userId,id,'approve'); }
+  @Post('attendance/:id/reject') @TenantPermissions('attendance.approve') rejectAttendance(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:RejectionDto) { return this.operations.transitionAttendance(req.tenant.id,req.tenant.userId,id,'reject',dto.reason); }
 }
