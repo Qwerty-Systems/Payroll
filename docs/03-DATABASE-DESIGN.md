@@ -72,7 +72,8 @@ Invoice line supports recurring maintenance, one-off setup, support, custom work
 Every client command carries globally unique command_id and device_id. Server stores processed command IDs with result to guarantee idempotent retries.
 
 ## 3.8 Audit and security
-- audit_events: tenant_id nullable only for platform events, actor_id, action, entity_type/id, occurred_at, request_id, source, before/after JSON with sensitive fields redacted.
+- audit_events: tenant_id NOT NULL, actor_id, action, entity_type/id, occurred_at, request_id, source, before/after JSON with sensitive fields redacted; protected by tenant RLS.
+- platform_audit_events: separate control-plane audit stream, visible only to explicitly authorized platform operators.
 - auth_sessions, refresh_tokens (hashed token identifiers), password_reset_tokens (hashed), mfa_credentials.
 - notification_outbox and job_execution records.
 
