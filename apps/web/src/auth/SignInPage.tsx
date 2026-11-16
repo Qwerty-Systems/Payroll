@@ -17,7 +17,7 @@ export default function SignInPage() {
         {session ? <Stack spacing={2}>
           <Alert severity="success">Google identity verified and session created for {session.user.email}.</Alert>
           <Typography variant="body2" color="text.secondary">Your access token is held in this page's memory only. The authenticated workspace screens and tenant membership onboarding are still being completed.</Typography>
-          <Button variant="outlined" onClick={() => setSession(null)}>Sign out of this page</Button>
+          <Button variant="outlined" onClick={() => { void fetch((import.meta.env.VITE_API_BASE_URL ?? '') + '/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).finally(() => setSession(null)); }}>Sign out</Button>
         </Stack> : <GoogleSignInButton onSignedIn={onSignedIn} />}
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 4 }}>JengaFlow by Qwerty Systems</Typography>
       </Paper>
