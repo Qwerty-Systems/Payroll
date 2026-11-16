@@ -18,10 +18,6 @@ const theme = createTheme({
   shape: { borderRadius: 12 },
   typography: {
     fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    h1: { color: '#17372B' },
-    h2: { color: '#17372B' },
-    h3: { color: '#17372B' },
-    h4: { color: '#17372B' },
     button: { textTransform: 'none', fontWeight: 700 },
   },
   components: {
