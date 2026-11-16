@@ -2,7 +2,10 @@ import { ConflictException, ForbiddenException, Injectable, UnauthorizedExceptio
 import { DataSource } from 'typeorm';
 import { CreateTenantDto } from './tenant-onboarding.dto';
 
-type Claims = { sub?: unknown; email?: unknown; email_verified?: unknown; name?: unknown };
+type Claims = { [key: string]: unknown; sub?: unknown; email?: unknown; email_verified?: unknown; name?: unknown };
+const EMAIL_CLAIM = 'https://jengaflow.qwerty.co.ke/email';
+const VERIFIED_CLAIM = 'https://jengaflow.qwerty.co.ke/email_verified';
+const NAME_CLAIM = 'https://jengaflow.qwerty.co.ke/name';
 
 @Injectable()
 export class IdentityService {
@@ -10,22 +13,23 @@ export class IdentityService {
 
   private getIdentity(claims: Claims) {
     if (typeof claims.sub !== 'string' || !claims.sub.trim()) throw new UnauthorizedException('A valid identity subject is required.');
-    if (typeof claims.email !== 'string' || !claims.email.trim()) throw new ForbiddenException('The identity provider did not supply an email address.');
-    if (claims.email_verified !== true) throw new ForbiddenException('Verify your email address before creating a workspace.');
-    return {
-      subject: claims.sub,
-      email: claims.email.trim().toLowerCase(),
-      name: typeof claims.name === 'string' && claims.name.trim() ? claims.name.trim() : claims.email.trim().split('@')[0],
-    };
+    const rawEmail = claims.email ?? claims[EMAIL_CLAIM];
+    const verified = claims.email_verified ?? claims[VERIFIED_CLAIM];
+    const rawName = claims.name ?? claims[NAME_CLAIM];
+    if (typeof rawEmail !== 'string' || !rawEmail.trim()) throw new ForbiddenException('The identity provider did not supply an email address.');
+    if (verified !== true) throw new ForbiddenException('Verify your email address before creating a workspace.');
+    return { subject: claims.sub, email: rawEmail.trim().toLowerCase(), name: typeof rawName === 'string' && rawName.trim() ? rawName.trim() : rawEmail.trim().split('@')[0] };
   }
 
   async getMe(claims: Claims) {
-    const identity = this.getIdentity(claims);
+    if (typeof claims.sub !== 'string' || !claims.sub.trim()) throw new UnauthorizedException('A valid identity subject is required.');
+    const email = claims.email ?? claims[EMAIL_CLAIM] ?? null;
+    const name = claims.name ?? claims[NAME_CLAIM] ?? null;
     const rows = await this.dataSource.query(
       "SELECT u.id, u.email, u.full_name, u.status, COALESCE(json_agg(json_build_object('tenantId', t.id, 'slug', t.slug, 'displayName', t.display_name, 'legalName', t.legal_name, 'tenantStatus', t.status, 'membershipId', m.id, 'role', m.role)) FILTER (WHERE m.id IS NOT NULL), '[]'::json) AS memberships FROM platform_users u LEFT JOIN tenant_memberships m ON m.user_id = u.id AND m.status = 'active' LEFT JOIN tenants t ON t.id = m.tenant_id AND t.status IN ('trial','active') WHERE u.auth0_subject = $1 GROUP BY u.id",
-      [identity.subject],
+      [claims.sub],
     );
-    if (!rows.length) return { authenticated: true, provisioned: false, identity: { email: identity.email, name: identity.name }, memberships: [] };
+    if (!rows.length) return { authenticated: true, provisioned: false, identity: { email, name }, memberships: [] };
     return { authenticated: true, provisioned: true, user: { id: rows[0].id, email: rows[0].email, fullName: rows[0].full_name, status: rows[0].status }, memberships: rows[0].memberships };
   }
 
@@ -39,9 +43,7 @@ export class IdentityService {
         let userId: string;
         if (linked.length) {
           userId = linked[0].id;
-          if (linked[0].email.toLowerCase() !== identity.email) {
-            await manager.query('UPDATE platform_users SET email = $2, updated_at = now() WHERE id = $1', [userId, identity.email]);
-          }
+          if (linked[0].email.toLowerCase() !== identity.email) await manager.query('UPDATE platform_users SET email = $2, updated_at = now() WHERE id = $1', [userId, identity.email]);
         } else {
           const existingEmail = await manager.query('SELECT id FROM platform_users WHERE lower(email) = $1 LIMIT 1', [identity.email]);
           if (existingEmail.length) throw new ConflictException('An account already exists for this email but is not linked to this Auth0 identity. Contact support for secure account linking.');
