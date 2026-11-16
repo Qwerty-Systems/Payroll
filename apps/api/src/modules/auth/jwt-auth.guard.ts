@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   Injectable,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -16,8 +17,23 @@ type AuthenticatedRequest = {
   user?: AuthenticatedUser;
 };
 
+export function auth0TokenFailureCode(error: unknown): string {
+  if (error instanceof jwt.TokenExpiredError) return 'TOKEN_EXPIRED';
+  if (error instanceof jwt.NotBeforeError) return 'TOKEN_NOT_ACTIVE';
+  if (error instanceof jwt.JsonWebTokenError) {
+    const message = error.message.toLowerCase();
+    if (message.includes('audience')) return 'AUDIENCE_MISMATCH';
+    if (message.includes('issuer')) return 'ISSUER_MISMATCH';
+    if (message.includes('signature')) return 'INVALID_SIGNATURE';
+    if (message.includes('algorithm')) return 'INVALID_ALGORITHM';
+    return 'MALFORMED_OR_INVALID_TOKEN';
+  }
+  return 'JWKS_OR_VERIFICATION_FAILURE';
+}
+
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
+  private readonly logger = new Logger(JwtAuthGuard.name);
   private jwks?: ReturnType<typeof jwksRsa>;
   private jwksUri?: string;
 
@@ -92,7 +108,16 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     } catch (error) {
       if (error instanceof ServiceUnavailableException) throw error;
-      throw new UnauthorizedException('Auth0 access token is invalid, expired, or has the wrong audience.');
+      const failureCode = auth0TokenFailureCode(error);
+      // Never log the bearer token or decoded claims. The failure category is
+      // enough to distinguish configuration errors from expiry/signature/JWKS faults.
+      this.logger.warn(`Auth0 bearer validation rejected a request: ${failureCode}`);
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: 'Unauthorized',
+        code: failureCode,
+        message: `Auth0 access token validation failed: ${failureCode}.`,
+      });
     }
   }
 }
