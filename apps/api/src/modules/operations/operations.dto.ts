@@ -32,3 +32,31 @@ export class CreateAttendanceDto {
   @IsOptional() @IsInt() @Min(0) @Max(1440) minutesWorked?: number;
   @IsOptional() @IsIn(['web','mobile','offline_sync','import']) source?: string;
 }
+
+export class CreateWorkerContractDto {
+  @IsIn(['permanent','fixed_term','casual','piece_rate','subcontractor'])
+  engagementType!: string;
+
+  @IsIn(['hourly','daily','weekly','monthly','per_unit'])
+  payBasis!: string;
+
+  @IsInt() @Min(1) @Max(1000000000)
+  rateAmount!: number;
+
+  @IsOptional() @IsString() @Length(3, 3)
+  currency?: string;
+
+  @IsDateString()
+  effectiveFrom!: string;
+
+  @IsOptional() @IsDateString()
+  effectiveTo?: string;
+
+  @IsOptional() @IsObject()
+  terms?: Record<string, unknown>;
+}
+
+export class EndWorkerContractDto {
+  @IsDateString()
+  effectiveTo!: string;
+}
