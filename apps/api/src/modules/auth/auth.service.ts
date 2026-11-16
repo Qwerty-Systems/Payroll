@@ -4,7 +4,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { OAuth2Client } from 'google-auth-library';
 import { DataSource } from 'typeorm';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 
 type GoogleIdentity = { sub: string; email: string; name?: string; picture?: string };
 type SessionResult = { accessToken: string; expiresIn: number; user: { id: string; email: string; name: string | null; avatarUrl: string | null } };
@@ -16,7 +16,7 @@ export class AuthService {
   constructor(private readonly dataSource: DataSource, private readonly jwt: JwtService) {}
 
   private hash(value: string): string {
-    return createHash('sha256').update(value).digest('hex');
+    return createHmac('sha256', process.env.JWT_REFRESH_SECRET ?? '').update(value).digest('hex');
   }
 
   async signInWithGoogle(credential: string): Promise<{ result: SessionResult; refreshToken: string }> {
