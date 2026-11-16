@@ -3,8 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { DataSource } from 'typeorm';
 import { TENANT_PERMISSIONS_KEY } from './tenant-access.decorator';
 
-type RequestWithIdentity = { headers: Record<string, string | string[] | undefined>; user?: { sub?: string }; tenant?: { id: string; membershipId: string; role: string } };
-
+type RequestWithIdentity = { headers: Record<string, string | string[] | undefined>; user?: { sub?: string }; tenant?: { id: string; membershipId: string; role: string; userId: string } };
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   owner: ['*'],
   admin: ['company.read','company.manage','users.read','users.manage','projects.read','projects.manage','workers.read','workers.manage','attendance.read','attendance.capture','attendance.approve','payroll.read','payroll.calculate','payroll.approve','payroll.finalize','payslips.read','reports.read','audit.read'],
@@ -19,7 +18,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
 @Injectable()
 export class TenantAccessGuard implements CanActivate {
   constructor(private readonly reflector: Reflector, private readonly dataSource: DataSource) {}
-
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const required = this.reflector.getAllAndOverride<string[]>(TENANT_PERMISSIONS_KEY, [context.getHandler(), context.getClass()]);
     if (!required?.length) return true;
@@ -28,17 +26,12 @@ export class TenantAccessGuard implements CanActivate {
     const rawTenant = request.headers['x-tenant-id'];
     const tenantId = Array.isArray(rawTenant) ? rawTenant[0] : rawTenant;
     if (!tenantId) throw new ForbiddenException('Select a company workspace using x-tenant-id.');
-    const memberships = await this.dataSource.query(
-      "SELECT m.id AS membership_id, m.role, t.id AS tenant_id FROM tenant_memberships m JOIN platform_users u ON u.id = m.user_id JOIN tenants t ON t.id = m.tenant_id WHERE u.auth0_subject = $1 AND t.id = $2 AND m.status = 'active' AND t.status IN ('trial','active') AND u.status = 'active' LIMIT 1",
-      [request.user.sub, tenantId],
-    );
-    if (!memberships.length) throw new ForbiddenException('You do not have an active membership in this company.');
-    const membership = memberships[0] as { membership_id: string; role: string; tenant_id: string };
+    const rows = await this.dataSource.query("SELECT m.id AS membership_id, m.role, t.id AS tenant_id, u.id AS user_id FROM tenant_memberships m JOIN platform_users u ON u.id = m.user_id JOIN tenants t ON t.id = m.tenant_id WHERE u.auth0_subject = $1 AND t.id = $2 AND m.status = 'active' AND t.status IN ('trial','active') AND u.status = 'active' LIMIT 1", [request.user.sub, tenantId]);
+    if (!rows.length) throw new ForbiddenException('You do not have an active membership in this company.');
+    const membership = rows[0] as { membership_id: string; role: string; tenant_id: string; user_id: string };
     const granted = ROLE_PERMISSIONS[membership.role] ?? [];
-    if (!granted.includes('*') && required.some((permission) => !granted.includes(permission))) {
-      throw new ForbiddenException('Your company role does not grant the required permission.');
-    }
-    request.tenant = { id: membership.tenant_id, membershipId: membership.membership_id, role: membership.role };
+    if (!granted.includes('*') && required.some((permission) => !granted.includes(permission))) throw new ForbiddenException('Your company role does not grant the required permission.');
+    request.tenant = { id: membership.tenant_id, membershipId: membership.membership_id, role: membership.role, userId: membership.user_id };
     return true;
   }
 }
