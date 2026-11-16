@@ -16,14 +16,14 @@ function ConfiguredSignInPage() {
     authorizationParams: { connection: 'google-oauth2' },
   });
 
-  return <Box sx={{ minHeight: '100vh', bgcolor: '#0a192f', display: 'grid', placeItems: 'center', p: 2 }}>
+  return <Box sx={{ minHeight: '100vh', bgcolor: '#17372B', display: 'grid', placeItems: 'center', p: 2 }}>
     <Container maxWidth="xs">
       <Paper elevation={12} sx={{ p: { xs: 3, sm: 4 }, borderRadius: 4 }}>
         <Button href="/" startIcon={<ArrowBackRounded />} sx={{ mb: 2 }}>Back to JengaFlow</Button>
-        <Typography variant="h4" fontWeight={900} color="#0a192f">Welcome back</Typography>
+        <Typography variant="h4" fontWeight={900} color="#17372B">Welcome back</Typography>
         <Typography color="text.secondary" sx={{ mt: 1, mb: 3 }}>Sign in securely to your JengaFlow account.</Typography>
 
-        {!auth0Configured && <Alert severity="warning">Auth0 is not configured for this deployment. Set the VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID and VITE_AUTH0_AUDIENCE build variables.</Alert>}
+        {!auth0Configured && <Alert severity="warning">This frontend image was built without its Auth0 settings. Add VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID and VITE_AUTH0_AUDIENCE as GitLab CI/CD variables, then rebuild and redeploy the web image.</Alert>}
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error.message}</Alert>}
 
         {isLoading ? <Stack alignItems="center" spacing={1}><CircularProgress /><Typography color="text.secondary">Checking your session…</Typography></Stack>
@@ -35,7 +35,7 @@ function ConfiguredSignInPage() {
           </Stack>
           : <Button fullWidth size="large" variant="contained" disabled={!auth0Configured}
               onClick={() => void signInWithGoogle()} startIcon={<GoogleIcon />}
-              sx={{ py: 1.4, bgcolor: '#1d513b', fontWeight: 800, '&:hover': { bgcolor: '#14251d' } }}>
+              sx={{ py: 1.4, bgcolor: '#2F6B4F', fontWeight: 800, '&:hover': { bgcolor: '#17372B' } }}>
               Continue with Google
             </Button>}
 
@@ -47,11 +47,11 @@ function ConfiguredSignInPage() {
 
 export default function SignInPage() {
   if (!auth0Configured) {
-    return <Box sx={{ minHeight: '100vh', bgcolor: '#0a192f', display: 'grid', placeItems: 'center', p: 2 }}>
+    return <Box sx={{ minHeight: '100vh', bgcolor: '#17372B', display: 'grid', placeItems: 'center', p: 2 }}>
       <Container maxWidth="xs"><Paper sx={{ p: 4, borderRadius: 4 }}>
         <Button href="/" startIcon={<ArrowBackRounded />} sx={{ mb: 2 }}>Back to JengaFlow</Button>
-        <Typography variant="h4" fontWeight={900} color="#0a192f">Welcome back</Typography>
-        <Alert severity="warning" sx={{ mt: 2 }}>Auth0 is not configured. Set the VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID and VITE_AUTH0_AUDIENCE build variables.</Alert>
+        <Typography variant="h4" fontWeight={900} color="#17372B">Welcome back</Typography>
+        <Alert severity="warning" sx={{ mt: 2 }}>This frontend image was built without its Auth0 settings. Add VITE_AUTH0_DOMAIN, VITE_AUTH0_CLIENT_ID and VITE_AUTH0_AUDIENCE as GitLab CI/CD variables, then rebuild and redeploy the web image.</Alert>
       </Paper></Container>
     </Box>;
   }
