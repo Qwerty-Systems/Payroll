@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { IsIn, IsString, MinLength } from 'class-validator';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
-import { CreateAttendanceDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeStatusDto } from './operations.dto';
+import { CreateAttendanceDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeStatusDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto } from './operations.dto';
 import { OperationsService } from './operations.service';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
@@ -18,9 +18,15 @@ export class OperationsController {
 
   @Get('projects') @TenantPermissions('projects.read') projects(@Req() req: TenantRequest) { return this.operations.listProjects(req.tenant.id); }
   @Post('projects') @TenantPermissions('projects.manage') createProject(@Req() req: TenantRequest, @Body() dto: CreateProjectDto) { return this.operations.createProject(req.tenant.id,dto); }
+  @Get('projects/:id') @TenantPermissions('projects.read') getProject(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.getProject(req.tenant.id,id); }
+  @Patch('projects/:id') @TenantPermissions('projects.manage') editProject(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateProjectDto) { return this.operations.updateProjectDetails(req.tenant.id,req.tenant.userId,id,dto); }
+  @Delete('projects/:id') @TenantPermissions('projects.manage') archiveProject(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.archiveProject(req.tenant.id,req.tenant.userId,id); }
   @Patch('projects/:id/status') @TenantPermissions('projects.manage') updateProject(@Req() req: TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:StatusDto) { return this.operations.updateProject(req.tenant.id,id,dto.status); }
 
   @Get('sites') @TenantPermissions('projects.read') sites(@Req() req:TenantRequest,@Query('projectId') projectId?:string) { return this.operations.listSites(req.tenant.id,projectId); }
+  @Get('sites/:id') @TenantPermissions('projects.read') getSite(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.getSite(req.tenant.id,id); }
+  @Patch('sites/:id') @TenantPermissions('projects.manage') updateSite(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateSiteDto) { return this.operations.updateSite(req.tenant.id,req.tenant.userId,id,dto); }
+  @Delete('sites/:id') @TenantPermissions('projects.manage') archiveSite(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.archiveSite(req.tenant.id,req.tenant.userId,id); }
   @Post('sites') @TenantPermissions('projects.manage') createSite(@Req() req:TenantRequest,@Body() dto:CreateSiteDto) { return this.operations.createSite(req.tenant.id,dto); }
 
   @Get('pay-grades') @TenantPermissions('workers.read') payGrades(@Req() req:TenantRequest) { return this.operations.listPayGrades(req.tenant.id); }
@@ -28,6 +34,9 @@ export class OperationsController {
   @Patch('pay-grades/:id/status') @TenantPermissions('workers.manage') updatePayGrade(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdatePayGradeStatusDto) { return this.operations.setPayGradeStatus(req.tenant.id,id,dto.status); }
 
   @Get('workers') @TenantPermissions('workers.read') workers(@Req() req:TenantRequest) { return this.operations.listWorkers(req.tenant.id); }
+  @Get('workers/:id') @TenantPermissions('workers.read') getWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.getWorker(req.tenant.id,id); }
+  @Patch('workers/:id') @TenantPermissions('workers.manage') editWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateWorkerDto) { return this.operations.updateWorker(req.tenant.id,req.tenant.userId,id,dto); }
+  @Delete('workers/:id') @TenantPermissions('workers.manage') archiveWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.archiveWorker(req.tenant.id,req.tenant.userId,id); }
   @Post('workers') @TenantPermissions('workers.manage') createWorker(@Req() req:TenantRequest,@Body() dto:CreateWorkerDto) { return this.operations.createWorker(req.tenant.id,dto); }
   @Patch('workers/:id/status') @TenantPermissions('workers.manage') updateWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:StatusDto) { return this.operations.setWorkerStatus(req.tenant.id,id,dto.status); }
 

@@ -71,3 +71,42 @@ describe('OperationsService worker contracts', () => {
       .rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+
+describe('OperationsService CRUD', () => {
+  const tenantId = '123e4567-e89b-42d3-a456-426614174000';
+  const actorId = '123e4567-e89b-42d3-a456-426614174001';
+  const workerId = '123e4567-e89b-42d3-a456-426614174002';
+
+  function serviceFor(query: jest.Mock) {
+    const tenantDb = { run: jest.fn(async (_tenantId: string, work: (manager: { query: jest.Mock }) => Promise<unknown>) => work({ query })) };
+    return new OperationsService(tenantDb as never);
+  }
+
+  it('updates a worker profile within the tenant and records an audit event', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ workerNumber:'W-1',firstName:'A',middleName:null,lastName:'B',phone:null,email:null,status:'active' }])
+      .mockResolvedValueOnce([{ id:workerId,workerNumber:'W-1',firstName:'Ada',lastName:'B' }])
+      .mockResolvedValueOnce([]);
+    const service = serviceFor(query);
+    await expect(service.updateWorker(tenantId,actorId,workerId,{ firstName:'Ada' })).resolves.toMatchObject({ firstName:'Ada' });
+    expect(query.mock.calls[0][0]).toContain('tenant_id=$1 AND id=$2 FOR UPDATE');
+    expect(query.mock.calls[1][0]).toContain('WHERE tenant_id=$1 AND id=$2');
+    expect(query.mock.calls[2][0]).toContain('worker.updated');
+  });
+
+  it('does not archive a worker with an active contract', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ id:workerId,status:'active' }])
+      .mockResolvedValueOnce([{ id:'active-contract' }]);
+    const service = serviceFor(query);
+    await expect(service.archiveWorker(tenantId,actorId,workerId)).rejects.toBeInstanceOf(ConflictException);
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns not found when a project is outside the tenant', async () => {
+    const query = jest.fn().mockResolvedValueOnce([]);
+    const service = serviceFor(query);
+    await expect(service.getProject(tenantId,workerId)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
