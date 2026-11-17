@@ -207,7 +207,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
         await request(`tenant/workers/${selectedWorker}/contracts`, { method: 'POST', body: JSON.stringify({
           engagementType: forms.engagementType, payBasis: forms.payBasis, payGradeId: forms.payGradeId || undefined,
           rateAmount: Number(forms.rateAmount), currency: 'KES', effectiveFrom: forms.effectiveFrom,
-          terms: forms.payBasis === 'per_unit' ? { unitCodes: forms.unitCodes.split(',').map(x => x.trim()).filter(Boolean) } : {},
+          terms: forms.payBasis === 'per_unit' ? { unitCodes: (forms.unitCodes ?? '').split(',').map(x => x.trim()).filter(Boolean) } : {},
         }) });
         setNotice('Contract added to the worker history.');
       } else if (dialog === 'payGrade') {
