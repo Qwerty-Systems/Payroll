@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Req } from '@
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
-import { ConfirmPayrollPaymentDto, CreatePayrollPeriodDto, CreatePayrollRunDto, PayrollPaymentBatchDto, CreateWorkerPayComponentDto, UpdateWorkerPayComponentStatusDto } from './payroll.dto';
+import { ConfirmPayrollPaymentDto, CreatePayrollPeriodDto, CreatePayrollRunDto, PayrollPaymentBatchDto, CreateWorkerPayComponentDto, UpdateWorkerPayComponentStatusDto, ReviewComplianceAssignmentDto, ReviewStatutoryFilingDto, SubmitStatutoryFilingDto } from './payroll.dto';
 import { PayrollService } from './payroll.service';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
@@ -35,5 +35,13 @@ export class PayrollController {
   @Get('workers/:workerId/components') @TenantPermissions('payroll.read') listWorkerComponents(@Req() req:TenantRequest,@Param('workerId',ParseUUIDPipe) workerId:string){return this.payroll.listWorkerPayComponents(req.tenant.id,workerId);}
   @Post('workers/:workerId/components') @TenantPermissions('payroll.calculate') createWorkerComponent(@Req() req:TenantRequest,@Param('workerId',ParseUUIDPipe) workerId:string,@Body() dto:CreateWorkerPayComponentDto){return this.payroll.createWorkerPayComponent(req.tenant.id,req.tenant.userId,workerId,dto);}
   @Patch('components/:id/status') @TenantPermissions('payroll.calculate') setWorkerComponentStatus(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateWorkerPayComponentStatusDto){return this.payroll.setWorkerPayComponentStatus(req.tenant.id,req.tenant.userId,id,dto.status);}
+
+
+  @Get('compliance/assignments') @TenantPermissions('payroll.read') listComplianceAssignments(@Req() req:TenantRequest){return this.payroll.listComplianceAssignments(req.tenant.id);}
+  @Post('compliance/assignments/:id/review') @TenantPermissions('payroll.approve') reviewComplianceAssignment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:ReviewComplianceAssignmentDto){return this.payroll.reviewComplianceAssignment(req.tenant.id,req.tenant.userId,id,dto.action,dto.reason);}
+  @Get('compliance/filings') @TenantPermissions('reports.read') listStatutoryFilings(@Req() req:TenantRequest){return this.payroll.listStatutoryFilings(req.tenant.id);}
+  @Post('runs/:id/filings/generate') @TenantPermissions('payroll.calculate') generateStatutoryFilings(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string){return this.payroll.generateStatutoryFilings(req.tenant.id,req.tenant.userId,id);}
+  @Post('compliance/filings/:id/review') @TenantPermissions('payroll.approve') reviewStatutoryFiling(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:ReviewStatutoryFilingDto){return this.payroll.reviewStatutoryFiling(req.tenant.id,req.tenant.userId,id,dto.action,dto.reason);}
+  @Post('compliance/filings/:id/mark-submitted') @TenantPermissions('payroll.finalize') markStatutoryFilingSubmitted(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:SubmitStatutoryFilingDto){return this.payroll.markStatutoryFilingSubmitted(req.tenant.id,req.tenant.userId,id,dto.externalReference);}
 
 }
