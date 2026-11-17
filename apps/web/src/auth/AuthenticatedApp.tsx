@@ -86,7 +86,7 @@ export default function AuthenticatedApp() {
   const hasWorkspace = Boolean(identity?.provisioned || (identity?.memberships?.length ?? 0) > 0);
   if (hasWorkspace) {
     return <TenantWorkspace
-      memberships={identity.memberships ?? []}
+      memberships={identity?.memberships ?? []}
       userName={user?.name}
       userPicture={user?.picture}
       apiBaseUrl={auth0Config.apiBaseUrl}
