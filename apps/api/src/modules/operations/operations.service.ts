@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
-import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, CreateWorkerOutputDto, CreatePayGradeDto } from './operations.dto';
+import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, CreateWorkerOutputDto, CreatePayGradeDto, CreateShiftDto, AssignShiftDto, CreateLeaveRequestDto, SetLeaveEntitlementDto, CreateOvertimeRequestDto, CreateTimesheetDto } from './operations.dto';
 
 @Injectable()
 export class OperationsService {
