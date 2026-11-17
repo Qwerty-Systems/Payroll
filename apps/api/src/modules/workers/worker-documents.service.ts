@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
 import { ObjectStorageService } from '../storage/object-storage.service';
 
-const DOCUMENT_TYPES = new Set(['identity','contract','tax','bank','qualification','medical_clearance','other']);
+const DOCUMENT_TYPES = new Set(['identity','contract','tax','bank','qualification','other']);
 type UploadFile = { buffer: Buffer; originalname: string; mimetype: string; size: number };
 
 @Injectable()
