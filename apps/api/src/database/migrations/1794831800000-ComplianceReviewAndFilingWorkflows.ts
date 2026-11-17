@@ -118,10 +118,24 @@ export class ComplianceReviewAndFilingWorkflows1794831800000 implements Migratio
       BEGIN
         FOREACH role_name IN ARRAY ARRAY['jengaflow_app','jf_app'] LOOP
           IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname=role_name) THEN
-            EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_statutory_rule_reviews, tenant_statutory_rule_changes, statutory_filing_records, tenant_statutory_rule_overrides TO %I',role_name);
+            EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_statutory_rule_reviews, tenant_statutory_rule_changes, statutory_filing_records, tenant_statutory_rule_overrides, tenant_statutory_assignments, statutory_rule_sets, statutory_rules TO %I',role_name);
           END IF;
         END LOOP;
       END $compliance$;
+
+      CREATE OR REPLACE FUNCTION prevent_compliance_audit_mutation()
+      RETURNS trigger LANGUAGE plpgsql AS $audit$
+      BEGIN
+        IF OLD.action LIKE 'compliance.%'
+          OR OLD.entity_type IN ('statutory_rule_review','statutory_rule_change','statutory_filing') THEN
+          RAISE EXCEPTION 'Compliance audit records are immutable.';
+        END IF;
+        RETURN OLD;
+      END $audit$;
+      DROP TRIGGER IF EXISTS compliance_audit_immutable ON audit_events;
+      CREATE TRIGGER compliance_audit_immutable
+        BEFORE UPDATE OR DELETE ON audit_events
+        FOR EACH ROW EXECUTE FUNCTION prevent_compliance_audit_mutation();
 
       DO $rls$ DECLARE t text; BEGIN
         FOREACH t IN ARRAY ARRAY[
