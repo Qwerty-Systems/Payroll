@@ -3,6 +3,7 @@ export class BillingSubscriptionsAndInvoicing1794831800000 implements MigrationI
  name='BillingSubscriptionsAndInvoicing1794831800000';
  async up(q:QueryRunner):Promise<void>{await q.query(`
   CREATE SEQUENCE billing_invoice_number_seq;
+  CREATE SEQUENCE billing_quote_number_seq;
   CREATE TABLE billing_plans(
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),code varchar(40) NOT NULL UNIQUE,name varchar(120) NOT NULL,
     description varchar(500),price_minor bigint,currency char(3) NOT NULL DEFAULT 'KES',
@@ -45,7 +46,7 @@ export class BillingSubscriptionsAndInvoicing1794831800000 implements MigrationI
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
     name varchar(160) NOT NULL,customer_name varchar(180) NOT NULL,customer_email varchar(254),
     currency char(3) NOT NULL,frequency varchar(16) NOT NULL CHECK(frequency IN ('monthly','yearly')),
-    next_run_date date NOT NULL,lines_snapshot jsonb NOT NULL,status varchar(16) NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','cancelled')),
+    next_run_date date NOT NULL,due_days integer NOT NULL CHECK(due_days BETWEEN 0 AND 365),lines_snapshot jsonb NOT NULL,status varchar(16) NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','cancelled')),
     created_by uuid REFERENCES platform_users(id) ON DELETE SET NULL,last_generated_date date,
     created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,id)
   );
@@ -91,5 +92,5 @@ export class BillingSubscriptionsAndInvoicing1794831800000 implements MigrationI
   CREATE INDEX billing_recurring_due_idx ON billing_recurring_schedules(tenant_id,status,next_run_date);
   CREATE INDEX billing_payment_invoice_idx ON billing_payments(tenant_id,invoice_id,status);
  `);}
- async down(q:QueryRunner):Promise<void>{await q.query('DROP TABLE IF EXISTS billing_payments,billing_invoice_lines,billing_invoices,billing_recurring_schedules,billing_quote_lines,billing_quotes,tenant_subscriptions,billing_plans CASCADE; DROP SEQUENCE IF EXISTS billing_invoice_number_seq;');}
+ async down(q:QueryRunner):Promise<void>{await q.query('DROP TABLE IF EXISTS billing_payments,billing_invoice_lines,billing_invoices,billing_recurring_schedules,billing_quote_lines,billing_quotes,tenant_subscriptions,billing_plans CASCADE; DROP SEQUENCE IF EXISTS billing_invoice_number_seq; DROP SEQUENCE IF EXISTS billing_quote_number_seq;');}
 }
