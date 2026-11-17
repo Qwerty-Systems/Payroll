@@ -12,8 +12,9 @@ const ROLES=['admin','hr_manager','payroll_manager','supervisor','worker','accou
 @Injectable()
 export class UsersService {
   constructor(private readonly tenantDb:TenantTransactionService){}
-  createInvitation(tenantId:string,actorId:string,dto:CreateInvitationDto){
+  createInvitation(tenantId:string,actorId:string,actorRole:string,dto:CreateInvitationDto){
     if(!ROLES.includes(dto.role))throw new BadRequestException('Unsupported invitation role.');
+    if(dto.role==='admin'&&actorRole!=='owner')throw new ForbiddenException('Only the company owner can invite an administrator.');
     const secret=randomBytes(32).toString('hex');
     const token=tenantId+'.'+secret;
     const tokenHash=createHash('sha256').update(token).digest('hex');
