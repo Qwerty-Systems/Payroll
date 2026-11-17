@@ -29,13 +29,14 @@ import { countCommands } from '../offline/offline-db';
 import { cacheReferenceData, loadCachedReferenceData, REFERENCE_ENTITIES, type ReferenceRows } from '../offline/reference-data';
 import { useAutoSync } from '../offline/use-auto-sync';
 import SyncReviewDialog from './SyncReviewDialog';
+import ComplianceWorkspace from './ComplianceWorkspace';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
   tenantStatus: string; membershipId: string; role: string;
 };
 type RowData = Record<string, unknown> & { id?: string };
-type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'payroll' | 'organization' | 'people';
+type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'payroll' | 'compliance' | 'organization' | 'people';
 type Props = {
   memberships: Membership[];
   userName?: string;
@@ -410,9 +411,13 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     { value: 'projects' as Section, label: 'Projects & sites', icon: <BusinessRounded />, group: 'WORKSPACE' },
     { value: 'attendance' as Section, label: 'Attendance', icon: <EventAvailableRounded />, group: 'WORKSPACE' },
     { value: 'payroll' as Section, label: 'Payroll', icon: <PaymentsRounded />, group: 'FINANCE' },
+    { value: 'compliance' as Section, label: 'Compliance', icon: <AssignmentTurnedInRounded />, group: 'COMPLIANCE' },
     { value: 'organization' as Section, label: 'Organization', icon: <SettingsRounded />, group: 'ADMINISTRATION' },
     { value: 'people' as Section, label: 'Team access', icon: <GroupsRounded />, group: 'ADMINISTRATION' },
   ];
+  const complianceReadableRoles = ['owner','admin','hr_manager','payroll_manager','accountant','viewer'];
+  const visibleNavItems = navItems.filter(item => item.value !== 'compliance' || complianceReadableRoles.includes(membership?.role ?? ''));
+  const navGroups = ['WORKSPACE','FINANCE','COMPLIANCE','ADMINISTRATION'].filter(group => visibleNavItems.some(item => item.group === group));
   const pageTitle: Record<Section, string> = {
     overview: 'Overview', workers: 'Employees', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
     attendance: 'Attendance', payroll: 'Payroll', organization: 'Organization', people: 'Team access',
@@ -424,6 +429,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     projects: 'Organize projects, clients and work sites.',
     attendance: 'Capture work activity and review submitted records.',
     payroll: 'Manage pay periods and review payroll calculation previews.',
+    compliance: 'Review statutory rules, approve effective-dated changes and track statutory filings.',
     organization: 'Structure your company and assign people to teams.',
     people: 'Control who can access this company workspace.',
   };
@@ -442,11 +448,11 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       </Box>
       <Divider sx={{ borderColor: 'rgba(255,255,255,.1)' }} />
       <Box sx={{ px: 1.5, py: 2, flex: 1 }}>
-        {['WORKSPACE','FINANCE','ADMINISTRATION'].map(group => (
+        {navGroups.map(group => (
           <Box key={group} sx={{ mb: 2 }}>
             <Typography sx={{ px: 1.5, mb: .8, color: 'rgba(255,255,255,.42)', fontSize: '.65rem', fontWeight: 800, letterSpacing: '.12em' }}>{group}</Typography>
             <List disablePadding>
-              {navItems.filter(item => item.group === group).map(item => (
+              {visibleNavItems.filter(item => item.group === group).map(item => (
                 <ListItemButton key={item.value} selected={section === item.value}
                   onClick={() => { setSection(item.value); setSearchQuery(''); setMobileNavOpen(false); }}
                   sx={{
@@ -615,7 +621,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
             </Stack>
           </Stack>
           {loading && <Box sx={{ mb: 2 }}><Typography variant="caption" color="text.secondary">Refreshing workspace data…</Typography></Box>}
-          {section !== 'organization' && section !== 'people' && <TextField fullWidth size="small" placeholder={`Search ${pageTitle[section].toLowerCase()}…`} value={searchQuery} onChange={event => setSearchQuery(event.target.value)}
+          {section !== 'organization' && section !== 'people' && section !== 'compliance' && <TextField fullWidth size="small" placeholder={`Search ${pageTitle[section].toLowerCase()}…`} value={searchQuery} onChange={event => setSearchQuery(event.target.value)}
             InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ color: '#87948A' }} /></InputAdornment> }}
             sx={{ mb: 2, maxWidth: 520, '& .MuiOutlinedInput-root': { bgcolor: '#FFFFFF', borderRadius: 2 } }} />}
           {section === 'pay-grades' ? <Stack spacing={2}><Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>

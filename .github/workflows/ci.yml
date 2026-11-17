@@ -60,6 +60,16 @@ jobs:
       - name: Apply database migrations
         working-directory: apps/api
         run: pnpm exec typeorm -d dist/database/data-source.js migration:run
+      - name: Verify required payroll and compliance schema
+        run: |
+          psql -h 127.0.0.1 -U postgres jengaflow -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN
+            IF to_regclass('public.worker_pay_grades') IS NULL THEN RAISE EXCEPTION 'worker_pay_grades migration is missing'; END IF;
+            IF to_regclass('public.tenant_statutory_rule_reviews') IS NULL THEN RAISE EXCEPTION 'compliance review migration is missing'; END IF;
+            IF to_regclass('public.tenant_statutory_rule_changes') IS NULL THEN RAISE EXCEPTION 'compliance rule-change migration is missing'; END IF;
+            IF to_regclass('public.statutory_filing_records') IS NULL THEN RAISE EXCEPTION 'statutory filing migration is missing'; END IF;
+          END \$\$;"
+      - name: Validate deployment Compose configuration
+        run: docker compose config --quiet
       - name: Build
         run: pnpm build
       - name: Test
