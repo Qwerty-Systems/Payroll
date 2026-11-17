@@ -135,6 +135,8 @@ export class ComplianceService {
       if(!rows.length) throw new NotFoundException('Rule change proposal not found.');
       if(!['draft','rejected'].includes(rows[0].status)) throw new ConflictException('Only draft or rejected proposals can be edited.');
       const r=rows[0];
+      if(dto.calculationMethod && dto.calculationMethod!==r.calculation_method) throw new BadRequestException('Changing the calculation method requires a reviewed payroll-engine implementation.');
+      if(dto.category && dto.category!==r.category) throw new BadRequestException('A rule change cannot change the statutory category.');
       const result=await m.query(`
         UPDATE tenant_statutory_rule_changes SET label=$3,category=$4,calculation_method=$5,configuration=$6::jsonb,
           effective_from=$7,effective_to=$8,source_title=$9,source_url=$10,verified_on=$11,reason=$12,status='draft',
@@ -266,7 +268,7 @@ export class ComplianceService {
       const rows=await m.query(`
         UPDATE statutory_filing_records SET status='submitted',external_reference=$3,submission_channel=$4,
           submission_evidence_url=$5,submitted_by=$6,submitted_at=now(),updated_at=now()
-        WHERE tenant_id=$1 AND id=$2 AND status='approved'
+        WHERE tenant_id=$1 AND id=$2 AND status='approved' AND reviewed_by IS DISTINCT FROM $6
         RETURNING id,status,external_reference AS "externalReference",submitted_at AS "submittedAt"
       `,[tenantId,id,dto.externalReference,dto.submissionChannel,dto.submissionEvidenceUrl??null,actorId]);
       if(!rows.length) throw new ConflictException('Only an approved filing can be recorded as submitted. Record the reference returned by the authority.');
@@ -300,10 +302,11 @@ export class ComplianceService {
   listAudit(tenantId:string,limit=100) {
     const safeLimit=Math.max(1,Math.min(250,Number.isFinite(limit)?Math.floor(limit):100));
     return this.tenantDb.run(tenantId,m=>m.query(`
-      SELECT id,actor_user_id AS "actorUserId",action,entity_type AS "entityType",entity_id AS "entityId",
-        metadata,created_at AS "createdAt"
-      FROM audit_events WHERE tenant_id=$1 AND (action LIKE 'compliance.%' OR entity_type IN ('statutory_rule_review','statutory_rule_change','statutory_filing'))
-      ORDER BY created_at DESC LIMIT $2
+      SELECT e.id,e.actor_user_id AS "actorUserId",u.full_name AS "actorName",u.email AS "actorEmail",
+        e.action,e.entity_type AS "entityType",e.entity_id AS "entityId",e.metadata,e.created_at AS "createdAt"
+      FROM audit_events e LEFT JOIN platform_users u ON u.id=e.actor_user_id
+      WHERE e.tenant_id=$1 AND (e.action LIKE 'compliance.%' OR e.entity_type IN ('statutory_rule_review','statutory_rule_change','statutory_filing'))
+      ORDER BY e.created_at DESC LIMIT $2
     `,[tenantId,safeLimit]));
   }
 
