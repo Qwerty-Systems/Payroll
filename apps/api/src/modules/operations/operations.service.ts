@@ -164,4 +164,80 @@ export class OperationsService {
     });
   }
 
+
+  async listAttendanceCorrections(tenantId: string, attendanceId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const record = await m.query('SELECT id FROM attendance_records WHERE tenant_id=$1 AND id=$2', [tenantId, attendanceId]);
+      if (!record.length) throw new NotFoundException('Attendance record not found.');
+      return m.query(`SELECT id,attendance_id AS "attendanceId",proposed_values AS "proposedValues",reason,status,
+        requested_by AS "requestedBy",reviewed_by AS "reviewedBy",review_reason AS "reviewReason",
+        created_at AS "createdAt",reviewed_at AS "reviewedAt"
+        FROM attendance_correction_requests WHERE tenant_id=$1 AND attendance_id=$2 ORDER BY created_at DESC`,
+        [tenantId, attendanceId]);
+    });
+  }
+
+  async requestAttendanceCorrection(tenantId: string, actorId: string, attendanceId: string,
+    input: { clockIn?: string; clockOut?: string; minutesWorked?: number; reason: string }) {
+    const proposedValues: Record<string, string | number> = {};
+    if (input.clockIn !== undefined) proposedValues.clockIn = input.clockIn;
+    if (input.clockOut !== undefined) proposedValues.clockOut = input.clockOut;
+    if (input.minutesWorked !== undefined) proposedValues.minutesWorked = input.minutesWorked;
+    if (!Object.keys(proposedValues).length) throw new BadRequestException('Provide at least one attendance field to correct.');
+    if (input.clockIn && input.clockOut && new Date(input.clockOut) <= new Date(input.clockIn)) {
+      throw new BadRequestException('Clock-out must be after clock-in.');
+    }
+    return this.tenantDb.run(tenantId, async m => {
+      const records = await m.query('SELECT id,status,created_by FROM attendance_records WHERE tenant_id=$1 AND id=$2 FOR UPDATE',
+        [tenantId, attendanceId]);
+      if (!records.length) throw new NotFoundException('Attendance record not found.');
+      if (records[0].status !== 'approved') throw new ConflictException('Corrections can only be requested for approved attendance records.');
+      const pending = await m.query("SELECT id FROM attendance_correction_requests WHERE tenant_id=$1 AND attendance_id=$2 AND status='pending' LIMIT 1",
+        [tenantId, attendanceId]);
+      if (pending.length) throw new ConflictException('A correction request is already pending for this attendance record.');
+      const rows = await m.query(`INSERT INTO attendance_correction_requests
+        (tenant_id,attendance_id,proposed_values,reason,requested_by)
+        VALUES($1,$2,$3::jsonb,$4,$5)
+        RETURNING id,attendance_id AS "attendanceId",proposed_values AS "proposedValues",reason,status,created_at AS "createdAt"`,
+        [tenantId, attendanceId, JSON.stringify(proposedValues), input.reason.trim(), actorId]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'attendance.correction.requested','attendance_correction',$3,$4::jsonb)",
+        [tenantId, actorId, rows[0].id, JSON.stringify({attendanceId, proposedValues, reason:input.reason.trim()})]);
+      return rows[0];
+    });
+  }
+
+  async reviewAttendanceCorrection(tenantId: string, actorId: string, correctionId: string,
+    action: 'approve' | 'reject', reason: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query(`SELECT c.id,c.attendance_id,c.proposed_values,c.reason,c.status,c.requested_by,
+        a.status AS attendance_status FROM attendance_correction_requests c
+        JOIN attendance_records a ON a.tenant_id=c.tenant_id AND a.id=c.attendance_id
+        WHERE c.tenant_id=$1 AND c.id=$2 FOR UPDATE OF c,a`, [tenantId, correctionId]);
+      if (!rows.length) throw new NotFoundException('Attendance correction request not found.');
+      const correction = rows[0];
+      if (correction.status !== 'pending') throw new ConflictException('This correction request has already been reviewed.');
+      if (correction.requested_by === actorId) throw new BadRequestException('Separation of duties: the requester cannot review their own correction.');
+      if (correction.attendance_status !== 'approved') throw new ConflictException('The source attendance record is no longer approved.');
+      if (!reason.trim()) throw new BadRequestException('A review reason is required.');
+      if (action === 'approve') {
+        const values = correction.proposed_values as Record<string, unknown>;
+        await m.query(`UPDATE attendance_records SET
+          clock_in=CASE WHEN $3::jsonb ? 'clockIn' THEN ($3::jsonb->>'clockIn')::timestamptz ELSE clock_in END,
+          clock_out=CASE WHEN $3::jsonb ? 'clockOut' THEN ($3::jsonb->>'clockOut')::timestamptz ELSE clock_out END,
+          minutes_worked=CASE WHEN $3::jsonb ? 'minutesWorked' THEN ($3::jsonb->>'minutesWorked')::integer ELSE minutes_worked END,
+          updated_at=now() WHERE tenant_id=$1 AND id=$2`,
+          [tenantId, correction.attendance_id, JSON.stringify(values)]);
+      }
+      const status = action === 'approve' ? 'approved' : 'rejected';
+      const updated = await m.query(`UPDATE attendance_correction_requests SET status=$3,reviewed_by=$4,
+        review_reason=$5,reviewed_at=now() WHERE tenant_id=$1 AND id=$2
+        RETURNING id,status,review_reason AS "reviewReason",reviewed_at AS "reviewedAt"`,
+        [tenantId, correctionId, status, actorId, reason.trim()]);
+      await m.query('INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,$3,\'attendance_correction\',$4,$5::jsonb)',
+        [tenantId, actorId, 'attendance.correction.'+action, correctionId,
+          JSON.stringify({attendanceId:correction.attendance_id, reason:reason.trim()})]);
+      return updated[0];
+    });
+  }
+
 }
