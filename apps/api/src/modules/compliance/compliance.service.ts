@@ -169,6 +169,14 @@ export class ComplianceService {
       if(decision==='approve'){
         const review=await m.query("SELECT id FROM tenant_statutory_rule_reviews WHERE tenant_id=$1 AND rule_set_id=$2 AND status='approved' AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $3::date) ORDER BY effective_from DESC LIMIT 1",[tenantId,change.rule_set_id,change.effective_from]);
         if(!review.length) throw new ConflictException('Approve the applicable statutory ruleset review before approving a rule change.');
+        const overlap=await m.query(`
+          SELECT id FROM tenant_statutory_rule_overrides
+          WHERE tenant_id=$1 AND rule_set_id=$2 AND rule_code=$3
+            AND daterange(effective_from,COALESCE(effective_to,'infinity'::date),'[]')
+              && daterange($4::date,COALESCE($5::date,'infinity'::date),'[]')
+          LIMIT 1
+        `,[tenantId,change.rule_set_id,change.rule_code,change.effective_from,change.effective_to]);
+        if(overlap.length) throw new ConflictException('An approved rule override already overlaps these effective dates. Amend the existing effective-dated schedule instead of creating a conflicting version.');
         const overrides=await m.query(`
           INSERT INTO tenant_statutory_rule_overrides
             (tenant_id,rule_set_id,rule_code,label,category,calculation_method,configuration,effective_from,effective_to,reason,approved_by,status,submitted_by,reviewed_at,review_notes,source_title,source_url,verified_on)
