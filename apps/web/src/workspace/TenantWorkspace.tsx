@@ -145,7 +145,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       const form = new FormData();
       form.append('file', documentFile);
       form.append('documentType', documentType);
-      const response = await fetch(`${apiBaseUrl.replace(/\\/+$/, '')}/api/v1/tenant/workers/${selectedWorker}/documents`, {
+      const response = await fetch(`${apiBaseUrl.replace(/\/+$/, '')}/api/v1/tenant/workers/${selectedWorker}/documents`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'x-tenant-id': tenantId, Accept: 'application/json' },
         body: form,
