@@ -252,9 +252,11 @@ export class PayrollPostFinalizationService {
       if(!rows.length) throw new NotFoundException('Payment item not found.');
       if(rows[0].status!=='paid') throw new ConflictException('Only confirmed paid items can be reversed.');
       await m.query("UPDATE payroll_payment_batch_items SET status='reversed' WHERE tenant_id=$1 AND batch_id=$2 AND id=$3",[tenantId,batchId,itemId]);
-      await m.query("UPDATE payroll_payment_batches SET status='partially_paid' WHERE tenant_id=$1 AND id=$2",[tenantId,batchId]);
+      const remaining=await m.query("SELECT count(*) FILTER(WHERE status='paid')::int AS paid,count(*) FILTER(WHERE status IN ('pending','processing'))::int AS open FROM payroll_payment_batch_items WHERE tenant_id=$1 AND batch_id=$2",[tenantId,batchId]);
+      const nextBatchStatus=remaining[0].paid>0?'partially_paid':remaining[0].open>0?'approved':'failed';
+      await m.query("UPDATE payroll_payment_batches SET status=$3 WHERE tenant_id=$1 AND id=$2",[tenantId,batchId,nextBatchStatus]);
       await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.payment.reversed','payment_batch_item',$3,$4::jsonb)",[tenantId,actorId,itemId,JSON.stringify({batchId,reason:reason.trim()})]);
-      return {id:itemId,status:'reversed'};
+      return {id:itemId,status:'reversed',batchStatus:nextBatchStatus};
     });
   }
 }
