@@ -548,7 +548,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               </TableBody></Table></TableContainer>}
               {section === 'workers' && selectedWorker && <Box sx={{ p: 2.5, borderTop: '1px solid #E8EEE8' }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                  <Typography fontWeight={850}>Worker lifecycle & contract history</Typography>
+                  <Typography fontWeight={850}>Worker lifecycle & contract history</Typography><Button size="small" variant="contained" disabled={busy} onClick={() => setDialog('contract')}>Add contract</Button>
                   <Button size="small" disabled={busy} onClick={() => void updateWorkerStatus(selectedWorker, data.workers?.find(worker => worker.id === selectedWorker)?.status === 'active' ? 'inactive' : 'active')}>
                     {data.workers?.find(worker => worker.id === selectedWorker)?.status === 'active' ? 'Deactivate worker' : 'Activate worker'}
                   </Button>
