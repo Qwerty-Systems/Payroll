@@ -113,6 +113,10 @@ export class ComplianceService {
     return this.tenantDb.run(tenantId,async m=>{
       const set=await m.query("SELECT id FROM statutory_rule_sets WHERE id=$1 AND status='published'",[ruleSetId]);
       if(!set.length) throw new NotFoundException('Published statutory ruleset not found.');
+      const baseRule=await m.query('SELECT code,category,calculation_method FROM statutory_rules WHERE rule_set_id=$1 AND code=$2 LIMIT 1',[ruleSetId,dto.ruleCode.trim().toUpperCase()]);
+      if(!baseRule.length) throw new BadRequestException('Only an existing rule in the selected statutory ruleset can be changed.');
+      if(baseRule[0].calculation_method!==dto.calculationMethod) throw new BadRequestException('Changing the calculation method requires a reviewed payroll-engine implementation; this workflow can safely update the effective-dated rule configuration only.');
+      if(baseRule[0].category!==dto.category) throw new BadRequestException('A rule change cannot change the statutory category.');
       const rows=await m.query(`
         INSERT INTO tenant_statutory_rule_changes
           (tenant_id,rule_set_id,rule_code,label,category,calculation_method,configuration,effective_from,effective_to,source_title,source_url,verified_on,reason)
