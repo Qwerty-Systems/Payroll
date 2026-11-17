@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { EntityManager } from 'typeorm';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
 import { calculateKenyaMonthlyPayroll, type StatutoryRule } from './kenya-payroll-calculator';
 import { CreatePayrollPeriodDto } from './payroll.dto';
@@ -12,6 +13,25 @@ const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 @Injectable()
 export class PayrollService {
   constructor(private readonly tenantDb: TenantTransactionService) {}
+
+  private async assertApprovedRulesSnapshot(manager: EntityManager, tenantId: string, ruleSetId: string, startDate: string, endDate: string) {
+    const reviews = await manager.query(`
+      SELECT id,rules_snapshot_hash FROM tenant_statutory_rule_reviews
+      WHERE tenant_id=$1 AND rule_set_id=$2 AND status='approved'
+        AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $4::date)
+      ORDER BY reviewed_at DESC LIMIT 1
+    `,[tenantId,ruleSetId,endDate,startDate]);
+    if (!reviews.length) throw new ConflictException('The statutory ruleset has not been reviewed and approved for this company and payroll period.');
+    const currentRules = await manager.query(
+      'SELECT code,calculation_method,configuration,effective_from::text,effective_to::text FROM statutory_rules WHERE rule_set_id=$1 ORDER BY code,effective_from',
+      [ruleSetId],
+    );
+    const currentHash = createHash('sha256').update(JSON.stringify(currentRules)).digest('hex');
+    if (currentHash !== String(reviews[0].rules_snapshot_hash).trim()) {
+      throw new ConflictException('The statutory rules changed after compliance approval. A fresh review and approval is required before payroll can continue.');
+    }
+    return reviews[0];
+  }
 
   listPeriods(tenantId: string) { return this.tenantDb.run(tenantId, m => m.query('SELECT id,code,name,start_date AS "startDate",end_date AS "endDate",payment_date AS "paymentDate",status FROM payroll_periods WHERE tenant_id=$1 ORDER BY start_date DESC',[tenantId])); }
 
@@ -50,6 +70,7 @@ export class PayrollService {
         WHERE a.tenant_id=$1 AND a.effective_from <= $2::date AND (a.effective_to IS NULL OR a.effective_to >= $3::date)
           AND s.status='published' ORDER BY a.effective_from DESC,cr.reviewed_at DESC LIMIT 1",[tenantId,periods[0].end_date,periods[0].start_date]);
       if (!assignments.length) throw new ConflictException('No published Kenya statutory ruleset is assigned for this payroll period.');
+      await this.assertApprovedRulesSnapshot(m,tenantId,assignments[0].rule_set_id,periods[0].start_date,periods[0].end_date);
       const next = await m.query('SELECT COALESCE(MAX(run_number),0)+1 AS run_number FROM payroll_runs WHERE tenant_id=$1 AND period_id=$2',[tenantId,periodId]);
       const rows = await m.query("INSERT INTO payroll_runs (tenant_id,period_id,run_number,status,engine_version,ruleset_id,created_by) VALUES ($1,$2,$3,'draft',$4,$5,$6) RETURNING id,period_id AS \"periodId\",run_number AS \"runNumber\",status,engine_version AS \"engineVersion\",ruleset_id AS \"rulesetId\",created_at AS \"createdAt\"",[tenantId,periodId,next[0].run_number,ENGINE_VERSION,assignments[0].rule_set_id,actorId]);
       await m.query("INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,'payroll.run.created','payroll_run',$3,$4::jsonb)",[tenantId,actorId,rows[0].id,JSON.stringify({periodId,runNumber:next[0].run_number})]);
@@ -63,8 +84,7 @@ export class PayrollService {
       if (!runs.length) throw new NotFoundException('Payroll run not found.');
       const run = runs[0];
       if (!['draft','rejected'].includes(run.status)) throw new ConflictException('Only a draft or rejected payroll run can be recalculated.');
-      const rulesetRows = await m.query("SELECT s.id FROM statutory_rule_sets s WHERE s.id=$1 AND EXISTS (SELECT 1 FROM tenant_statutory_rule_reviews cr WHERE cr.tenant_id=$2 AND cr.rule_set_id=s.id AND cr.status='approved' AND cr.effective_from <= $3::date AND (cr.effective_to IS NULL OR cr.effective_to >= $4::date))",[run.ruleset_id,tenantId,run.end_date,run.start_date]);
-      if (!rulesetRows.length) throw new ConflictException('The statutory ruleset has not been reviewed and approved for this company and payroll period.');
+      await this.assertApprovedRulesSnapshot(m,tenantId,run.ruleset_id,run.start_date,run.end_date);
       const rawRules = await m.query('SELECT code,calculation_method,configuration FROM statutory_rules WHERE rule_set_id=$1 AND effective_from <= $2::date AND (effective_to IS NULL OR effective_to >= $3::date) ORDER BY effective_from ASC',[run.ruleset_id,run.end_date,run.start_date]);
       const tenantOverrides = await m.query('SELECT rule_code AS code,calculation_method,configuration FROM tenant_statutory_rule_overrides WHERE tenant_id=$1 AND rule_set_id=$2 AND status=\'approved\' AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $4::date) ORDER BY effective_from ASC',[tenantId,run.ruleset_id,run.end_date,run.start_date]);
       const mergedRules = new Map<string,StatutoryRule>();
@@ -170,7 +190,7 @@ export class PayrollService {
 
   async transitionRun(tenantId: string, actorId: string, runId: string, action: 'submit'|'approve'|'finalize') {
     return this.tenantDb.run(tenantId,async m=>{
-      const rows=await m.query(`SELECT r.*,p.code AS period_code,
+      const rows=await m.query(`SELECT r.*,p.code AS period_code,p.start_date::text AS period_start_date,p.end_date::text AS period_end_date,
         EXISTS(SELECT 1 FROM tenant_statutory_rule_reviews cr WHERE cr.tenant_id=r.tenant_id AND cr.rule_set_id=r.ruleset_id
           AND cr.status='approved' AND cr.effective_from <= p.end_date AND (cr.effective_to IS NULL OR cr.effective_to >= p.start_date)) AS tenant_compliance_approved
         FROM payroll_runs r JOIN payroll_periods p ON p.tenant_id=r.tenant_id AND p.id=r.period_id
@@ -187,6 +207,7 @@ export class PayrollService {
       } else {
         if(run.status!=='approved') throw new ConflictException('Only an approved payroll run can be finalized.');
         if(!run.tenant_compliance_approved) throw new ConflictException('The statutory ruleset has not been reviewed and approved for this company and payroll period. Payroll finalization is blocked.');
+        await this.assertApprovedRulesSnapshot(m,tenantId,run.ruleset_id,run.period_start_date,run.period_end_date);
         const warnings=Array.isArray(run.warnings)?run.warnings:JSON.parse(run.warnings ?? '[]');
         const blocking=blockingWarnings(warnings);
         if(blocking.length) throw new ConflictException({message:'Payroll has unresolved blocking warnings.',warnings:blocking});
