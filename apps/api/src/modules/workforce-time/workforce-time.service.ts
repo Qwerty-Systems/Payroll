@@ -317,7 +317,6 @@ export class WorkforceTimeService {
       const headers=await m.query('SELECT period_start,period_end,status FROM timesheets WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,timesheetId]);
       if(!headers.length) throw new NotFoundException('Timesheet not found.');
       if(!['draft','rejected'].includes(headers[0].status)) throw new ConflictException('Only draft or rejected timesheets can be edited.');
-      if(dto.workDate<headers[0].period_start.toISOString?.().slice(0,10) && dto.workDate< String(headers[0].period_start).slice(0,10)) throw new BadRequestException('Work date is outside the timesheet period.');
       const from=String(headers[0].period_start).slice(0,10),to=String(headers[0].period_end).slice(0,10);
       if(dto.workDate<from || dto.workDate>to) throw new BadRequestException('Work date is outside the timesheet period.');
       const rows=await m.query(`
