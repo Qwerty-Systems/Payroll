@@ -110,3 +110,58 @@ describe('OperationsService CRUD', () => {
     await expect(service.getProject(tenantId,workerId)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+
+describe('OperationsService pay grade and employee deletion safeguards', () => {
+  const tenantId = '123e4567-e89b-42d3-a456-426614174000';
+  const actorId = '123e4567-e89b-42d3-a456-426614174001';
+  const employeeId = '123e4567-e89b-42d3-a456-426614174002';
+  const payGradeId = '123e4567-e89b-42d3-a456-426614174003';
+
+  function makeService(query: jest.Mock) {
+    const tenantDb = {
+      run: jest.fn(async (_tenantId: string, work: (manager: { query: jest.Mock }) => Promise<unknown>) => work({ query })),
+    };
+    return new OperationsService(tenantDb as never);
+  }
+
+  it('updates pay grade details and records an audit event', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ code:'M1',name:'Manager',description:null,currency:'KES',payBasis:'monthly',minimumRate:50000,midpointRate:70000,maximumRate:90000,status:'active' }])
+      .mockResolvedValueOnce([{ id:payGradeId,code:'M1',name:'Senior manager' }])
+      .mockResolvedValueOnce([]);
+    const service = makeService(query);
+    await expect(service.updatePayGrade(tenantId,actorId,payGradeId,{ name:'Senior manager' })).resolves.toMatchObject({ name:'Senior manager' });
+    expect(query.mock.calls[0][0]).toContain('FOR UPDATE');
+    expect(query.mock.calls[1][0]).toContain('UPDATE worker_pay_grades');
+    expect(query.mock.calls[2][0]).toContain('worker.pay_grade.updated');
+  });
+
+  it('preserves the audit trail when an employee with linked history cannot be deleted', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ id:employeeId,worker_number:'E001',first_name:'Amani',last_name:'Otieno' }])
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce({ code:'23503' });
+    const service = makeService(query);
+    await expect(service.permanentlyDeleteEmployee(tenantId,actorId,employeeId)).rejects.toBeInstanceOf(ConflictException);
+    expect(query.mock.calls[1][0]).toContain('employee.permanently_deleted');
+    expect(query.mock.calls[2][0]).toContain('DELETE FROM workers');
+  });
+
+  it('permanently deletes an employee only when no retained records reference them', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ id:employeeId,worker_number:'E001',first_name:'Amani',last_name:'Otieno' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id:employeeId }]);
+    const service = makeService(query);
+    await expect(service.permanentlyDeleteEmployee(tenantId,actorId,employeeId)).resolves.toMatchObject({ id:employeeId,permanentlyDeleted:true });
+  });
+
+  it('returns a clear conflict for a duplicate pay grade code', async () => {
+    const query = jest.fn().mockRejectedValueOnce({ code:'23505' });
+    const service = makeService(query);
+    await expect(service.createPayGrade(tenantId,actorId,{
+      code:'M1',name:'Manager',payBasis:'monthly',currency:'KES',
+    })).rejects.toThrow('A pay grade with this code already exists');
+  });
+});

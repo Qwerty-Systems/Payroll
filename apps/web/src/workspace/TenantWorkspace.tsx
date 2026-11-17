@@ -56,12 +56,15 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [dialog, setDialog] = useState<'' | 'worker' | 'contract' | 'payGrade' | 'endContract' | 'project' | 'site' | 'attendance' | 'period'>('');
+  const [dialog, setDialog] = useState<'' | 'worker' | 'contract' | 'payGrade' | 'endContract' | 'project' | 'site' | 'attendance' | 'period' | 'payComponent'>('');
   const [busy, setBusy] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedRun, setSelectedRun] = useState('');
   const [selectedContract, setSelectedContract] = useState('');
+  const [selectedPayGrade, setSelectedPayGrade] = useState('');
+  const [selectedComponentId, setSelectedComponentId] = useState('');
+  const [selectedComponentType, setSelectedComponentType] = useState<'allowance' | 'deduction'>('allowance');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -76,6 +79,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [forms, setForms] = useState<Record<string, string>>({
     workerNumber: '', firstName: '', lastName: '', phone: '', email: '',
+    componentName: '', componentMethod: 'fixed_amount', componentTreatment: 'review_required', componentConfiguration: '{}', componentEnabled: 'true', componentApproval: 'true',
     engagementType: 'permanent', payBasis: 'monthly', rateAmount: '', effectiveFrom: dateToday(), contractEndDate: dateToday(), unitCodes: '', payGradeId: '',
     gradeCode: '', gradeName: '', gradeDescription: '', gradePayBasis: 'monthly', gradeMinimum: '', gradeMidpoint: '', gradeMaximum: '', gradeCurrency: 'KES',
     projectCode: '', projectName: '', clientName: '', siteCode: '', siteName: '',
@@ -111,6 +115,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     const endpoints: Record<string, string> = {
       workers: 'tenant/workers',
       payGrades: 'tenant/pay-grades',
+      allowanceTypes: 'tenant/pay-components/allowances',
+      deductionTypes: 'tenant/pay-components/deductions',
       projects: 'tenant/projects',
       sites: 'tenant/sites',
       attendance: 'tenant/attendance',
@@ -177,11 +183,11 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof body.message === 'string' ? body.message : 'Document upload failed.');
       setDocumentFile(null);
-      setNotice('Worker document uploaded securely.');
+      setNotice('Employee document uploaded securely.');
       const docs = await request<unknown>(`tenant/workers/${selectedWorker}/documents`);
       setWorkerDocuments(asRows(docs));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Worker document upload failed.');
+      setError(cause instanceof Error ? cause.message : 'Employee document upload failed.');
     } finally { setUploadingDocument(false); }
   }
 
@@ -243,7 +249,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           phone: forms.phone || undefined, email: forms.email || undefined,
         }) });
         setSelectedWorker(String(worker.id ?? ''));
-        setNotice('Worker profile created.');
+        setNotice('Employee profile created.');
       } else if (dialog === 'contract') {
         await request(`tenant/workers/${selectedWorker}/contracts`, { method: 'POST', body: JSON.stringify({
           engagementType: forms.engagementType, payBasis: forms.payBasis, payGradeId: forms.payGradeId || undefined,
@@ -251,22 +257,47 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           terms: forms.payBasis === 'per_unit' ? { unitCodes: (forms.unitCodes ?? '').split(',').map(x => x.trim()).filter(Boolean) } : {},
         }) });
         setContracts(asRows(await request<unknown>(`tenant/workers/${selectedWorker}/contracts`)));
-        setNotice('Contract added to the worker history.');
+        setNotice('Contract added to the employee history.');
       } else if (dialog === 'endContract') {
         await request(`tenant/workers/${selectedWorker}/contracts/${selectedContract}/end`, {
           method: 'PATCH', body: JSON.stringify({ effectiveTo: forms.contractEndDate }),
         });
         setContracts(asRows(await request<unknown>(`tenant/workers/${selectedWorker}/contracts`)));
-        setNotice('Worker contract end date recorded.');
+        setNotice('Employee contract end date recorded.');
       } else if (dialog === 'payGrade') {
-        await request('tenant/pay-grades', { method: 'POST', body: JSON.stringify({
-          code: forms.gradeCode, name: forms.gradeName, description: forms.gradeDescription || undefined,
+        const payload = {
+          name: forms.gradeName, description: forms.gradeDescription || null,
           payBasis: forms.gradePayBasis, currency: forms.gradeCurrency,
-          minimumRate: forms.gradeMinimum === '' ? undefined : Number(forms.gradeMinimum),
-          midpointRate: forms.gradeMidpoint === '' ? undefined : Number(forms.gradeMidpoint),
-          maximumRate: forms.gradeMaximum === '' ? undefined : Number(forms.gradeMaximum),
-        }) });
-        setNotice('Pay grade created. It is now available for new worker contracts.');
+          minimumRate: forms.gradeMinimum === '' ? null : Number(forms.gradeMinimum),
+          midpointRate: forms.gradeMidpoint === '' ? null : Number(forms.gradeMidpoint),
+          maximumRate: forms.gradeMaximum === '' ? null : Number(forms.gradeMaximum),
+        };
+        if (selectedPayGrade) {
+          await request('tenant/pay-grades/' + selectedPayGrade, { method: 'PATCH', body: JSON.stringify(payload) });
+          setNotice('Pay grade updated. Existing contracts retain their agreed rates.');
+        } else {
+          await request('tenant/pay-grades', { method: 'POST', body: JSON.stringify({ ...payload, code: forms.gradeCode }) });
+          setNotice('Pay grade created and made available for new employee contracts.');
+        }
+        setSelectedPayGrade('');
+      } else if (dialog === 'payComponent') {
+        let configuration: Record<string, unknown>;
+        try {
+          configuration = JSON.parse(forms.componentConfiguration || '{}') as Record<string, unknown>;
+          if (!configuration || Array.isArray(configuration) || typeof configuration !== 'object') throw new Error('Configuration must be a JSON object.');
+        } catch (cause) {
+          throw new Error(cause instanceof Error ? 'Configuration JSON is invalid: ' + cause.message : 'Configuration JSON is invalid.');
+        }
+        const payload: Record<string, unknown> = {
+          name: forms.componentName, calculationMethod: forms.componentMethod, configuration,
+          isEnabled: forms.componentEnabled === 'true', requiresApproval: forms.componentApproval === 'true',
+        };
+        if (selectedComponentType === 'allowance') payload.taxTreatment = forms.componentTreatment;
+        else payload.taxableTreatment = forms.componentTreatment;
+        const route = selectedComponentType === 'allowance' ? 'allowances' : 'deductions';
+        await request('tenant/pay-components/' + route + '/' + selectedComponentId, { method: 'PATCH', body: JSON.stringify(payload) });
+        setNotice('Pay component settings saved. New calculations will use the updated configuration; existing payroll snapshots remain unchanged.');
+        setSelectedComponentId('');
       } else if (dialog === 'project') {
         const project = await request<RowData>('tenant/projects', { method: 'POST', body: JSON.stringify({
           projectCode: forms.projectCode, name: forms.projectName, clientName: forms.clientName || undefined,
@@ -298,6 +329,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
         setNotice('Payroll period created. Calculations remain subject to statutory approval and engine safeguards.');
       }
       setDialog('');
+      setSelectedPayGrade('');
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The request could not be completed.');
@@ -308,10 +340,25 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     setBusy(true); setError(''); setNotice('');
     try {
       await request(`tenant/workers/${workerId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
-      setNotice(`Worker status updated to ${status.replaceAll('_',' ')}.`);
+      setNotice(`Employee status updated to ${status.replaceAll('_',' ')}.`);
       await refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Worker status could not be updated.'); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Employee status could not be updated.'); }
     finally { setBusy(false); }
+  }
+
+  async function permanentlyDeleteEmployee(employeeId: string) {
+    const employee = data.workers?.find(row => row.id === employeeId);
+    const employeeLabel = [employee?.firstName, employee?.lastName].filter(Boolean).join(' ') || 'this employee';
+    if (!window.confirm(`Permanently delete ${employeeLabel}? This is allowed only when no contracts, attendance, payroll, documents or assignments depend on the record. This action cannot be undone.`)) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await request(`tenant/workers/${employeeId}/permanent`, { method: 'DELETE' });
+      setSelectedWorker('');
+      setNotice('Employee permanently deleted. The deletion event remains in the audit log.');
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Employee could not be permanently deleted. Linked history may need to be retained.');
+    } finally { setBusy(false); }
   }
 
   async function attendanceAction(id: string, action: 'submit' | 'approve') {
@@ -329,8 +376,12 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     setBusy(true); setError(''); setNotice('');
     try {
       const run = await request<RowData>('payroll/runs', { method: 'POST', body: JSON.stringify({ periodId }) });
-      setSelectedRun(String(run.id ?? ''));
-      setNotice('Payroll run created. Review its warnings and statutory approval state before any further action.');
+      const runId = String(run.id ?? '');
+      if (!runId) throw new Error('The API did not return a payroll run identifier.');
+      setSelectedRun(runId);
+      const details = await request<RowData>('payroll/runs/' + runId);
+      setData(current => ({ ...current, run: [details] }));
+      setNotice('Payroll run created. Calculate the preview to review employee-level earnings, deductions and net pay.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to create payroll run.'); }
     finally { setBusy(false); }
   }
@@ -342,7 +393,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       await request(`payroll/runs/${selectedRun}/calculate`, { method: 'POST', body: '{}' });
       const result = await request<RowData>(`payroll/runs/${selectedRun}`);
       setData(current => ({ ...current, run: [result] }));
-      setNotice('Calculation completed. Inspect warnings and compliance status; finalization is not enabled here.');
+      setNotice('Payroll preview calculated. Review employee-level earnings, deductions and warnings before submitting the run for approval.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Payroll calculation could not be completed.'); }
     finally { setBusy(false); }
   }
@@ -354,7 +405,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     JSON.stringify(row).toLowerCase().includes(searchQuery.trim().toLowerCase()));
   const navItems = [
     { value: 'overview' as Section, label: 'Overview', icon: <DashboardRounded /> , group: 'WORKSPACE' },
-    { value: 'workers' as Section, label: 'People & workers', icon: <GroupsRounded />, group: 'WORKSPACE' },
+    { value: 'workers' as Section, label: 'Employees', icon: <GroupsRounded />, group: 'WORKSPACE' },
     { value: 'pay-grades' as Section, label: 'Pay grades', icon: <PaymentsRounded />, group: 'FINANCE' },
     { value: 'projects' as Section, label: 'Projects & sites', icon: <BusinessRounded />, group: 'WORKSPACE' },
     { value: 'attendance' as Section, label: 'Attendance', icon: <EventAvailableRounded />, group: 'WORKSPACE' },
@@ -363,13 +414,13 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     { value: 'people' as Section, label: 'Team access', icon: <GroupsRounded />, group: 'ADMINISTRATION' },
   ];
   const pageTitle: Record<Section, string> = {
-    overview: 'Overview', workers: 'People & workers', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
+    overview: 'Overview', workers: 'Employees', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
     attendance: 'Attendance', payroll: 'Payroll', organization: 'Organization', people: 'Team access',
   };
   const pageDescription: Record<Section, string> = {
     overview: 'A clear picture of your workforce and operations.',
-    workers: 'Manage worker records, contracts and employment history.',
-    'pay-grades': 'Define reusable pay bands and assign them to worker contracts.',
+    workers: 'Manage employee records, contracts and employment history.',
+    'pay-grades': 'Define reusable pay bands and assign them to employee contracts.',
     projects: 'Organize projects, clients and work sites.',
     attendance: 'Capture work activity and review submitted records.',
     payroll: 'Manage pay periods and review payroll calculation previews.',
@@ -481,7 +532,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               </Box>
               <Stack direction={{ xs: 'row', sm: 'column' }} spacing={1} sx={{ alignSelf: { xs: 'stretch', sm: 'center' }, minWidth: { sm: 170 } }}>
                 <Button fullWidth variant="contained" startIcon={<PersonAddAlt1Rounded />} onClick={() => setDialog('worker')}
-                  sx={{ bgcolor: '#D6A84F', color: '#17372B', '&:hover': { bgcolor: '#E7C77F' }, fontWeight: 850 }}>Add a worker</Button>
+                  sx={{ bgcolor: '#D6A84F', color: '#17372B', '&:hover': { bgcolor: '#E7C77F' }, fontWeight: 850 }}>Add an employee</Button>
                 <Button fullWidth variant="outlined" startIcon={<CalendarMonthRounded />} onClick={() => { setSection('payroll'); setDialog('period'); }}
                   sx={{ borderColor: 'rgba(255,255,255,.32)', color: '#FFFFFF', '&:hover': { borderColor: '#FFFFFF', bgcolor: 'rgba(255,255,255,.06)' } }}>New pay period</Button>
               </Stack>
@@ -494,7 +545,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           </Stack>
           <Grid container spacing={2} sx={{ mb: 3 }}>
             {[
-              { title: 'Active workers', amount: counts.workers, caption: 'People on your workforce', icon: <GroupsRounded />, color: '#2F6B4F', bg: '#E7F0E9', target: 'workers' as Section },
+              { title: 'Active employees', amount: counts.workers, caption: 'Employees in your company', icon: <GroupsRounded />, color: '#2F6B4F', bg: '#E7F0E9', target: 'workers' as Section },
               { title: 'Active projects', amount: counts.projects, caption: 'Projects marked active', icon: <BusinessRounded />, color: '#8B642D', bg: '#F6EFDF', target: 'projects' as Section },
               { title: 'Awaiting review', amount: counts.attendance, caption: 'Attendance submissions', icon: <AssignmentTurnedInRounded />, color: '#376A8A', bg: '#E8F0F5', target: 'attendance' as Section },
               { title: 'Payroll periods', amount: counts.periods, caption: 'Configured pay periods', icon: <AccountBalanceWalletRounded />, color: '#6D5A91', bg: '#F0ECF6', target: 'payroll' as Section },
@@ -534,7 +585,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, borderColor: '#E6EBE5', borderRadius: 3, height: '100%' }}>
                 <Typography fontWeight={850}>Quick actions</Typography><Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>Common tasks, one click away</Typography>
                 {[
-                  { title: 'Add a worker', subtitle: 'Create a workforce profile', icon: <PersonAddAlt1Rounded />, action: () => setDialog('worker') },
+                  { title: 'Add an employee', subtitle: 'Create an employee profile', icon: <PersonAddAlt1Rounded />, action: () => setDialog('worker') },
                   { title: 'Capture attendance', subtitle: 'Record work completed', icon: <EventAvailableRounded />, action: () => setSection('attendance') },
                   { title: 'Set up a pay period', subtitle: 'Prepare the next payroll cycle', icon: <CalendarMonthRounded />, action: () => { setSection('payroll'); setDialog('period'); } },
                   { title: 'Invite a teammate', subtitle: 'Give someone workspace access', icon: <GroupsRounded />, action: () => setSection('people') },
@@ -556,8 +607,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
             </Box>
             <Stack direction="row" spacing={1}>
               <Tooltip title="Refresh records"><span><Button variant="outlined" color="inherit" startIcon={<RefreshRounded />} onClick={() => void refresh()} disabled={loading} sx={{ borderColor: '#DCE4DC' }}>Refresh</Button></span></Tooltip>
-              {section === 'workers' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('worker')}>Add worker</Button>}
-              {section === 'pay-grades' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('payGrade')}>Create pay grade</Button>}
+              {section === 'workers' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('worker')}>Add employee</Button>}
+              {section === 'pay-grades' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => { setSelectedPayGrade(''); setDialog('payGrade'); }}>Create pay grade</Button>}
               {section === 'projects' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('project')}>Add project</Button>}
               {section === 'attendance' && <Button variant="contained" startIcon={<AddRounded />} disabled={!selectedWorker || !selectedProject} onClick={() => setDialog('attendance')}>Capture</Button>}
               {section === 'payroll' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('period')}>New period</Button>}
@@ -567,12 +618,31 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           {section !== 'organization' && section !== 'people' && <TextField fullWidth size="small" placeholder={`Search ${pageTitle[section].toLowerCase()}…`} value={searchQuery} onChange={event => setSearchQuery(event.target.value)}
             InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ color: '#87948A' }} /></InputAdornment> }}
             sx={{ mb: 2, maxWidth: 520, '& .MuiOutlinedInput-root': { bgcolor: '#FFFFFF', borderRadius: 2 } }} />}
-          {section === 'pay-grades' ? <Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
+          {section === 'pay-grades' ? <Stack spacing={2}><Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
             <TableContainer><Table size="medium"><TableHead><TableRow>{['Code','Pay grade','Pay basis','Minimum','Midpoint','Maximum','Currency','Status','Actions'].map(x => <TableCell key={x} sx={{ bgcolor: '#F8FAF8', color: '#66756A', fontWeight: 800, fontSize: '.72rem' }}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
-              {(data.payGrades ?? []).filter(row => !searchQuery || JSON.stringify(row).toLowerCase().includes(searchQuery.toLowerCase())).map(row => <TableRow key={String(row.id)} hover><TableCell>{label(row.code)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.name)}</Typography><Typography variant="caption" color="text.secondary">{label(row.description)}</Typography></TableCell><TableCell>{label(row.payBasis)}</TableCell><TableCell>{label(row.minimumRate)}</TableCell><TableCell>{label(row.midpointRate)}</TableCell><TableCell>{label(row.maximumRate)}</TableCell><TableCell>{label(row.currency)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Button size="small" disabled={busy} onClick={async () => { setBusy(true); try { await request(`tenant/pay-grades/${row.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: row.status === 'active' ? 'inactive' : 'active' }) }); setNotice(`Pay grade ${row.status === 'active' ? 'deactivated' : 'reactivated'}.`); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Pay grade status could not be updated.'); } finally { setBusy(false); } }}>{row.status === 'active' ? 'Deactivate' : 'Reactivate'}</Button></TableCell></TableRow>)}
+              {(data.payGrades ?? []).filter(row => !searchQuery || JSON.stringify(row).toLowerCase().includes(searchQuery.toLowerCase())).map(row => <TableRow key={String(row.id)} hover><TableCell>{label(row.code)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.name)}</Typography><Typography variant="caption" color="text.secondary">{label(row.description)}</Typography></TableCell><TableCell>{label(row.payBasis)}</TableCell><TableCell>{label(row.minimumRate)}</TableCell><TableCell>{label(row.midpointRate)}</TableCell><TableCell>{label(row.maximumRate)}</TableCell><TableCell>{label(row.currency)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Stack direction="row" spacing={.5}><Button size="small" disabled={busy} onClick={() => { setSelectedPayGrade(String(row.id)); setField('gradeCode', String(row.code ?? '')); setField('gradeName', String(row.name ?? '')); setField('gradeDescription', String(row.description ?? '')); setField('gradePayBasis', String(row.payBasis ?? 'monthly')); setField('gradeCurrency', String(row.currency ?? 'KES')); setField('gradeMinimum', row.minimumRate == null ? '' : String(row.minimumRate)); setField('gradeMidpoint', row.midpointRate == null ? '' : String(row.midpointRate)); setField('gradeMaximum', row.maximumRate == null ? '' : String(row.maximumRate)); setDialog('payGrade'); }}>Edit</Button><Button size="small" disabled={busy} onClick={async () => { setBusy(true); try { await request(`tenant/pay-grades/${row.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: row.status === 'active' ? 'inactive' : 'active' }) }); setNotice(`Pay grade ${row.status === 'active' ? 'deactivated' : 'reactivated'}.`); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Pay grade status could not be updated.'); } finally { setBusy(false); } }}>{row.status === 'active' ? 'Deactivate' : 'Reactivate'}</Button></Stack></TableCell></TableRow>)}
               {!(data.payGrades ?? []).length && <TableRow><TableCell colSpan={9} sx={{ py: 5, textAlign: 'center' }}>No pay grades yet. Create a pay grade to define a reusable rate band.</TableCell></TableRow>}
             </TableBody></Table></TableContainer>
-          </Paper> : section === 'organization' || section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> :
+          </Paper>
+          <Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
+            <Box sx={{ p: 2.5, borderBottom: '1px solid #E8EEE8' }}>
+              <Typography fontWeight={850}>Allowance and deduction catalogue</Typography>
+              <Typography variant="body2" color="text.secondary">Kenya payroll defaults are seeded for each new company. Configure names, calculation methods, tax treatment, approval and calculation settings here.</Typography>
+            </Box>
+            <Box sx={{ p: 2.5 }}>
+              <Typography fontWeight={800} sx={{ mb: 1 }}>Allowances</Typography>
+              <TableContainer><Table size="small"><TableHead><TableRow>{['Code','Allowance','Method','Tax treatment','Enabled',''].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
+                {(data.allowanceTypes ?? []).map(row => <TableRow key={String(row.id)}><TableCell>{label(row.code)}</TableCell><TableCell>{label(row.name)}</TableCell><TableCell>{label(row.calculationMethod)}</TableCell><TableCell>{label(row.taxTreatment)}</TableCell><TableCell><Chip size="small" label={row.isEnabled ? 'Enabled' : 'Disabled'} color={row.isEnabled ? 'success' : 'default'} /></TableCell><TableCell><Button size="small" onClick={() => { setSelectedComponentType('allowance'); setSelectedComponentId(String(row.id)); setField('componentName',String(row.name ?? '')); setField('componentMethod',String(row.calculationMethod ?? 'fixed_amount')); setField('componentTreatment',String(row.taxTreatment ?? 'review_required')); setField('componentConfiguration',JSON.stringify(row.configuration ?? {},null,2)); setField('componentEnabled',String(Boolean(row.isEnabled))); setField('componentApproval',String(Boolean(row.requiresApproval))); setDialog('payComponent'); }}>Configure</Button></TableCell></TableRow>)}
+                {!(data.allowanceTypes ?? []).length && <TableRow><TableCell colSpan={6}>No allowance types have been seeded for this company yet.</TableCell></TableRow>}
+              </TableBody></Table></TableContainer>
+              <Divider sx={{ my: 2.5 }} />
+              <Typography fontWeight={800} sx={{ mb: 1 }}>Deductions</Typography>
+              <TableContainer><Table size="small"><TableHead><TableRow>{['Code','Deduction','Category','Method','Tax treatment','Enabled',''].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
+                {(data.deductionTypes ?? []).map(row => <TableRow key={String(row.id)}><TableCell>{label(row.code)}</TableCell><TableCell>{label(row.name)}</TableCell><TableCell>{label(row.category)}</TableCell><TableCell>{label(row.calculationMethod)}</TableCell><TableCell>{label(row.taxableTreatment)}</TableCell><TableCell><Chip size="small" label={row.isEnabled ? 'Enabled' : 'Disabled'} color={row.isEnabled ? 'success' : 'default'} /></TableCell><TableCell><Button size="small" onClick={() => { setSelectedComponentType('deduction'); setSelectedComponentId(String(row.id)); setField('componentName',String(row.name ?? '')); setField('componentMethod',String(row.calculationMethod ?? 'fixed_amount')); setField('componentTreatment',String(row.taxableTreatment ?? 'review_required')); setField('componentConfiguration',JSON.stringify(row.configuration ?? {},null,2)); setField('componentEnabled',String(Boolean(row.isEnabled))); setField('componentApproval',String(Boolean(row.requiresApproval))); setDialog('payComponent'); }}>Configure</Button></TableCell></TableRow>)}
+                {!(data.deductionTypes ?? []).length && <TableRow><TableCell colSpan={7}>No deduction types have been seeded for this company yet.</TableCell></TableRow>}
+              </TableBody></Table></TableContainer>
+            </Box>
+          </Paper></Stack> : section === 'organization' || section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> :
             <Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
               {section === 'payroll' ? <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
                 <TableContainer><Table size="small"><TableHead><TableRow>{['Code','Period','Start','End','Status','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
@@ -580,14 +650,58 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                   {!data.periods?.length && <TableRow><TableCell colSpan={6} sx={{ py: 4, textAlign: 'center' }}>No payroll periods yet. Create one to prepare a calculation preview.</TableCell></TableRow>}
                 </TableBody></Table></TableContainer>
                 {selectedRun && <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ mt: 2 }}><Typography variant="body2">Selected run: {selectedRun}</Typography><Button variant="outlined" size="small" onClick={() => void calculateRun()} disabled={busy}>Calculate preview</Button></Stack>}
-                {(data.run ?? []).map(run => <Alert key={String(run.id)} severity="warning" sx={{ mt: 2 }}>Run status: {label(run.status)} · Totals and warnings: {JSON.stringify(run.totals ?? {})} {JSON.stringify(run.warnings ?? [])}</Alert>)}
+                {(data.run ?? []).map(run => {
+                  const totals = (run.totals ?? {}) as Record<string, unknown>;
+                  const items = asRows(run.items);
+                  const warnings = Array.isArray(run.warnings) ? run.warnings.map(String) : [];
+                  return <Box key={String(run.id)} sx={{ mt: 2.5 }}>
+                    <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1} sx={{ mb: 1.5 }}>
+                      <Box><Typography fontWeight={850}>Payroll calculation preview</Typography><Typography variant="caption" color="text.secondary">Run {label(run.runNumber)} · {label(run.status)} · Engine {label(run.engineVersion)}</Typography></Box>
+                      <Chip size="small" color={warnings.length ? 'warning' : 'success'} label={warnings.length ? warnings.length + ' review warning(s)' : 'No calculation warnings'} />
+                    </Stack>
+                    <Grid container spacing={1.2} sx={{ mb: 2 }}>
+                      {[
+                        ['Employees', totals.workerCount], ['Gross earnings', totals.grossEarnings], ['Employee deductions', totals.employeeDeductions],
+                        ['Employer contributions', totals.employerContributions], ['Net pay', totals.netPay], ['Total employer cost', totals.employerCost],
+                      ].map(([title, value]) => <Grid size={{ xs: 6, md: 4, xl: 2 }} key={String(title)}>
+                        <Paper variant="outlined" sx={{ p: 1.5, borderColor: '#E6EBE5', borderRadius: 2 }}>
+                          <Typography variant="caption" color="text.secondary">{String(title)}</Typography>
+                          <Typography fontWeight={850} sx={{ mt: .4 }}>{value == null ? '—' : title === 'Employees' ? label(value) : 'KES ' + Number(value).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Typography>
+                        </Paper>
+                      </Grid>)}
+                    </Grid>
+                    {warnings.length > 0 && <Alert severity="warning" sx={{ mb: 1.5 }}><Typography fontWeight={800} sx={{ mb: .5 }}>Items requiring review</Typography>{warnings.map((warning, index) => <Typography key={index} variant="body2">{warning}</Typography>)}</Alert>}
+                    <TableContainer component={Paper} variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 2 }}>
+                      <Table size="small"><TableHead><TableRow>{['Employee','Basic + allowances','Statutory deductions','Other deductions','Net pay'].map(title => <TableCell key={title}>{title}</TableCell>)}</TableRow></TableHead>
+                        <TableBody>
+                          {items.map(item => {
+                            const snapshot = (item.snapshot ?? {}) as Record<string, any>;
+                            const person = snapshot.worker ?? {};
+                            const earnings = snapshot.earnings ?? {};
+                            const statutory = snapshot.statutory ?? {};
+                            const deductions = snapshot.otherDeductions ?? {};
+                            return <TableRow key={String(item.id)}>
+                              <TableCell><Typography fontWeight={750}>{[person.firstName,person.middleName,person.lastName].filter(Boolean).join(' ') || label(person.workerNumber)}</Typography><Typography variant="caption" color="text.secondary">{label(person.workerNumber)}</Typography></TableCell>
+                              <TableCell>KES {Number(earnings.grossPay ?? item.earnings ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</TableCell>
+                              <TableCell>KES {Number(statutory.employeeStatutoryDeductions ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</TableCell>
+                              <TableCell>KES {Number(deductions.total ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</TableCell>
+                              <TableCell><Typography fontWeight={850}>KES {Number(item.netPay ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</Typography></TableCell>
+                            </TableRow>;
+                          })}
+                          {!items.length && <TableRow><TableCell colSpan={5} sx={{ py: 3, textAlign: 'center' }}>No employee calculation lines were returned for this run.</TableCell></TableRow>}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>This is a preview only. It does not issue payslips, finalize payroll or initiate payments.</Typography>
+                  </Box>;
+                })}
               </Box> : <TableContainer sx={{ overflowX: 'auto' }}><Table size="medium"><TableHead><TableRow>
-                {(section === 'workers' ? ['Worker no.','Name','Phone','Email','Status','Select'] :
+                {(section === 'workers' ? ['Employee no.','Name','Phone','Email','Status','Actions'] :
                   section === 'projects' ? ['Code','Project','Client','Status','Select'] :
-                  ['Date','Worker ID','Project ID','Minutes','Status','Actions']).map(x => <TableCell key={x} sx={{ bgcolor: '#F8FAF8', color: '#66756A', fontWeight: 800, fontSize: '.72rem', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>{x}</TableCell>)}
+                  ['Date','Employee ID','Project ID','Minutes','Status','Actions']).map(x => <TableCell key={x} sx={{ bgcolor: '#F8FAF8', color: '#66756A', fontWeight: 800, fontSize: '.72rem', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>{x}</TableCell>)}
               </TableRow></TableHead><TableBody>
                 {filteredRows.map(row => <TableRow key={String(row.id ?? JSON.stringify(row))} hover>
-                  {section === 'workers' && <><TableCell>{label(row.workerNumber)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.firstName)} {label(row.lastName)}</Typography></TableCell><TableCell>{label(row.phone)}</TableCell><TableCell>{label(row.email)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Button size="small" variant={selectedWorker === row.id ? 'contained' : 'text'} onClick={() => setSelectedWorker(String(row.id))}>{selectedWorker === row.id ? 'Selected' : 'View'}</Button></TableCell></>}
+                  {section === 'workers' && <><TableCell>{label(row.workerNumber)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.firstName)} {label(row.lastName)}</Typography></TableCell><TableCell>{label(row.phone)}</TableCell><TableCell>{label(row.email)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Stack direction="row" spacing={.5}><Button size="small" variant={selectedWorker === row.id ? 'contained' : 'text'} onClick={() => setSelectedWorker(String(row.id))}>{selectedWorker === row.id ? 'Selected' : 'View'}</Button><Button size="small" color="error" disabled={busy} onClick={() => void permanentlyDeleteEmployee(String(row.id))}>Delete</Button></Stack></TableCell></>}
                   {section === 'projects' && <><TableCell>{label(row.projectCode)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.name)}</Typography></TableCell><TableCell>{label(row.clientName)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Button size="small" variant={selectedProject === row.id ? 'contained' : 'text'} onClick={() => setSelectedProject(String(row.id))}>{selectedProject === row.id ? 'Selected' : 'View sites'}</Button></TableCell></>}
                   {section === 'attendance' && <><TableCell>{label(row.workDate)}</TableCell><TableCell>{label(row.workerId)}</TableCell><TableCell>{label(row.projectId)}</TableCell><TableCell>{label(row.minutesWorked)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'approved' ? 'success' : row.status === 'submitted' ? 'warning' : 'default'} /></TableCell><TableCell>{row.status === 'draft' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'submit')}>Submit</Button> : row.status === 'submitted' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'approve')}>Approve</Button> : '—'}</TableCell></>}
                 </TableRow>)}
@@ -598,9 +712,9 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               </TableBody></Table></TableContainer>}
               {section === 'workers' && selectedWorker && <Box sx={{ p: 2.5, borderTop: '1px solid #E8EEE8' }}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                  <Typography fontWeight={850}>Worker lifecycle & contract history</Typography><Button size="small" variant="contained" disabled={busy} onClick={() => setDialog('contract')}>Add contract</Button>
+                  <Typography fontWeight={850}>Employee lifecycle & contract history</Typography><Button size="small" variant="contained" disabled={busy} onClick={() => setDialog('contract')}>Add contract</Button>
                   <Button size="small" disabled={busy} onClick={() => void updateWorkerStatus(selectedWorker, data.workers?.find(worker => worker.id === selectedWorker)?.status === 'active' ? 'inactive' : 'active')}>
-                    {data.workers?.find(worker => worker.id === selectedWorker)?.status === 'active' ? 'Deactivate worker' : 'Activate worker'}
+                    {data.workers?.find(worker => worker.id === selectedWorker)?.status === 'active' ? 'Deactivate employee' : 'Activate employee'}
                   </Button>
                 </Stack>
                 <TableContainer><Table size="small"><TableHead><TableRow>{['Engagement','Pay basis','Rate','From','To','Actions'].map(item => <TableCell key={item}>{item}</TableCell>)}</TableRow></TableHead><TableBody>
@@ -610,7 +724,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               </Box>}
               {section === 'workers' && selectedWorker && <Box sx={{ p: 2.5, borderTop: '1px solid #E8EEE8' }}>
                 <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1.5} sx={{ mb: 2 }}>
-                  <Box><Typography fontWeight={850}>Worker documents</Typography><Typography variant="caption" color="text.secondary">Private tenant-scoped files. Download links expire after three minutes.</Typography></Box>
+                  <Box><Typography fontWeight={850}>Employee documents</Typography><Typography variant="caption" color="text.secondary">Private tenant-scoped files. Download links expire after three minutes.</Typography></Box>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                     <TextField select size="small" label="Document type" value={documentType} onChange={e => setDocumentType(e.target.value)} sx={{ minWidth: 170 }}>
                       {['identity','contract','tax','bank','qualification','other'].map(x => <MenuItem key={x} value={x}>{x.replaceAll('_',' ')}</MenuItem>)}
@@ -640,20 +754,33 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     </Box>
 
     <SyncReviewDialog open={reviewOpen} tenantId={tenantId} onClose={() => setReviewOpen(false)} onChanged={() => { void refreshQueueCounts(); void syncOfflineQueue(false); }} />
-    <Dialog open={Boolean(dialog)} onClose={() => setDialog('')} fullWidth maxWidth="sm">
+    <Dialog open={Boolean(dialog)} onClose={() => { setDialog(''); setSelectedPayGrade(''); setSelectedComponentId(''); }} fullWidth maxWidth="sm">
       <Box component="form" onSubmit={submit}>
-        <DialogTitle>{dialog === 'worker' ? 'Add worker' : dialog === 'contract' ? 'Add worker contract' : dialog === 'endContract' ? 'End worker contract' : dialog === 'payGrade' ? 'Create pay grade' : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : 'Create payroll period'}</DialogTitle>
+        <DialogTitle>{dialog === 'worker' ? 'Add employee' : dialog === 'contract' ? 'Add employee contract' : dialog === 'endContract' ? 'End employee contract' : dialog === 'payGrade' ? (selectedPayGrade ? 'Edit pay grade' : 'Create pay grade') : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : dialog === 'payComponent' ? 'Configure pay component' : 'Create payroll period'}</DialogTitle>
         <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
-          {dialog === 'endContract' && <><Alert severity="warning">Ending a contract is effective-dated and cannot be extended. Create a new contract version if the worker is rehired.</Alert><TextField label="Effective to" type="date" required InputLabelProps={{ shrink: true }} value={forms.contractEndDate} onChange={e => setField('contractEndDate', e.target.value)} /></>}
-          {dialog === 'worker' && <><TextField label="Worker number" required value={forms.workerNumber} onChange={e => setField('workerNumber', e.target.value)} /><TextField label="First name" required value={forms.firstName} onChange={e => setField('firstName', e.target.value)} /><TextField label="Last name" required value={forms.lastName} onChange={e => setField('lastName', e.target.value)} /><TextField label="Phone" value={forms.phone} onChange={e => setField('phone', e.target.value)} /><TextField label="Email" type="email" value={forms.email} onChange={e => setField('email', e.target.value)} /></>}
-          {dialog === 'payGrade' && <><TextField label="Code" required value={forms.gradeCode} onChange={e => setField('gradeCode', e.target.value.toUpperCase())} /><TextField label="Name" required value={forms.gradeName} onChange={e => setField('gradeName', e.target.value)} /><TextField label="Description" multiline minRows={2} value={forms.gradeDescription} onChange={e => setField('gradeDescription', e.target.value)} /><TextField select label="Pay basis" value={forms.gradePayBasis} onChange={e => setField('gradePayBasis', e.target.value)}>{['hourly','daily','weekly','monthly','per_unit'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField label="Currency" required inputProps={{ maxLength: 3 }} value={forms.gradeCurrency} onChange={e => setField('gradeCurrency', e.target.value.toUpperCase())} /><TextField label="Minimum rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMinimum} onChange={e => setField('gradeMinimum', e.target.value)} /><TextField label="Midpoint rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMidpoint} onChange={e => setField('gradeMidpoint', e.target.value)} /><TextField label="Maximum rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMaximum} onChange={e => setField('gradeMaximum', e.target.value)} /></>}
+          {dialog === 'endContract' && <><Alert severity="warning">Ending a contract is effective-dated and cannot be extended. Create a new contract version if the employee is rehired.</Alert><TextField label="Effective to" type="date" required InputLabelProps={{ shrink: true }} value={forms.contractEndDate} onChange={e => setField('contractEndDate', e.target.value)} /></>}
+          {dialog === 'worker' && <><TextField label="Employee number" required value={forms.workerNumber} onChange={e => setField('workerNumber', e.target.value)} /><TextField label="First name" required value={forms.firstName} onChange={e => setField('firstName', e.target.value)} /><TextField label="Last name" required value={forms.lastName} onChange={e => setField('lastName', e.target.value)} /><TextField label="Phone" value={forms.phone} onChange={e => setField('phone', e.target.value)} /><TextField label="Email" type="email" value={forms.email} onChange={e => setField('email', e.target.value)} /></>}
+          {dialog === 'payGrade' && <>{!selectedPayGrade && <TextField label="Code" required value={forms.gradeCode} onChange={e => setField('gradeCode', e.target.value.toUpperCase())} />}<TextField label="Name" required value={forms.gradeName} onChange={e => setField('gradeName', e.target.value)} /><TextField label="Description" multiline minRows={2} value={forms.gradeDescription} onChange={e => setField('gradeDescription', e.target.value)} /><TextField select label="Pay basis" value={forms.gradePayBasis} onChange={e => setField('gradePayBasis', e.target.value)}>{['hourly','daily','weekly','monthly','per_unit'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField label="Currency" required inputProps={{ maxLength: 3 }} value={forms.gradeCurrency} onChange={e => setField('gradeCurrency', e.target.value.toUpperCase())} /><TextField label="Minimum rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMinimum} onChange={e => setField('gradeMinimum', e.target.value)} /><TextField label="Midpoint rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMidpoint} onChange={e => setField('gradeMidpoint', e.target.value)} /><TextField label="Maximum rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMaximum} onChange={e => setField('gradeMaximum', e.target.value)} /></>}
            {dialog === 'contract' && <><TextField select label="Engagement" value={forms.engagementType} onChange={e => setField('engagementType', e.target.value)}>{['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Pay basis" value={forms.payBasis} onChange={e => setField('payBasis', e.target.value)}>{['hourly','daily','weekly','monthly','per_unit'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Pay grade (optional)" value={forms.payGradeId} onChange={e => { const grade = (data.payGrades ?? []).find(item => item.id === e.target.value); setField('payGradeId', e.target.value); if (grade) setField('payBasis', String(grade.payBasis)); }}><MenuItem value="">No pay grade</MenuItem>{(data.payGrades ?? []).filter(grade => grade.status === 'active').map(grade => <MenuItem key={String(grade.id)} value={String(grade.id)}>{label(grade.code)} — {label(grade.name)}</MenuItem>)}</TextField>{forms.payBasis === 'per_unit' && <TextField label="Approved unit codes (comma-separated)" required helperText="Example: blocks, metres, deliveries. These must match approved output entries." value={forms.unitCodes} onChange={e => setField('unitCodes', e.target.value)} />}<TextField label="Rate (KES)" type="number" required value={forms.rateAmount} onChange={e => setField('rateAmount', e.target.value)} /><TextField label="Effective from" type="date" required InputLabelProps={{ shrink: true }} value={forms.effectiveFrom} onChange={e => setField('effectiveFrom', e.target.value)} /></>}
           {dialog === 'project' && <><TextField label="Project code" required value={forms.projectCode} onChange={e => setField('projectCode', e.target.value)} /><TextField label="Project name" required value={forms.projectName} onChange={e => setField('projectName', e.target.value)} /><TextField label="Client name" value={forms.clientName} onChange={e => setField('clientName', e.target.value)} /></>}
           {dialog === 'site' && <><TextField label="Site code" required value={forms.siteCode} onChange={e => setField('siteCode', e.target.value)} /><TextField label="Site name" required value={forms.siteName} onChange={e => setField('siteName', e.target.value)} /></>}
           {dialog === 'attendance' && <><TextField select label="Site" required value={forms.siteId ?? ''} onChange={e => setField('siteId', e.target.value)}>{(data.sites ?? []).filter(site => site.projectId === selectedProject).map(site => <MenuItem key={String(site.id)} value={String(site.id)}>{label(site.name)}</MenuItem>)}</TextField><TextField label="Work date" type="date" required InputLabelProps={{ shrink: true }} value={forms.workDate} onChange={e => setField('workDate', e.target.value)} /><TextField label="Minutes worked" type="number" required value={forms.minutesWorked} onChange={e => setField('minutesWorked', e.target.value)} /></>}
+          {dialog === 'payComponent' && <>
+            <Alert severity="info">Changes affect future payroll calculations. Completed payroll snapshots are not rewritten.</Alert>
+            <TextField label={selectedComponentType === 'allowance' ? 'Allowance name' : 'Deduction name'} required value={forms.componentName} onChange={e => setField('componentName',e.target.value)} />
+            <TextField select label="Calculation method" value={forms.componentMethod} onChange={e => setField('componentMethod',e.target.value)}>
+              {(selectedComponentType === 'allowance' ? ['fixed_amount','per_day','per_hour','percentage','quantity_times_rate'] : ['fixed_amount','percentage','balance_recovery']).map(method => <MenuItem key={method} value={method}>{method.replaceAll('_',' ')}</MenuItem>)}
+            </TextField>
+            <TextField select label="Tax treatment" value={forms.componentTreatment} onChange={e => setField('componentTreatment',e.target.value)}>
+              {(selectedComponentType === 'allowance' ? ['review_required','taxable','non_taxable'] : ['review_required','not_applicable','post_tax']).map(value => <MenuItem key={value} value={value}>{value.replaceAll('_',' ')}</MenuItem>)}
+            </TextField>
+            <TextField label="Calculation configuration (JSON)" multiline minRows={5} helperText='Example: {"rate": 1.5, "maximumMonthly": 5000}. Use an empty object when no parameters are required.' value={forms.componentConfiguration} onChange={e => setField('componentConfiguration',e.target.value)} />
+            <TextField select label="Status" value={forms.componentEnabled} onChange={e => setField('componentEnabled',e.target.value)}><MenuItem value="true">Enabled</MenuItem><MenuItem value="false">Disabled</MenuItem></TextField>
+            <TextField select label="Require approval" value={forms.componentApproval} onChange={e => setField('componentApproval',e.target.value)}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField>
+          </>}
           {dialog === 'period' && <><TextField label="Period code" required value={forms.periodCode} onChange={e => setField('periodCode', e.target.value)} /><TextField label="Period name" required value={forms.periodName} onChange={e => setField('periodName', e.target.value)} /><TextField label="Start date" type="date" required InputLabelProps={{ shrink: true }} value={forms.startDate} onChange={e => setField('startDate', e.target.value)} /><TextField label="End date" type="date" required InputLabelProps={{ shrink: true }} value={forms.endDate} onChange={e => setField('endDate', e.target.value)} /></>}
         </Stack></DialogContent>
-        <DialogActions sx={{ p: 2.5 }}><Button onClick={() => setDialog('')}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button></DialogActions>
+        <DialogActions sx={{ p: 2.5 }}><Button onClick={() => { setDialog(''); setSelectedPayGrade(''); setSelectedComponentId(''); }}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button></DialogActions>
       </Box>
     </Dialog>
   </Box>;
