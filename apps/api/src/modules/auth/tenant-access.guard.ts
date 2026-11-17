@@ -13,7 +13,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   supervisor: ['projects.read','workers.read','attendance.read','attendance.capture','attendance.approve','reports.read'],
   worker: ['attendance.capture','payslips.read'],
   accountant: ['company.read','payroll.read','payslips.read','reports.read','audit.read','compliance.read','compliance.manage','compliance.submit','compliance.review'],
-  viewer: ['company.read','projects.read','workers.read','attendance.read','payroll.read','reports.read','compliance.read'],
+  viewer: ['company.read','projects.read','workers.read','attendance.read','payroll.read','reports.read','compliance.read','audit.read'],
 };
 
 @Injectable()
