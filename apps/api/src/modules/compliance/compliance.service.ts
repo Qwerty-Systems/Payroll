@@ -78,7 +78,7 @@ export class ComplianceService {
       if (review.status !== 'submitted') throw new ConflictException('Only a submitted ruleset review can be approved or rejected.');
       if (review.submitted_by === actorId) throw new BadRequestException('Separation of duties: the person who submitted this review cannot decide it.');
       if (decision === 'approve') {
-        const currentRules=await m.query('SELECT code,calculation_method,configuration,effective_from::text,effective_to::text FROM statutory_rules WHERE rule_set_id=$1 ORDER BY code,effective_from',[review.rule_set_id]);
+        const currentRules=await m.query('SELECT code,label,category,calculation_method,configuration,effective_from::text,effective_to::text,source_title,source_url,verified_on::text FROM statutory_rules WHERE rule_set_id=$1 ORDER BY code,effective_from',[review.rule_set_id]);
         const currentHash=createHash('sha256').update(JSON.stringify(currentRules)).digest('hex');
         if(currentHash!==String(review.rules_snapshot_hash).trim()) throw new ConflictException('The statutory rules changed after this review was submitted. Submit a fresh review against the current ruleset before approval.');
         const published=await m.query("SELECT id FROM statutory_rule_sets WHERE id=$1 AND status='published'",[review.rule_set_id]);
