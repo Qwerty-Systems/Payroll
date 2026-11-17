@@ -12,7 +12,7 @@ const rules:StatutoryRule[]=[
 function makeService(withAdjustments=true){
  const inserted:unknown[][]=[];
  const worker={worker_id:'w1',worker_number:'W001',first_name:'Amani',middle_name:null,last_name:'Otieno',email:null,contract_id:'c1',engagement_type:'permanent',pay_basis:'monthly',rate_amount:'100000',currency:'KES',effective_from:'2026-01-01',effective_to:null,terms:{},approved_days:20,approved_minutes:9600,approved_units:0,overlapping_contracts:1};
- const query=jest.fn(async(sql:string)=>{
+ const query=jest.fn(async(sql:string,params:unknown[] = [])=>{
   if(sql.includes('FROM payroll_runs r JOIN payroll_periods p'))return [{id:runId,status:'draft',period_id:'p1',ruleset_id:'rs1',created_by:actorId,start_date:'2026-11-01',end_date:'2026-11-30'}];
   if(sql.includes('FROM statutory_rule_sets'))return [{id:'rs1',compliance_approved_at:new Date()}];
   if(sql.includes('FROM statutory_rules'))return rules;
@@ -22,7 +22,7 @@ function makeService(withAdjustments=true){
    {assignment_id:'a2',worker_id:'w1',type_id:'at2',code:'TOOLS',name:'Tools',method:'fixed_amount',tax_treatment:'non_taxable',configuration:{},type_enabled:true,type_effective_from:'2026-01-01',type_effective_to:null,amount:'5000',effective_from:'2026-01-01',effective_to:null,approved_days:20,approved_minutes:9600}
   ]:[];
   if(sql.includes('FROM worker_deduction_assignments d'))return withAdjustments?[{assignment_id:'d1',worker_id:'w1',type_id:'dt1',code:'SACCO',name:'SACCO',method:'fixed_amount',taxable_treatment:'post_tax',configuration:{},type_enabled:true,type_effective_from:'2026-01-01',type_effective_to:null,amount:'2000',outstanding_balance:null,effective_from:'2026-01-01',effective_to:null}]:[];
-  if(sql.startsWith('INSERT INTO payroll_run_items')){inserted.push((arguments as any));return [];}
+  if(sql.startsWith('INSERT INTO payroll_run_items')){inserted.push(params);return [];}
   return [];
  });
  const db={run:jest.fn(async(_tenant:string,fn:(manager:{query:typeof query})=>Promise<unknown>)=>fn({query}))};
