@@ -95,3 +95,28 @@ export class EndWorkerContractDto {
   @IsDateString()
   effectiveTo!: string;
 }
+
+ 
+export class UpdateProjectDto {
+  @IsOptional() @IsString() @Length(1,40) projectCode?: string;
+  @IsOptional() @IsString() @Length(2,180) name?: string;
+  @IsOptional() @IsString() @Length(1,180) clientName?: string | null;
+  @IsOptional() @IsIn(['planning','active','on_hold','completed','cancelled']) status?: string;
+  @IsOptional() @IsDateString() startDate?: string | null;
+  @IsOptional() @IsDateString() endDate?: string | null;
+}
+export class UpdateSiteDto {
+  @IsOptional() @IsUUID() projectId?: string;
+  @IsOptional() @IsString() @Length(1,40) siteCode?: string;
+  @IsOptional() @IsString() @Length(2,180) name?: string;
+  @IsOptional() @IsString() address?: string | null;
+  @IsOptional() @IsIn(['active','inactive']) status?: string;
+}
+export class UpdateWorkerDto {
+  @IsOptional() @IsString() @Length(1,40) workerNumber?: string;
+  @IsOptional() @IsString() @Length(1,100) firstName?: string;
+  @IsOptional() @IsString() @Length(1,100) middleName?: string | null;
+  @IsOptional() @IsString() @Length(1,100) lastName?: string;
+  @IsOptional() @IsString() @Length(7,32) phone?: string | null;
+  @IsOptional() @IsEmail() email?: string | null;
+}
