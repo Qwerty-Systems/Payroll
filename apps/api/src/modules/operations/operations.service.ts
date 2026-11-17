@@ -188,10 +188,15 @@ export class OperationsService {
       throw new BadRequestException('Clock-out must be after clock-in.');
     }
     return this.tenantDb.run(tenantId, async m => {
-      const records = await m.query('SELECT id,status,created_by FROM attendance_records WHERE tenant_id=$1 AND id=$2 FOR UPDATE',
+      const records = await m.query('SELECT id,status,created_by,clock_in,clock_out FROM attendance_records WHERE tenant_id=$1 AND id=$2 FOR UPDATE',
         [tenantId, attendanceId]);
       if (!records.length) throw new NotFoundException('Attendance record not found.');
       if (records[0].status !== 'approved') throw new ConflictException('Corrections can only be requested for approved attendance records.');
+      const proposedClockIn = input.clockIn ? new Date(input.clockIn) : (records[0].clock_in ? new Date(records[0].clock_in) : null);
+      const proposedClockOut = input.clockOut ? new Date(input.clockOut) : (records[0].clock_out ? new Date(records[0].clock_out) : null);
+      if (proposedClockIn && proposedClockOut && proposedClockOut <= proposedClockIn) {
+        throw new BadRequestException('The corrected clock-out must be after the effective clock-in.');
+      }
       const pending = await m.query("SELECT id FROM attendance_correction_requests WHERE tenant_id=$1 AND attendance_id=$2 AND status='pending' LIMIT 1",
         [tenantId, attendanceId]);
       if (pending.length) throw new ConflictException('A correction request is already pending for this attendance record.');
