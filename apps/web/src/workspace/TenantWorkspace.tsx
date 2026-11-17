@@ -13,6 +13,7 @@ import GroupsRounded from '@mui/icons-material/GroupsRounded';
 import BusinessRounded from '@mui/icons-material/BusinessRounded';
 import EventAvailableRounded from '@mui/icons-material/EventAvailableRounded';
 import PaymentsRounded from '@mui/icons-material/PaymentsRounded';
+import AssessmentRounded from '@mui/icons-material/AssessmentRounded';
 import SettingsRounded from '@mui/icons-material/SettingsRounded';
 import MenuRounded from '@mui/icons-material/MenuRounded';
 import SearchRounded from '@mui/icons-material/SearchRounded';
@@ -124,7 +125,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       members: 'tenant/users',
     };
     const entries = await Promise.all(Object.entries(endpoints).map(async ([key, path]) => {
-      try { return [key, asRows(await request<unknown>(path))] as const; }
+      try { const value = await request<unknown>(path); return [key, key === 'reportDashboard' && value && typeof value === 'object' && !Array.isArray(value) ? [value as RowData] : asRows(value)] as const; }
       catch { const cached = await getCachedOfflineReferenceData<Record<string, unknown[]>>(tenantId); return [key, asRows(cached?.[key])] as const; }
     }));
     setData(Object.fromEntries(entries));
@@ -392,6 +393,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const currentRows = (section === 'workers' ? data.workers : section === 'pay-grades' ? data.payGrades : section === 'projects' ? data.projects :
     section === 'attendance' ? data.attendance : section === 'payroll' ? data.periods : section === 'billing' ? data.invoices :
     section === 'people' ? data.members : section === 'organization' ? data.branches : []) ?? [];
+  const reportStats = (data.reportDashboard?.[0] ?? {}) as RowData & { workforce?: { active?: number }; attendanceThisMonth?: { total?: number; pending?: number }; pendingLeave?: number; pendingOvertime?: number; openPayrollRuns?: number; outstandingInvoices?: { balance_minor?: number }; openOfflineConflicts?: number };
   const filteredRows = currentRows.filter(row => !searchQuery.trim() ||
     JSON.stringify(row).toLowerCase().includes(searchQuery.trim().toLowerCase()));
   const navItems = [
@@ -627,14 +629,14 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                 <Typography fontWeight={850} sx={{mb:2}}>Operational overview</Typography>
                 <Grid container spacing={2}>
                   {[
-                    ['Active workers',data.reportDashboard?.workforce?.active??0],
-                    ['Attendance this month',data.reportDashboard?.attendanceThisMonth?.total??0],
-                    ['Pending attendance',data.reportDashboard?.attendanceThisMonth?.pending??0],
-                    ['Leave awaiting review',data.reportDashboard?.pendingLeave??0],
-                    ['Overtime awaiting review',data.reportDashboard?.pendingOvertime??0],
-                    ['Open payroll runs',data.reportDashboard?.openPayrollRuns??0],
-                    ['Outstanding invoices (minor units)',data.reportDashboard?.outstandingInvoices?.balance_minor??0],
-                    ['Offline conflicts',data.reportDashboard?.openOfflineConflicts??0],
+                    ['Active workers',reportStats.workforce?.active??0],
+                    ['Attendance this month',reportStats.attendanceThisMonth?.total??0],
+                    ['Pending attendance',reportStats.attendanceThisMonth?.pending??0],
+                    ['Leave awaiting review',reportStats.pendingLeave??0],
+                    ['Overtime awaiting review',reportStats.pendingOvertime??0],
+                    ['Open payroll runs',reportStats.openPayrollRuns??0],
+                    ['Outstanding invoices (minor units)',reportStats.outstandingInvoices?.balance_minor??0],
+                    ['Offline conflicts',reportStats.openOfflineConflicts??0],
                   ].map(([title,value])=><Grid size={{xs:12,sm:6,md:3}} key={String(title)}><Card variant="outlined"><CardContent><Typography variant="caption" color="text.secondary">{title}</Typography><Typography variant="h5" fontWeight={850}>{String(value)}</Typography></CardContent></Card></Grid>)}
                   <Grid size={{xs:12}}><Card variant="outlined"><CardContent><Typography fontWeight={850} sx={{mb:1}}>Download reports</Typography><Stack direction={{xs:'column',md:'row'}} spacing={1} alignItems={{md:'center'}}><TextField size="small" label="From" type="date" InputLabelProps={{shrink:true}} value={forms.reportFrom} onChange={e=>setField('reportFrom',e.target.value)} /><TextField size="small" label="To" type="date" InputLabelProps={{shrink:true}} value={forms.reportTo} onChange={e=>setField('reportTo',e.target.value)} /><Button variant="outlined" disabled={busy} onClick={()=>void downloadReport(`tenant/reports/attendance.csv?from=${forms.reportFrom}&to=${forms.reportTo}`,`attendance-${forms.reportFrom}-${forms.reportTo}.csv`)}>Attendance CSV</Button><Button variant="outlined" disabled={busy} onClick={()=>void downloadReport(`tenant/reports/audit.csv?from=${forms.reportFrom}&to=${forms.reportTo}`,`audit-${forms.reportFrom}-${forms.reportTo}.csv`)}>Audit CSV</Button></Stack><Divider sx={{my:2}}/><Stack direction={{xs:'column',md:'row'}} spacing={1}><TextField select size="small" label="Payroll period" value={forms.reportPeriodId} onChange={e=>setField('reportPeriodId',e.target.value)} sx={{minWidth:260}}>{(data.periods??[]).map(p=><MenuItem key={String(p.id)} value={String(p.id)}>{label(p.name)} · {label(p.startDate)}–{label(p.endDate)}</MenuItem>)}</TextField><Button variant="contained" disabled={busy||!forms.reportPeriodId} onClick={()=>void downloadReport(`tenant/reports/payroll/${forms.reportPeriodId}.csv`,`payroll-${forms.reportPeriodId}.csv`)}>Payroll CSV</Button></Stack></CardContent></Card></Grid>
                 </Grid>
