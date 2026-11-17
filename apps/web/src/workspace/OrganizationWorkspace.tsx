@@ -101,7 +101,7 @@ export default function OrganizationWorkspace({ request, workers, projects, site
         {entity==='branches'&&<TableCell>{row.address||'—'}</TableCell>}{entity==='departments'&&<TableCell>{branchName(row.branchId)}</TableCell>}
         <TableCell><Chip size="small" label={row.status} color={row.status==='active'?'success':'default'}/></TableCell>
         <TableCell><Stack direction="row" spacing={.5}><Button size="small" onClick={()=>start(entity==='branches'?'branch':entity==='departments'?'department':'cost-centre',row)}>Edit</Button>
-          {row.status==='active'&&<Button size="small" color="warning" disabled={busy} onClick={()=>void archive(entity,row)}>Archive</Button>}</Stack></TableCell></TableRow>)}
+          {row.status==='active'?<Button size="small" color="warning" disabled={busy} onClick={()=>void archive(entity,row)}>Archive</Button>:<Button size="small" disabled={busy} onClick={async()=>{setBusy(true);try{await request('tenant/organization/'+entity+'/'+row.id,{method:'PATCH',body:JSON.stringify({status:'active'})});setNotice('Record reactivated.');await refresh();}catch(e){setError(e instanceof Error?e.message:'Could not reactivate record.');}finally{setBusy(false);}}}>Reactivate</Button>}</Stack></TableCell></TableRow>)}
         {!rows.length&&<TableRow><TableCell colSpan={entity==='branches'?5:entity==='departments'?5:4} sx={{py:3,textAlign:'center',color:'text.secondary'}}>No records yet. Add your first {title.toLowerCase().replace(/s$/,'')}.</TableCell></TableRow>}
       </TableBody></Table></TableContainer>
   </Paper>;
