@@ -173,6 +173,8 @@ export class ComplianceService {
       if(change.status!=='submitted') throw new ConflictException('Only a submitted rule change can be decided.');
       if(change.submitted_by===actorId) throw new BadRequestException('Separation of duties: the submitter cannot approve their own rule change.');
       if(decision==='approve'){
+        const baseRule=await m.query('SELECT category,calculation_method FROM statutory_rules WHERE rule_set_id=$1 AND code=$2 AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $3::date) ORDER BY effective_from DESC LIMIT 1',[change.rule_set_id,change.rule_code,change.effective_from]);
+        if(!baseRule.length || baseRule[0].category!==change.category || baseRule[0].calculation_method!==change.calculation_method) throw new ConflictException('The statutory rule baseline changed or no longer supports this proposal. Recreate the proposal against the current published ruleset.');
         const review=await m.query("SELECT id FROM tenant_statutory_rule_reviews WHERE tenant_id=$1 AND rule_set_id=$2 AND status='approved' AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $3::date) ORDER BY effective_from DESC LIMIT 1",[tenantId,change.rule_set_id,change.effective_from]);
         if(!review.length) throw new ConflictException('Approve the applicable statutory ruleset review before approving a rule change.');
         const overlap=await m.query(`
