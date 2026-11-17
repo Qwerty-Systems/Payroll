@@ -18,7 +18,7 @@ JengaFlow ships with a versioned Kenya statutory baseline. Starter values are co
 | SHIF | 2.75% of gross salary/wage; minimum KES 300/month for a paid salaried record | 1 Oct 2024 | Social Health Insurance Regulations 2024, reg. 17 |
 | NSSF Year 4 | 6% employee + 6% employer; LEL KES 9,000; UEL KES 108,000 | 1 Feb 2026 | NSSF Year 4 2026 notice |
 | Affordable Housing Levy | 1.5% employee + 1.5% employer of gross monthly salary | 19 Mar 2024 | Affordable Housing Act 2024 / KRA notice |
-| NITA training levy | KES 50 per employee/month; employer cost, not employee deduction | 16 Nov 2026 baseline snapshot | NITA Levy Inspectorate |
+| NITA training levy | KES 600 per employee/year (accrue KES 50/month); employer cost, not employee deduction | 28 Feb 2020 | Industrial Training (Training Levy) Order, 2007, as amended in 2020 |
 | PAYE allowable deductions | SHIF, AHL, registered pension contributions (subject to KES 30,000/month cap), post-retirement medical fund (KES 15,000/month), mortgage interest (KES 30,000/month) | 16 Nov 2026 baseline snapshot | KRA PAYE page |
 | Insurance relief | 15% of qualifying premiums, capped at KES 5,000/month | 1 Jul 2023 | KRA PAYE page |
 
@@ -29,7 +29,7 @@ JengaFlow ships with a versioned Kenya statutory baseline. Starter values are co
 - PAYE bands are annual thresholds applied to annualized monthly taxable pay; resident personal relief is then applied monthly.
 - The PAYE taxable base deducts configured allowable deductions, including SHIF and employee AHL, plus eligible pension/NSSF amounts within the configured cap.
 - Insurance relief and employee-specific tax adjustments require verified employee-level premium and eligibility data; the current fixed-salary MVP applies only standard resident personal relief. Do not assume insurance relief for employees without supporting records.
-- NITA is an employer levy and must never be subtracted from employee net pay.
+- NITA is an employer levy of KES 600 per employee per year under the 2020 amendment; the engine accrues KES 50/month for employer-cost reporting, but the remittance is annual and due by the ninth day after the employer's financial year end. It must never be subtracted from employee net pay.
 - Employer Affordable Housing Levy is employer cost; only the employee's 1.5% is a payslip deduction.
 
 ## Governance
@@ -46,4 +46,5 @@ JengaFlow ships with a versioned Kenya statutory baseline. Starter values are co
 - NSSF Year 4 2026: https://www.nssf.or.ke/notice-to-employers-year-4-2026-nssf-contribution-rates
 - Social Health Insurance Regulations: https://new.kenyalaw.org/akn/ke/act/ln/2024/49/eng@2024-09-20/source
 - Affordable Housing Levy: https://www.kra.go.ke/news-center/public-notices/2099-collection-of-the-affordable-housing-levy-by-kenya-revenue-authority
-- NITA: https://www.nita.go.ke/our-services/levy-inspectorate.html
+- NITA / Industrial Training Levy Order (consolidated legal text): https://new.kenyalaw.org/akn/ke/act/ln/2007/113/eng@2022-12-31/source
+- NITA current employer guidance: https://www.nita.go.ke/our-services/levy-inspectorate.html
