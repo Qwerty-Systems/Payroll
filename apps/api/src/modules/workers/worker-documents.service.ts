@@ -39,6 +39,7 @@ export class WorkerDocumentsService {
   async upload(tenantId: string, actorId: string, workerId: string, documentType: string, file: UploadFile) {
     if (!DOCUMENT_TYPES.has(documentType)) throw new BadRequestException('Select a valid worker document type.');
     this.validateFile(file);
+    // eslint-disable-next-line no-control-regex -- intentionally strips control characters from filenames
     const name = file.originalname.split(/[\\/]/).pop()?.replace(/[\x00-\x1f\x7f]/g,'').trim().slice(0,180);
     if (!name) throw new BadRequestException('The uploaded file must have a valid filename.');
     const worker = await this.tenantDb.run(tenantId, async m => {

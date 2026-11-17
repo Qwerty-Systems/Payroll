@@ -33,7 +33,6 @@ export const STALE_SYNCING_MS = 2 * 60 * 1000;
 
 const DB_NAME = 'jengaflow-offline';
 const DB_VERSION = 1;
-const STORES = ['records', 'commands', 'metadata'] as const;
 
 function openDatabase(): Promise<IDBDatabase> {
   if (!('indexedDB' in globalThis)) return Promise.reject(new Error('Offline storage is not supported by this browser.'));
@@ -235,6 +234,31 @@ export async function clearTenantOfflineData(tenantId: string): Promise<void> {
       request.onsuccess = () => request.result.forEach((item: { tenantId: string; id: string }) => {
         if (item.tenantId === tenantId) store.delete(item.id);
       });
+    }
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } finally { db.close(); }
+}
+
+/**
+ * Atomically replaces every cached record of one entity for a tenant. Used for reference-data bootstrap: the server
+ * list is authoritative, so rows deleted or archived server-side must disappear from the offline cache too.
+ */
+export async function replaceOfflineRecords(tenantId: string, entity: OfflineEntity, records: OfflineRecord[]): Promise<void> {
+  const db = await openDatabase();
+  try {
+    const tx = db.transaction('records', 'readwrite');
+    const store = tx.objectStore('records');
+    const existing = await requestResult<OfflineRecord[]>(store.getAll());
+    for (const row of existing) {
+      if (row.tenantId === tenantId && row.entity === entity) store.delete(row.id);
+    }
+    for (const row of records) {
+      if (row.tenantId !== tenantId || row.entity !== entity) throw new Error('Offline record does not belong to this tenant/entity.');
+      store.put(row);
     }
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();

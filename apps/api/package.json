@@ -6,7 +6,7 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main.js",
-    "lint": "echo \"Linting will be enabled with the shared ESLint configuration\"",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
     "migration:run": "typeorm-ts-node-commonjs -d src/database/data-source.ts migration:run",

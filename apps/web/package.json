@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
-    "lint": "echo \"Frontend lint configuration pending\"",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
