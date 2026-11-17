@@ -118,7 +118,7 @@ suite('Payroll flow against PostgreSQL (RLS enforced)', () => {
     expect(calc.warnings.filter((w: string) => /REQUIRES_REVIEW|NOT_AVAILABLE|NET_PAY|NOT_INCLUDED/.test(w))).toEqual([]);
     expect((await loan()).bal).toBe(12000); // calculation must not touch balances
 
-    await finalize(janRun);
+    await finalize(decRun);
     expect(await loan()).toEqual({ bal: 7000, status: 'active' });
     const payslips: any[] = await service.listPayslips(tenantId, decRun);
     expect(payslips).toHaveLength(1);
@@ -129,7 +129,7 @@ suite('Payroll flow against PostgreSQL (RLS enforced)', () => {
     const janRun = await newRun('2027-01', '2027-01-01', '2027-01-31');
     const jan: any = await service.calculateRun(tenantId, creator, janRun);
     expect(jan.totals.employeeDeductions).toBeCloseTo(calculateKenyaMonthlyPayroll(110000, rules).employeeStatutoryDeductions + 2000 + 3000, 2);
-    await finalize(decRun);
+    await finalize(janRun);
     expect(await loan()).toEqual({ bal: 0, status: 'completed' });
   });
 
