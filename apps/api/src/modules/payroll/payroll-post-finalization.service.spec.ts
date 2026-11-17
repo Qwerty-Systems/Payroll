@@ -38,10 +38,10 @@ describe('Payroll post-finalization controls', () => {
     const query = jest.fn()
       .mockResolvedValueOnce([{ id: runId, status: 'finalized' }])
       .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ worker_id: actorId, earnings: '1000.00', employee_deductions: '250.00', employer_contributions: '100.00', net_pay: '750.00' }])
       .mockResolvedValueOnce([{ n: 1 }])
       .mockResolvedValueOnce([{ id: '123e4567-e89b-42d3-a456-426614174003', correctionNumber: 1, status: 'draft' }])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ worker_id: actorId, earnings: '1000.00', employee_deductions: '250.00', employer_contributions: '100.00', net_pay: '750.00' }])
       .mockResolvedValueOnce([]);
     const service = serviceFor(query);
     await service.createCorrection(tenantId, actorId, runId, 'reversal', 'Reverse the finalized payroll in full', []);
