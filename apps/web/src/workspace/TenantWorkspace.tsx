@@ -420,7 +420,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const navGroups = ['WORKSPACE','FINANCE','COMPLIANCE','ADMINISTRATION'].filter(group => visibleNavItems.some(item => item.group === group));
   const pageTitle: Record<Section, string> = {
     overview: 'Overview', workers: 'Employees', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
-    attendance: 'Attendance', payroll: 'Payroll', organization: 'Organization', people: 'Team access',
+    attendance: 'Attendance', payroll: 'Payroll', compliance: 'Compliance', organization: 'Organization', people: 'Team access',
   };
   const pageDescription: Record<Section, string> = {
     overview: 'A clear picture of your workforce and operations.',
@@ -648,7 +648,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                 {!(data.deductionTypes ?? []).length && <TableRow><TableCell colSpan={7}>No deduction types have been seeded for this company yet.</TableCell></TableRow>}
               </TableBody></Table></TableContainer>
             </Box>
-          </Paper></Stack> : section === 'organization' || section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> :
+          </Paper></Stack> : section === 'compliance' ? <ComplianceWorkspace role={membership?.role ?? 'viewer'} periods={data.periods ?? []} request={request} /> : section === 'organization' || section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> :
             <Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
               {section === 'payroll' ? <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
                 <TableContainer><Table size="small"><TableHead><TableRow>{['Code','Period','Start','End','Status','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
