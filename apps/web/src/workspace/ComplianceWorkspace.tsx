@@ -24,6 +24,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
   const [filings,setFilings]=useState<Row[]>([]);
   const [audit,setAudit]=useState<Row[]>([]);
   const [runs,setRuns]=useState<Row[]>([]);
+  const [filingReport,setFilingReport]=useState<Row|null>(null);
   const [selectedPeriod,setSelectedPeriod]=useState('');
   const [dialog,setDialog]=useState('');
   const [activeId,setActiveId]=useState('');
@@ -127,6 +128,13 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
     finally{setBusy(false);}
   }
 
+  async function viewFiling(id:string){
+    setBusy(true);setError('');
+    try{setFilingReport(await request<Row>('compliance/filings/'+id));}
+    catch(e){setError(e instanceof Error?e.message:'The filing report could not be loaded.');}
+    finally{setBusy(false);}
+  }
+
   const selected=rulesets.find(r=>String(r.id)===selectedRuleset);
   return <Stack spacing={2.5}>
     {error&&<Alert severity="error" onClose={()=>setError('')}>{error}</Alert>}
@@ -178,6 +186,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
       </Stack>
       <TableContainer sx={{mt:2}}><Table size="small"><TableHead><TableRow>{['Authority','Filing','Period','Due date','Status','Reference / actions'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
         {filings.map(f=><TableRow key={f.id}><TableCell>{show(f.authority)}</TableCell><TableCell>{show(f.filingType)}</TableCell><TableCell>{show(f.referencePeriod)}</TableCell><TableCell>{show(f.dueDate)}</TableCell><TableCell><Chip size="small" color={statusColor(String(f.status))} label={show(f.status)}/></TableCell><TableCell>
+          <Button size="small" onClick={()=>void viewFiling(String(f.id))}>View report</Button>
           {f.status==='prepared'?<Button size="small" onClick={()=>void act('compliance/filings/'+f.id+'/request-review',{},'POST','Filing sent for review.')}>Request review</Button>:null}
           {f.status==='in_review'&&canReview?<><Button size="small" color="success" onClick={()=>{set('decision','approve');openDialog('filingDecision',String(f.id));}}>Approve</Button><Button size="small" color="error" onClick={()=>{set('decision','reject');openDialog('filingDecision',String(f.id));}}>Reject</Button></>:null}
           {f.status==='approved'?<Button size="small" onClick={()=>openDialog('recordSubmission',String(f.id))}>Record submission</Button>:null}
@@ -193,7 +202,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
       <Typography variant="h6" fontWeight={900}>Compliance audit history</Typography>
       <Typography variant="body2" color="text.secondary">Immutable event history for rule reviews, rule changes and filing preparation, review and submission records.</Typography>
       <TableContainer sx={{mt:2,maxHeight:420}}><Table size="small" stickyHeader><TableHead><TableRow>{['When','Action','Record','Actor','Details'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
-        {audit.map(a=><TableRow key={a.id}><TableCell>{a.createdAt?new Date(a.createdAt).toLocaleString():'—'}</TableCell><TableCell>{show(a.action)}</TableCell><TableCell>{show(a.entityType)} · {show(a.entityId)}</TableCell><TableCell>{show(a.actorUserId)}</TableCell><TableCell><Typography variant="caption">{JSON.stringify(a.metadata??{})}</Typography></TableCell></TableRow>)}
+        {audit.map(a=><TableRow key={a.id}><TableCell>{a.createdAt?new Date(a.createdAt).toLocaleString():'—'}</TableCell><TableCell>{show(a.action)}</TableCell><TableCell>{show(a.entityType)} · {show(a.entityId)}</TableCell><TableCell>{show(a.actorName??a.actorEmail??a.actorUserId)}</TableCell><TableCell><Typography variant="caption">{JSON.stringify(a.metadata??{})}</Typography></TableCell></TableRow>)}
         {!audit.length&&<TableRow><TableCell colSpan={5}>No compliance audit events yet.</TableCell></TableRow>}
       </TableBody></Table></TableContainer>
     </Paper>
@@ -231,6 +240,37 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
         </Stack></DialogContent>
         <DialogActions sx={{p:2.5}}><Button onClick={closeDialog} disabled={busy}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy?'Saving…':'Save and continue'}</Button></DialogActions>
       </Box>
+    </Dialog>
+    <Dialog open={Boolean(filingReport)} onClose={()=>setFilingReport(null)} fullWidth maxWidth="lg">
+      <DialogTitle>Statutory filing report</DialogTitle>
+      <DialogContent>
+        {filingReport&&(()=>{
+          const snapshot=filingReport.report_snapshot??{};
+          const employees=rows(snapshot.employees);
+          const totals=filingReport.totals??snapshot.totals??{};
+          return <Stack spacing={2} sx={{pt:1}}>
+            <Alert severity="info">Prepared report snapshot. Submission to the authority is not performed by JengaFlow; use the authority portal and record its reference afterwards.</Alert>
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Chip label={show(filingReport.authority)}/><Chip label={show(filingReport.filing_type)}/><Chip label={'Period '+show(filingReport.reference_period)}/><Chip label={'Status '+show(filingReport.status)}/>
+            </Stack>
+            <Typography variant="subtitle2" fontWeight={800}>Report totals</Typography>
+            <Stack direction={{xs:'column',sm:'row'}} spacing={1}>
+              {Object.entries(totals).map(([key,value])=><Paper key={key} variant="outlined" sx={{p:1.5,flex:1,minWidth:120}}><Typography variant="caption" color="text.secondary">{key.replaceAll('_',' ')}</Typography><Typography fontWeight={850}>{show(value)}</Typography></Paper>)}
+            </Stack>
+            <Typography variant="subtitle2" fontWeight={800}>Employee breakdown</Typography>
+            <TableContainer sx={{maxHeight:460}}><Table size="small" stickyHeader><TableHead><TableRow>{['Employee','Gross earnings','Taxable income','Statutory lines','Net pay'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
+              {employees.map((employee,i)=><TableRow key={String(employee.worker?.id??i)}>
+                <TableCell>{show(employee.worker?.workerNumber)} · {show([employee.worker?.firstName,employee.worker?.lastName].filter(Boolean).join(' '))}</TableCell>
+                <TableCell>{show(employee.grossEarnings)}</TableCell><TableCell>{show(employee.taxableIncome)}</TableCell>
+                <TableCell>{(employee.lines??[]).map((line:Row)=><Typography key={line.code} variant="caption" display="block">{show(line.code)}: {show(line.amount)} ({show(line.side)})</Typography>)}</TableCell>
+                <TableCell>{show(employee.netPay)}</TableCell>
+              </TableRow>)}
+              {!employees.length&&<TableRow><TableCell colSpan={5}>No employee breakdown in this report.</TableCell></TableRow>}
+            </TableBody></Table></TableContainer>
+          </Stack>;
+        })()}
+      </DialogContent>
+      <DialogActions><Button onClick={()=>setFilingReport(null)}>Close report</Button></DialogActions>
     </Dialog>
   </Stack>;
 }
