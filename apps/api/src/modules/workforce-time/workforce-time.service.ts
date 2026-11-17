@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
+import { EntityManager } from 'typeorm';
 import {
   CreateLeaveRequestDto, CreateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
@@ -256,7 +257,7 @@ export class WorkforceTimeService {
     });
   }
 
-  private audit(m: { query: (sql: string, parameters?: unknown[]) => Promise<unknown> }, tenantId: string,
+  private audit(m: EntityManager, tenantId: string,
     actorId: string, action: string, entityType: string, entityId: string, metadata: unknown) {
     return m.query(`
       INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
