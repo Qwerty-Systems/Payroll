@@ -190,7 +190,6 @@ export class PayrollPostFinalizationService {
         employerContributions+=Number(s.statutory?.employerContributions??0);
         netPay+=Number(s.netPay??0);
       }
-      const totals=run[0].totals??{};
       const journal=[
         {account:'Payroll expense',debit:Number(totals.grossEarnings??gross),credit:0},
         {account:'Employer statutory contributions expense',debit:Math.max(0,employerContributions),credit:Math.max(0,-employerContributions)},
@@ -213,7 +212,6 @@ export class PayrollPostFinalizationService {
       const p=rows[0],s=p.snapshot??{},worker=s.worker??{},period=s.period??{};
       const esc=(v:unknown)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
       const money=(v:unknown)=>'KES '+Number(v??0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2});
-      const rowsHtml=(items:any[],cols:string[])=>items.map(x=>'<tr>'+cols.map(c=>'<td>'+esc(x[c]??'')+'</td>').join('')+'</tr>').join('');
       const statutory=Array.isArray(s.statutory?.lines)?s.statutory.lines:[];
       const allowances=Array.isArray(s.allowances?.lines)?s.allowances.lines:[];
       const deductions=Array.isArray(s.otherDeductions?.lines)?s.otherDeductions.lines:[];
