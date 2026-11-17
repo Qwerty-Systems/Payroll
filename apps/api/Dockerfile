@@ -18,6 +18,8 @@ COPY --from=build /workspace/apps/api/package.json ./apps/api/package.json
 COPY --from=build /workspace/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /workspace/apps/api/dist ./apps/api/dist
 WORKDIR /workspace/apps/api
+COPY --from=build /workspace/apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 EXPOSE 3001
 USER node
-CMD ["node", "dist/main.js"]
+ENTRYPOINT ["./docker-entrypoint.sh"]

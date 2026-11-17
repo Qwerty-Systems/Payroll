@@ -1,10 +1,38 @@
 name: jengaflow
 services:
+  # Apply schema changes with the migration role before the API starts.
+  migrate:
+    image: ${REGISTRY_IMAGE_PREFIX:-registry.qwerty.co.ke/jengaflow}/api:production
+    entrypoint: ["node", "node_modules/typeorm/cli.js"]
+    command: ["-d", "dist/database/data-source.js", "migration:run"]
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_HOST: ${DATABASE_HOST:-}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-}
+      DATABASE_NAME: ${DATABASE_NAME:-}
+      MIGRATIONS_DATABASE_URL: ${MIGRATIONS_DATABASE_URL:-}
+      MIGRATIONS_DATABASE_HOST: ${MIGRATIONS_DATABASE_HOST:-}
+      MIGRATIONS_DATABASE_PORT: ${MIGRATIONS_DATABASE_PORT:-}
+      MIGRATIONS_DATABASE_USERNAME: ${MIGRATIONS_DATABASE_USERNAME:-}
+      MIGRATIONS_DATABASE_PASSWORD: ${MIGRATIONS_DATABASE_PASSWORD:-}
+      MIGRATIONS_DATABASE_NAME: ${MIGRATIONS_DATABASE_NAME:-}
+      DATABASE_SSL: ${DATABASE_SSL:-false}
+      DATABASE_SSL_REJECT_UNAUTHORIZED: ${DATABASE_SSL_REJECT_UNAUTHORIZED:-true}
+    networks: [jengaflow]
+
   api:
     image: ${REGISTRY_IMAGE_PREFIX:-registry.qwerty.co.ke/jengaflow}/api:production
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
+      SKIP_DATABASE_MIGRATIONS: "true"
       API_PORT: 3001
       APP_NAME: ${APP_NAME:-JengaFlow}
       APP_URL: ${APP_URL:-https://jengaflow.qwerty.co.ke}
