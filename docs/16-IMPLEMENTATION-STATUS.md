@@ -76,3 +76,13 @@ Worker documents are stored in private object storage with tenant-scoped metadat
 - Tooling: shared ESLint flat config (`eslint.base.mjs`, per-app configs) replaces the placeholder lint scripts and runs in CI; API and web Dockerfiles install with `--frozen-lockfile`.
 - Still open: offline workflows beyond attendance, end-to-end offline browser tests, conflict *resolution* that keeps both records (only discard/re-queue exists), and the remaining items in "Not yet production-ready" above (payments, payslips, billing, observability, restore drill).
 
+
+
+## Attendance management workflows (in progress)
+- Tenant-scoped shift catalogue with create, update and deactivate operations.
+- Leave types and per-worker annual balances with opening, accrued, adjustment, used, pending and available day totals. Leave requests enforce available balances and date-overlap checks; approval/rejection is audited and prevents self-approval.
+- Overtime requests support supervisor approval/rejection and approved-minute caps.
+- Timesheets support draft creation, line create/update/delete, date-range validation, submission, rejection/resubmission and maker-checker approval.
+- The tenant workspace includes a Time Management area for shifts, leave, overtime and timesheet operations.
+- Leave balances are intentionally tenant-maintained; the system does not infer legal accrual rules. Approved overtime and timesheet values are not automatically added to payroll until the applicable pay policy and approval mapping are configured and reviewed.
+- Remaining: worker-to-shift roster assignments, shift-based attendance calculations, payroll integration for approved overtime/timesheets, leave-type edit/deactivation UI, richer timesheet editing UI, and browser end-to-end coverage.
