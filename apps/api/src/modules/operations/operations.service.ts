@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
-import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, CreateWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto } from './operations.dto';
+import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, CreateWorkerOutputDto, CreatePayGradeDto, UpdateAllowanceTypeDto, UpdateDeductionTypeDto, UpdatePayGradeDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto } from './operations.dto';
 
 @Injectable()
 export class OperationsService {
@@ -222,6 +222,53 @@ export class OperationsService {
     return this.tenantDb.run(tenantId, async m => {
       const rows=await m.query('UPDATE worker_pay_grades SET status=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,code,name,status',[tenantId,id,status]);
       if(!rows.length) throw new NotFoundException('Pay grade not found.');
+      return rows[0];
+    });
+  }
+
+
+  listPayComponents(tenantId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const allowances = await m.query('SELECT id,code,name,calculation_method AS "calculationMethod",configuration,tax_treatment AS "taxTreatment",is_enabled AS "isEnabled",requires_approval AS "requiresApproval",effective_from::text AS "effectiveFrom",effective_to::text AS "effectiveTo" FROM tenant_allowance_types WHERE tenant_id=$1 ORDER BY code,effective_from DESC', [tenantId]);
+      const deductions = await m.query('SELECT id,code,name,category,calculation_method AS "calculationMethod",configuration,taxable_treatment AS "taxableTreatment",is_system AS "isSystem",is_enabled AS "isEnabled",requires_approval AS "requiresApproval",effective_from::text AS "effectiveFrom",effective_to::text AS "effectiveTo" FROM tenant_deduction_types WHERE tenant_id=$1 ORDER BY code,effective_from DESC', [tenantId]);
+      return { allowances, deductions };
+    });
+  }
+
+  updateAllowanceType(tenantId: string, actorId: string, id: string, dto: UpdateAllowanceTypeDto) {
+    return this.tenantDb.run(tenantId, async m => {
+      const found = await m.query('SELECT code,name,calculation_method AS "calculationMethod",configuration,tax_treatment AS "taxTreatment",is_enabled AS "isEnabled",requires_approval AS "requiresApproval" FROM tenant_allowance_types WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId,id]);
+      if (!found.length) throw new NotFoundException('Allowance type not found.');
+      const before = found[0];
+      const next = {
+        name: dto.name === undefined ? before.name : dto.name.trim(),
+        method: dto.calculationMethod ?? before.calculationMethod,
+        configuration: dto.configuration ?? before.configuration ?? {},
+        treatment: dto.taxTreatment ?? before.taxTreatment,
+        enabled: dto.isEnabled ?? before.isEnabled,
+        approval: dto.requiresApproval ?? before.requiresApproval,
+      };
+      const rows = await m.query('UPDATE tenant_allowance_types SET name=$3,calculation_method=$4,configuration=$5::jsonb,tax_treatment=$6,is_enabled=$7,requires_approval=$8 WHERE tenant_id=$1 AND id=$2 RETURNING id,code,name,calculation_method AS "calculationMethod",configuration,tax_treatment AS "taxTreatment",is_enabled AS "isEnabled",requires_approval AS "requiresApproval"', [tenantId,id,next.name,next.method,JSON.stringify(next.configuration),next.treatment,next.enabled,next.approval]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.allowance_type.updated','allowance_type',$3,$4::jsonb)", [tenantId,actorId,id,JSON.stringify({before,after:rows[0]})]);
+      return rows[0];
+    });
+  }
+
+  updateDeductionType(tenantId: string, actorId: string, id: string, dto: UpdateDeductionTypeDto) {
+    return this.tenantDb.run(tenantId, async m => {
+      const found = await m.query('SELECT code,name,calculation_method AS "calculationMethod",configuration,taxable_treatment AS "taxableTreatment",is_enabled AS "isEnabled",requires_approval AS "requiresApproval" FROM tenant_deduction_types WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId,id]);
+      if (!found.length) throw new NotFoundException('Deduction type not found.');
+      const before = found[0];
+      const next = {
+        name: dto.name === undefined ? before.name : dto.name.trim(),
+        method: dto.calculationMethod ?? before.calculationMethod,
+        configuration: dto.configuration ?? before.configuration ?? {},
+        treatment: dto.taxableTreatment ?? before.taxableTreatment,
+        enabled: dto.isEnabled ?? before.isEnabled,
+        approval: dto.requiresApproval ?? before.requiresApproval,
+      };
+      const rows = await m.query('UPDATE tenant_deduction_types SET name=$3,calculation_method=$4,configuration=$5::jsonb,taxable_treatment=$6,is_enabled=$7,requires_approval=$8 WHERE tenant_id=$1 AND id=$2 RETURNING id,code,name,calculation_method AS "calculationMethod",configuration,taxable_treatment AS "taxableTreatment",is_enabled AS "isEnabled",requires_approval AS "requiresApproval"', [tenantId,id,next.name,next.method,JSON.stringify(next.configuration),next.treatment,next.enabled,next.approval]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.deduction_type.updated','deduction_type',$3,$4::jsonb)", [tenantId,actorId,id,JSON.stringify({before,after:rows[0]})]);
       return rows[0];
     });
   }
