@@ -212,7 +212,7 @@ export class OperationsService {
       return { id, permanentlyDeleted: true };
     }).catch(error => {
       const code = (error as { code?: string })?.code;
-      if (code === '23503') throw new ConflictException('This employee has linked contracts, attendance, payroll, documents, or assignments. Preserve the history and archive the employee instead.');
+      if (code === '23503' || code === '23001') throw new ConflictException('This employee has linked records, including project assignments. Permanent deletion is blocked to preserve employment and operational history. End any active contract, then archive the employee. If the employee was created in error, review and remove eligible dependent records through their own audited workflows first.');
       if (code === '42501') throw new ForbiddenException('The database role cannot permanently delete employees. Check the runtime role permissions.');
       throw error;
     });
