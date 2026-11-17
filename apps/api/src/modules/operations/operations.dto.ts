@@ -95,3 +95,44 @@ export class EndWorkerContractDto {
   @IsDateString()
   effectiveTo!: string;
 }
+
+export class CreateShiftDto {
+  @IsString() @Length(1,40) code!: string;
+  @IsString() @Length(2,120) name!: string;
+  @IsString() @Length(5,8) startTime!: string;
+  @IsString() @Length(5,8) endTime!: string;
+  @IsOptional() @IsInt() @Min(0) @Max(720) breakMinutes?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(240) graceMinutes?: number;
+}
+export class AssignShiftDto {
+  @IsUUID() workerId!: string;
+  @IsUUID() shiftId!: string;
+  @IsDateString() effectiveFrom!: string;
+  @IsOptional() @IsDateString() effectiveTo?: string;
+}
+export class CreateLeaveRequestDto {
+  @IsUUID() workerId!: string;
+  @IsIn(['annual','sick','maternity','paternity','compassionate','unpaid','other']) leaveType!: string;
+  @IsDateString() startDate!: string;
+  @IsDateString() endDate!: string;
+  @IsNumber({maxDecimalPlaces:2}) @Min(0.5) @Max(366) requestedDays!: number;
+  @IsString() @Length(5,500) reason!: string;
+}
+export class SetLeaveEntitlementDto {
+  @IsIn(['annual','sick','maternity','paternity','compassionate','unpaid','other']) leaveType!: string;
+  @IsNumber({maxDecimalPlaces:2}) @Min(0) @Max(366) annualDays!: number;
+  @IsDateString() effectiveFrom!: string;
+  @IsOptional() @IsDateString() effectiveTo?: string;
+}
+export class CreateOvertimeRequestDto {
+  @IsUUID() workerId!: string;
+  @IsUUID() attendanceId!: string;
+  @IsInt() @Min(1) @Max(1440) minutesRequested!: number;
+  @IsString() @Length(5,500) reason!: string;
+}
+export class CreateTimesheetDto {
+  @IsUUID() workerId!: string;
+  @IsDateString() periodStart!: string;
+  @IsDateString() periodEnd!: string;
+}
+export class ReviewAttendanceWorkflowDto { @IsString() @Length(3,500) reason!: string; }

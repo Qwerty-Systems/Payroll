@@ -65,3 +65,12 @@ Worker documents are stored in private object storage with tenant-scoped metadat
 - Approved attendance records can receive tenant-scoped correction requests with a reason and proposed clock-in, clock-out and/or minutes-worked values.
 - A single pending correction is allowed per attendance record. The requester cannot approve their own correction; approval/rejection requires a review reason and is audited.
 - The correction request table enforces tenant RLS and a composite tenant/attendance foreign key. This does not yet replace the remaining shift, leave, overtime and timesheet workflows.
+
+
+## Attendance planning and approvals (in review)
+- Tenant-isolated shift templates and effective-dated worker assignments are available through the operations API.
+- Leave entitlement policies are effective-dated and tenant-configured; leave requests reject overlapping pending/approved ranges, balances report configured entitlement against approved usage, and review enforces separation of duties.
+- Overtime requests must reference approved attendance for the same worker and require an independent reviewer.
+- Timesheets are generated from approved attendance, preserve attendance-line references, and support submit/approve/reject with separation of duties.
+- The workspace now exposes shift creation, leave requests and policy setup, overtime requests, timesheet generation/review and attendance correction requests.
+- Approved overtime is not yet added to payroll automatically. Leave balance accrual/proration and statutory entitlement interpretation still require an approved tenant policy and legal review.

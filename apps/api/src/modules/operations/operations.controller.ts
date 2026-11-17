@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { IsIn, IsString, MinLength } from 'class-validator';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
-import { CreateAttendanceDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeStatusDto } from './operations.dto';
+import { CreateAttendanceDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeStatusDto, CreateShiftDto, AssignShiftDto, CreateLeaveRequestDto, SetLeaveEntitlementDto, CreateOvertimeRequestDto, CreateTimesheetDto, ReviewAttendanceWorkflowDto } from './operations.dto';
 import { OperationsService } from './operations.service';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
@@ -51,5 +51,25 @@ export class OperationsController {
   @Post('attendance/:id/corrections') @TenantPermissions('attendance.capture') requestAttendanceCorrection(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:CreateAttendanceCorrectionDto) { return this.operations.requestAttendanceCorrection(req.tenant.id,req.tenant.userId,id,dto); }
   @Post('attendance-corrections/:id/approve') @TenantPermissions('attendance.approve') approveAttendanceCorrection(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:ReviewAttendanceCorrectionDto) { return this.operations.reviewAttendanceCorrection(req.tenant.id,req.tenant.userId,id,'approve',dto.reason); }
   @Post('attendance-corrections/:id/reject') @TenantPermissions('attendance.approve') rejectAttendanceCorrection(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:ReviewAttendanceCorrectionDto) { return this.operations.reviewAttendanceCorrection(req.tenant.id,req.tenant.userId,id,'reject',dto.reason); }
+
+
+  @Get('attendance/shifts') @TenantPermissions('attendance.read') listShifts(@Req() req:TenantRequest){return this.operations.listShifts(req.tenant.id);}
+  @Post('attendance/shifts') @TenantPermissions('attendance.manage') createShift(@Req() req:TenantRequest,@Body() dto:CreateShiftDto){return this.operations.createShift(req.tenant.id,req.tenant.userId,dto);}
+  @Post('attendance/shift-assignments') @TenantPermissions('attendance.manage') assignShift(@Req() req:TenantRequest,@Body() dto:AssignShiftDto){return this.operations.assignShift(req.tenant.id,req.tenant.userId,dto);}
+  @Get('attendance/leave-requests') @TenantPermissions('attendance.read') listLeaveRequests(@Req() req:TenantRequest){return this.operations.listLeaveRequests(req.tenant.id);}
+  @Post('attendance/leave-requests') @TenantPermissions('attendance.capture') createLeaveRequest(@Req() req:TenantRequest,@Body() dto:CreateLeaveRequestDto){return this.operations.createLeaveRequest(req.tenant.id,req.tenant.userId,dto);}
+  @Post('attendance/leave-entitlements') @TenantPermissions('attendance.manage') setLeaveEntitlement(@Req() req:TenantRequest,@Body() dto:SetLeaveEntitlementDto){return this.operations.setLeaveEntitlement(req.tenant.id,req.tenant.userId,dto);}
+  @Get('attendance/workers/:workerId/leave-balances') @TenantPermissions('attendance.read') leaveBalances(@Req() req:TenantRequest,@Param('workerId',ParseUUIDPipe) workerId:string,@Query('year') year?:string){const y=year?Number(year):new Date().getUTCFullYear();if(!Number.isInteger(y)||y<2000||y>2200)throw new BadRequestException('Invalid leave balance year.');return this.operations.leaveBalances(req.tenant.id,workerId,y);}
+  @Post('attendance/leave-requests/:id/approve') @TenantPermissions('attendance.approve') approveLeave(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:ReviewAttendanceWorkflowDto){return this.operations.reviewLeaveRequest(req.tenant.id,req.tenant.userId,id,'approve',dto.reason);}
+  @Post('attendance/leave-requests/:id/reject') @TenantPermissions('attendance.approve') rejectLeave(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:ReviewAttendanceWorkflowDto){return this.operations.reviewLeaveRequest(req.tenant.id,req.tenant.userId,id,'reject',dto.reason);}
+  @Get('attendance/overtime-requests') @TenantPermissions('attendance.read') listOvertime(@Req() req:TenantRequest){return this.operations.listOvertimeRequests(req.tenant.id);}
+  @Post('attendance/overtime-requests') @TenantPermissions('attendance.capture') createOvertime(@Req() req:TenantRequest,@Body() dto:CreateOvertimeRequestDto){return this.operations.createOvertimeRequest(req.tenant.id,req.tenant.userId,dto);}
+  @Post('attendance/overtime-requests/:id/approve') @TenantPermissions('attendance.approve') approveOvertime(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:ReviewAttendanceWorkflowDto){return this.operations.reviewOvertimeRequest(req.tenant.id,req.tenant.userId,id,'approve',dto.reason);}
+  @Post('attendance/overtime-requests/:id/reject') @TenantPermissions('attendance.approve') rejectOvertime(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:ReviewAttendanceWorkflowDto){return this.operations.reviewOvertimeRequest(req.tenant.id,req.tenant.userId,id,'reject',dto.reason);}
+  @Get('attendance/timesheets') @TenantPermissions('attendance.read') listTimesheets(@Req() req:TenantRequest){return this.operations.listTimesheets(req.tenant.id);}
+  @Post('attendance/timesheets') @TenantPermissions('attendance.capture') createTimesheet(@Req() req:TenantRequest,@Body() dto:CreateTimesheetDto){return this.operations.createTimesheet(req.tenant.id,req.tenant.userId,dto);}
+  @Post('attendance/timesheets/:id/submit') @TenantPermissions('attendance.capture') submitTimesheet(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string){return this.operations.transitionTimesheet(req.tenant.id,req.tenant.userId,id,'submit');}
+  @Post('attendance/timesheets/:id/approve') @TenantPermissions('attendance.approve') approveTimesheet(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string){return this.operations.transitionTimesheet(req.tenant.id,req.tenant.userId,id,'approve');}
+  @Post('attendance/timesheets/:id/reject') @TenantPermissions('attendance.approve') rejectTimesheet(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:ReviewAttendanceWorkflowDto){return this.operations.transitionTimesheet(req.tenant.id,req.tenant.userId,id,'reject',dto.reason);}
 
 }
