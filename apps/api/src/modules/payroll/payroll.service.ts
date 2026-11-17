@@ -65,36 +65,61 @@ export class PayrollService {
         if (!['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'].includes(worker.engagement_type)) throw new ConflictException('Worker '+worker.worker_number+' has an unsupported engagement classification.');
         const rate = Number(worker.rate_amount);
         const earningsResult = calculateContractEarnings({
-          payBasis: worker.pay_basis,
-          rate,
-          periodStart: String(run.start_date),
-          periodEnd: String(run.end_date),
+          payBasis: worker.pay_basis, rate,
+          periodStart: String(run.start_date), periodEnd: String(run.end_date),
           contractStart: String(worker.effective_from),
           contractEnd: worker.effective_to ? String(worker.effective_to) : null,
           approvedDays: Number(worker.approved_days),
           approvedMinutes: Number(worker.approved_minutes),
           approvedUnits: Number(worker.approved_units),
         });
-        const earnings = earningsResult.amount;
-        const contractorNeedsReview = ['subcontractor','independent_contractor'].includes(worker.engagement_type);
-        // Do not apply employee PAYE/SHIF/NSSF deductions to a service contractor by default.
-        // Their withholding/VAT treatment is a separate reviewed workflow; payroll finalization remains blocked.
-        const statutory = contractorNeedsReview
-          ? {
-              gross: earnings, taxableIncome: 0, paye: 0, shif: 0, nssf: 0, housingLevy: 0,
-              employeeStatutoryDeductions: 0, employerNssf: 0, employerHousingLevy: 0, nita: 0,
-              employerContributions: 0, netBeforeOtherDeductions: earnings,
-              warnings: ['CONTRACTOR_TAX_TREATMENT_REQUIRES_REVIEW'], lines: [],
-            }
-          : calculateKenyaMonthlyPayroll(earnings,rules);
-        const classificationWarnings = contractorNeedsReview
-          ? ['WORKER_CLASSIFICATION_REQUIRES_STATUTORY_REVIEW']
-          : [];
-        warnings.push(...earningsResult.warnings.map(w => worker.worker_number+':'+w));
-        warnings.push(...classificationWarnings.map(w => worker.worker_number+':'+w));
-        const snapshot = { worker:{id:worker.worker_id,workerNumber:worker.worker_number,firstName:worker.first_name,middleName:worker.middle_name,lastName:worker.last_name,email:worker.email},contract:{id:worker.contract_id,engagementType:worker.engagement_type,payBasis:worker.pay_basis,rate,currency:worker.currency},period:{startDate:run.start_date,endDate:run.end_date},attendance:{approvedDays:Number(worker.approved_days),approvedMinutes:Number(worker.approved_minutes)},earnings:{quantity:earningsResult.quantity,unit:earningsResult.unit,rate,amount:earnings},classificationWarnings,statutory,netPay:statutory.netBeforeOtherDeductions,engineVersion:ENGINE_VERSION };
-        itemSnapshots.push({workerId:worker.worker_id,earnings,employeeDeductions:statutory.employeeStatutoryDeductions,employerContributions:statutory.employerContributions,netPay:statutory.netBeforeOtherDeductions,snapshot});
-        warnings.push(...statutory.warnings.map(w => worker.worker_number+':'+w));
+        const baseEarnings = earningsResult.amount;
+        const components = await m.query(
+          "SELECT id,code,name,component_type,calculation_method,amount::numeric AS amount,taxable FROM worker_pay_components WHERE tenant_id=$1 AND worker_id=$2 AND status='active' AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $4::date) ORDER BY component_type,code",
+          [tenantId, worker.worker_id, run.end_date, run.start_date],
+        );
+        const componentLines = components.map((item:any) => ({
+          id:item.id,code:item.code,name:item.name,type:item.component_type,
+          calculationMethod:item.calculation_method,rate:Number(item.amount),taxable:Boolean(item.taxable),
+          amount:round(item.calculation_method==='percentage_of_base' ? baseEarnings*Number(item.amount)/100 : Number(item.amount)),
+        }));
+        const allowances = componentLines.filter((x:any)=>x.type==='allowance');
+        const deductions = componentLines.filter((x:any)=>x.type==='deduction');
+        const benefits = componentLines.filter((x:any)=>x.type==='benefit');
+        const allowanceTotal=round(allowances.reduce((sum:number,x:any)=>sum+x.amount,0));
+        const taxableAllowance=round(allowances.filter((x:any)=>x.taxable).reduce((sum:number,x:any)=>sum+x.amount,0));
+        const nonTaxableAllowance=round(allowances.filter((x:any)=>!x.taxable).reduce((sum:number,x:any)=>sum+x.amount,0));
+        const deductionTotal=round(deductions.reduce((sum:number,x:any)=>sum+x.amount,0));
+        const benefitTotal=round(benefits.reduce((sum:number,x:any)=>sum+x.amount,0));
+        const grossEarnings=round(baseEarnings+allowanceTotal);
+        const taxableGross=round(baseEarnings+taxableAllowance);
+        const contractorNeedsReview=['subcontractor','independent_contractor'].includes(worker.engagement_type);
+        // Only explicitly taxable allowances are included in the statutory calculation base.
+        // The applicable treatment remains controlled by the published, compliance-approved ruleset.
+        const statutory=contractorNeedsReview
+          ? {gross:taxableGross,taxableIncome:0,paye:0,shif:0,nssf:0,housingLevy:0,employeeStatutoryDeductions:0,employerNssf:0,employerHousingLevy:0,nita:0,employerContributions:0,netBeforeOtherDeductions:grossEarnings,warnings:['CONTRACTOR_TAX_TREATMENT_REQUIRES_REVIEW'],lines:[]}
+          : calculateKenyaMonthlyPayroll(taxableGross,rules);
+        const employeeDeductions=round(Number(statutory.employeeStatutoryDeductions)+deductionTotal);
+        const netPay=round(grossEarnings-employeeDeductions);
+        const employerContributions=round(Number(statutory.employerContributions)+benefitTotal);
+        const classificationWarnings=contractorNeedsReview?['WORKER_CLASSIFICATION_REQUIRES_STATUTORY_REVIEW']:[];
+        const componentWarnings=netPay<0?['NET_PAY_NEGATIVE']:[];
+        warnings.push(...earningsResult.warnings.map(w=>worker.worker_number+':'+w));
+        warnings.push(...classificationWarnings.map(w=>worker.worker_number+':'+w));
+        warnings.push(...componentWarnings.map(w=>worker.worker_number+':'+w));
+        warnings.push(...statutory.warnings.map((w:string)=>worker.worker_number+':'+w));
+        const snapshot={
+          worker:{id:worker.worker_id,workerNumber:worker.worker_number,firstName:worker.first_name,middleName:worker.middle_name,lastName:worker.last_name,email:worker.email},
+          contract:{id:worker.contract_id,engagementType:worker.engagement_type,payBasis:worker.pay_basis,rate,currency:worker.currency},
+          period:{startDate:run.start_date,endDate:run.end_date},
+          attendance:{approvedDays:Number(worker.approved_days),approvedMinutes:Number(worker.approved_minutes)},
+          earnings:{quantity:earningsResult.quantity,unit:earningsResult.unit,rate,baseAmount:baseEarnings,allowances:allowanceTotal,taxableAllowances:taxableAllowance,nonTaxableAllowances:nonTaxableAllowance,total:grossEarnings},
+          components:componentLines,
+          deductions:{statutory:Number(statutory.employeeStatutoryDeductions),other:deductionTotal,total:employeeDeductions},
+          benefits:{employerBenefits:benefitTotal},
+          classificationWarnings,componentWarnings,statutory,netPay,employerContributions,engineVersion:ENGINE_VERSION
+        };
+        itemSnapshots.push({workerId:worker.worker_id,earnings:grossEarnings,employeeDeductions,employerContributions,netPay,snapshot});
       }
       await m.query('DELETE FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2',[tenantId,runId]);
       let totalEarnings=0,totalEmployeeDeductions=0,totalEmployerContributions=0,totalNet=0;
