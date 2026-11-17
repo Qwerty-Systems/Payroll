@@ -31,6 +31,8 @@ export class OperationsController {
 
   @Get('pay-grades') @TenantPermissions('workers.read') payGrades(@Req() req:TenantRequest) { return this.operations.listPayGrades(req.tenant.id); }
   @Get('pay-components') @TenantPermissions('payroll.read') payComponents(@Req() req:TenantRequest) { return this.operations.listPayComponents(req.tenant.id); }
+  @Get('pay-components/allowances') @TenantPermissions('payroll.read') allowanceTypes(@Req() req:TenantRequest) { return this.operations.listAllowanceTypes(req.tenant.id); }
+  @Get('pay-components/deductions') @TenantPermissions('payroll.read') deductionTypes(@Req() req:TenantRequest) { return this.operations.listDeductionTypes(req.tenant.id); }
   @Patch('pay-components/allowances/:id') @TenantPermissions('payroll.calculate') updateAllowanceType(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateAllowanceTypeDto) { return this.operations.updateAllowanceType(req.tenant.id,req.tenant.userId,id,dto); }
   @Patch('pay-components/deductions/:id') @TenantPermissions('payroll.calculate') updateDeductionType(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateDeductionTypeDto) { return this.operations.updateDeductionType(req.tenant.id,req.tenant.userId,id,dto); }
   @Post('pay-grades') @TenantPermissions('workers.manage') createPayGrade(@Req() req:TenantRequest,@Body() dto:CreatePayGradeDto) { return this.operations.createPayGrade(req.tenant.id,req.tenant.userId,dto); }
