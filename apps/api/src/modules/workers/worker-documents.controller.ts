@@ -40,6 +40,6 @@ export class WorkerDocumentsController {
     @Param('workerId',ParseUUIDPipe) workerId: string,
     @Param('documentId',ParseUUIDPipe) documentId: string,
   ) {
-    return this.documents.createDownloadUrl(req.tenant.id,workerId,documentId);
+    return this.documents.createDownloadUrl(req.tenant.id,req.tenant.userId,workerId,documentId);
   }
 }
