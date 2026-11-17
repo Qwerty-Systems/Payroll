@@ -4,8 +4,9 @@ import { TenantTransactionService } from '../../database/tenant-transaction.serv
 import { calculateKenyaMonthlyPayroll, type StatutoryRule } from './kenya-payroll-calculator';
 import { CreatePayrollPeriodDto } from './payroll.dto';
 import { calculateContractEarnings } from './contract-earnings';
+import { blockingWarnings, calculateAllowances, calculateOtherDeductions, type AllowanceAssignmentInput, type DeductionAssignmentInput } from './adjustments';
 
-const ENGINE_VERSION = 'jengaflow-ke-0.1.0';
+const ENGINE_VERSION = 'jengaflow-ke-0.2.0';
 const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 @Injectable()
@@ -53,12 +54,33 @@ export class PayrollService {
       const rules = rawRules.map((r: any) => ({ code:r.code, calculation_method:r.calculation_method, configuration:r.configuration })) as StatutoryRule[];
       const workers = await m.query("SELECT w.id AS worker_id,w.worker_number,w.first_name,w.middle_name,w.last_name,w.email,c.id AS contract_id,c.engagement_type,c.pay_basis,c.rate_amount::numeric AS rate_amount,c.currency,c.effective_from,c.effective_to,c.terms,(SELECT count(DISTINCT a.work_date)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS approved_days,(SELECT COALESCE(sum(a.minutes_worked),0)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS approved_minutes,(SELECT COALESCE(sum(o.quantity),0)::numeric FROM worker_output_entries o WHERE o.tenant_id=w.tenant_id AND o.worker_id=w.id AND o.status='approved' AND o.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date)) AND o.unit_code = ANY(ARRAY(SELECT jsonb_array_elements_text(COALESCE(c.terms->'unitCodes','[]'::jsonb))))) AS approved_units,(SELECT count(*)::int FROM worker_contracts c2 WHERE c2.tenant_id=w.tenant_id AND c2.worker_id=w.id AND c2.effective_from <= $3::date AND (c2.effective_to IS NULL OR c2.effective_to >= $2::date)) AS overlapping_contracts FROM workers w JOIN worker_contracts c ON c.tenant_id=w.tenant_id AND c.worker_id=w.id AND c.effective_from <= $3::date AND (c.effective_to IS NULL OR c.effective_to >= $2::date) WHERE w.tenant_id=$1 AND w.status='active' ORDER BY w.worker_number",[tenantId,run.start_date,run.end_date]);
       if (!workers.length) throw new ConflictException('No active workers with contracts overlap this payroll period.');
-      const allowanceRows = await m.query('SELECT count(*)::int AS count FROM worker_allowance_assignments WHERE tenant_id=$1 AND status=\'active\' AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $2::date)',[tenantId,run.start_date,run.end_date]);
-      const deductionRows = await m.query('SELECT count(*)::int AS count FROM worker_deduction_assignments WHERE tenant_id=$1 AND status=\'active\' AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $2::date)',[tenantId,run.start_date,run.end_date]);
+      const attendanceWindow = (alias: string) => "BETWEEN GREATEST($2::date,"+alias+".effective_from) AND LEAST($3::date,COALESCE("+alias+".effective_to,$3::date))";
+      const allowanceRows = await m.query(
+        "SELECT a.id AS assignment_id,a.worker_id,a.allowance_type_id AS type_id,t.code,t.name,t.calculation_method AS method,t.tax_treatment,t.configuration,t.is_enabled AS type_enabled,t.effective_from::text AS type_effective_from,t.effective_to::text AS type_effective_to,a.amount::numeric AS amount,a.effective_from::text AS effective_from,a.effective_to::text AS effective_to,"
+        +"(SELECT count(DISTINCT r.work_date)::int FROM attendance_records r WHERE r.tenant_id=a.tenant_id AND r.worker_id=a.worker_id AND r.status='approved' AND r.work_date "+attendanceWindow('a')+") AS approved_days,"
+        +"(SELECT COALESCE(sum(r.minutes_worked),0)::int FROM attendance_records r WHERE r.tenant_id=a.tenant_id AND r.worker_id=a.worker_id AND r.status='approved' AND r.work_date "+attendanceWindow('a')+") AS approved_minutes "
+        +"FROM worker_allowance_assignments a JOIN tenant_allowance_types t ON t.tenant_id=a.tenant_id AND t.id=a.allowance_type_id "
+        +"WHERE a.tenant_id=$1 AND a.status='active' AND a.effective_from <= $3::date AND (a.effective_to IS NULL OR a.effective_to >= $2::date) ORDER BY a.worker_id,t.code,a.id",
+        [tenantId,run.start_date,run.end_date]);
+      const deductionRows = await m.query(
+        "SELECT d.id AS assignment_id,d.worker_id,d.deduction_type_id AS type_id,t.code,t.name,t.calculation_method AS method,t.taxable_treatment,t.configuration,t.is_enabled AS type_enabled,t.effective_from::text AS type_effective_from,t.effective_to::text AS type_effective_to,d.amount::numeric AS amount,d.outstanding_balance::numeric AS outstanding_balance,d.effective_from::text AS effective_from,d.effective_to::text AS effective_to "
+        +"FROM worker_deduction_assignments d JOIN tenant_deduction_types t ON t.tenant_id=d.tenant_id AND t.id=d.deduction_type_id "
+        +"WHERE d.tenant_id=$1 AND d.status='active' AND d.effective_from <= $3::date AND (d.effective_to IS NULL OR d.effective_to >= $2::date) ORDER BY d.worker_id,t.code,d.id",
+        [tenantId,run.start_date,run.end_date]);
+      const allowancesByWorker = new Map<string, AllowanceAssignmentInput[]>();
+      for (const r of allowanceRows) {
+        const list = allowancesByWorker.get(r.worker_id) ?? [];
+        list.push({ assignmentId:r.assignment_id,typeId:r.type_id,code:r.code,name:r.name,method:r.method,taxTreatment:r.tax_treatment,configuration:r.configuration ?? {},typeEnabled:r.type_enabled,typeEffectiveFrom:r.type_effective_from,typeEffectiveTo:r.type_effective_to,amount:Number(r.amount),effectiveFrom:r.effective_from,effectiveTo:r.effective_to,approvedDays:Number(r.approved_days),approvedMinutes:Number(r.approved_minutes) });
+        allowancesByWorker.set(r.worker_id, list);
+      }
+      const deductionsByWorker = new Map<string, DeductionAssignmentInput[]>();
+      for (const r of deductionRows) {
+        const list = deductionsByWorker.get(r.worker_id) ?? [];
+        list.push({ assignmentId:r.assignment_id,typeId:r.type_id,code:r.code,name:r.name,method:r.method,taxableTreatment:r.taxable_treatment,configuration:r.configuration ?? {},typeEnabled:r.type_enabled,typeEffectiveFrom:r.type_effective_from,typeEffectiveTo:r.type_effective_to,amount:Number(r.amount),outstandingBalance:r.outstanding_balance===null?null:Number(r.outstanding_balance),effectiveFrom:r.effective_from,effectiveTo:r.effective_to });
+        deductionsByWorker.set(r.worker_id, list);
+      }
       const warnings: string[] = [];
       if (!rulesetRows[0].compliance_approved_at) warnings.push('STATUTORY_RULESET_REQUIRES_PLATFORM_COMPLIANCE_APPROVAL');
-      if (Number(allowanceRows[0].count) > 0) warnings.push('ALLOWANCE_ASSIGNMENTS_NOT_INCLUDED_IN_THIS_ENGINE_VERSION');
-      if (Number(deductionRows[0].count) > 0) warnings.push('NON_STATUTORY_DEDUCTION_ASSIGNMENTS_NOT_INCLUDED_IN_THIS_ENGINE_VERSION');
       const itemSnapshots: any[] = [];
       for (const worker of workers) {
         if (Number(worker.overlapping_contracts) !== 1) throw new ConflictException('Worker '+worker.worker_number+' has overlapping contracts. Resolve contract dates before calculating payroll.');
@@ -75,25 +97,42 @@ export class PayrollService {
           approvedMinutes: Number(worker.approved_minutes),
           approvedUnits: Number(worker.approved_units),
         });
-        const earnings = earningsResult.amount;
+        const basicEarnings = earningsResult.amount;
+        const allowanceList = allowancesByWorker.get(worker.worker_id) ?? [];
+        const seenAllowanceTypes = new Set<string>();
+        const duplicateAllowanceWarnings: string[] = [];
+        for (const a of allowanceList) {
+          if (seenAllowanceTypes.has(a.typeId)) duplicateAllowanceWarnings.push(a.code+':ALLOWANCE_DUPLICATE_ASSIGNMENT');
+          seenAllowanceTypes.add(a.typeId);
+        }
+        const allowances = calculateAllowances({ periodStart:String(run.start_date), periodEnd:String(run.end_date), basicEarnings, assignments: allowanceList });
+        const grossPay = round(basicEarnings + allowances.total);
+        const statutoryBase = round(basicEarnings + allowances.taxableTotal);
+        const otherDeductions = calculateOtherDeductions({ periodStart:String(run.start_date), periodEnd:String(run.end_date), basicEarnings, grossEarnings: grossPay, assignments: deductionsByWorker.get(worker.worker_id) ?? [] });
         const contractorNeedsReview = ['subcontractor','independent_contractor'].includes(worker.engagement_type);
         // Do not apply employee PAYE/SHIF/NSSF deductions to a service contractor by default.
         // Their withholding/VAT treatment is a separate reviewed workflow; payroll finalization remains blocked.
         const statutory = contractorNeedsReview
           ? {
-              gross: earnings, taxableIncome: 0, paye: 0, shif: 0, nssf: 0, housingLevy: 0,
+              gross: statutoryBase, taxableIncome: 0, paye: 0, shif: 0, nssf: 0, housingLevy: 0,
               employeeStatutoryDeductions: 0, employerNssf: 0, employerHousingLevy: 0, nita: 0,
-              employerContributions: 0, netBeforeOtherDeductions: earnings,
+              employerContributions: 0, netBeforeOtherDeductions: statutoryBase,
               warnings: ['CONTRACTOR_TAX_TREATMENT_REQUIRES_REVIEW'], lines: [],
             }
-          : calculateKenyaMonthlyPayroll(earnings,rules);
+          : calculateKenyaMonthlyPayroll(statutoryBase,rules);
+        const employeeDeductions = round(statutory.employeeStatutoryDeductions + otherDeductions.total);
+        const netPay = round(grossPay - employeeDeductions);
         const classificationWarnings = contractorNeedsReview
           ? ['WORKER_CLASSIFICATION_REQUIRES_STATUTORY_REVIEW']
           : [];
         warnings.push(...earningsResult.warnings.map(w => worker.worker_number+':'+w));
         warnings.push(...classificationWarnings.map(w => worker.worker_number+':'+w));
-        const snapshot = { worker:{id:worker.worker_id,workerNumber:worker.worker_number,firstName:worker.first_name,middleName:worker.middle_name,lastName:worker.last_name,email:worker.email},contract:{id:worker.contract_id,engagementType:worker.engagement_type,payBasis:worker.pay_basis,rate,currency:worker.currency},period:{startDate:run.start_date,endDate:run.end_date},attendance:{approvedDays:Number(worker.approved_days),approvedMinutes:Number(worker.approved_minutes)},earnings:{quantity:earningsResult.quantity,unit:earningsResult.unit,rate,amount:earnings},classificationWarnings,statutory,netPay:statutory.netBeforeOtherDeductions,engineVersion:ENGINE_VERSION };
-        itemSnapshots.push({workerId:worker.worker_id,earnings,employeeDeductions:statutory.employeeStatutoryDeductions,employerContributions:statutory.employerContributions,netPay:statutory.netBeforeOtherDeductions,snapshot});
+        warnings.push(...allowances.warnings.map(w => worker.worker_number+':'+w));
+        warnings.push(...duplicateAllowanceWarnings.map(w => worker.worker_number+':'+w));
+        warnings.push(...otherDeductions.warnings.map(w => worker.worker_number+':'+w));
+        if (netPay < 0 && !statutory.warnings.includes('NET_PAY_NEGATIVE')) warnings.push(worker.worker_number+':NET_PAY_NEGATIVE');
+        const snapshot = { worker:{id:worker.worker_id,workerNumber:worker.worker_number,firstName:worker.first_name,middleName:worker.middle_name,lastName:worker.last_name,email:worker.email},contract:{id:worker.contract_id,engagementType:worker.engagement_type,payBasis:worker.pay_basis,rate,currency:worker.currency},period:{startDate:run.start_date,endDate:run.end_date},attendance:{approvedDays:Number(worker.approved_days),approvedMinutes:Number(worker.approved_minutes)},earnings:{quantity:earningsResult.quantity,unit:earningsResult.unit,rate,amount:basicEarnings,allowancesTotal:allowances.total,grossPay},allowances:{lines:allowances.lines,taxableTotal:allowances.taxableTotal,nonTaxableTotal:allowances.nonTaxableTotal,total:allowances.total},otherDeductions:{lines:otherDeductions.lines,total:otherDeductions.total},classificationWarnings,statutory,netPay,engineVersion:ENGINE_VERSION };
+        itemSnapshots.push({workerId:worker.worker_id,earnings:grossPay,employeeDeductions,employerContributions:statutory.employerContributions,netPay,snapshot});
         warnings.push(...statutory.warnings.map(w => worker.worker_number+':'+w));
       }
       await m.query('DELETE FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2',[tenantId,runId]);
@@ -126,13 +165,18 @@ export class PayrollService {
         if(run.status!=='approved') throw new ConflictException('Only an approved payroll run can be finalized.');
         if(!run.compliance_approved_at) throw new ConflictException('The statutory ruleset has not received platform compliance approval. Payroll finalization is blocked.');
         const warnings=Array.isArray(run.warnings)?run.warnings:JSON.parse(run.warnings ?? '[]');
-        const blocking=warnings.filter((w:string)=>w==='STATUTORY_RULESET_REQUIRES_PLATFORM_COMPLIANCE_APPROVAL'||w==='ALLOWANCE_ASSIGNMENTS_NOT_INCLUDED_IN_THIS_ENGINE_VERSION'||w==='NON_STATUTORY_DEDUCTION_ASSIGNMENTS_NOT_INCLUDED_IN_THIS_ENGINE_VERSION'||w.endsWith(':NET_PAY_NEGATIVE')||w.endsWith(':WORKER_CLASSIFICATION_REQUIRES_STATUTORY_REVIEW')||w.endsWith(':NO_APPROVED_EARNING_UNITS')||w.endsWith(':CONTRACT_NOT_ACTIVE_IN_PAY_PERIOD'));
+        const blocking=blockingWarnings(warnings);
         if(blocking.length) throw new ConflictException({message:'Payroll has unresolved blocking warnings.',warnings:blocking});
         if(run.approved_by===actorId) throw new BadRequestException('Separation of duties: the payroll approver cannot finalize the same run.');
         const items=await m.query('SELECT i.id,i.worker_id,i.calculation_snapshot,w.worker_number FROM payroll_run_items i JOIN workers w ON w.tenant_id=i.tenant_id AND w.id=i.worker_id WHERE i.tenant_id=$1 AND i.payroll_run_id=$2',[tenantId,runId]);
         for(const item of items){
           const number=String(run.period_code)+'-'+String(item.worker_number)+'-'+String(run.run_number);
           await m.query('INSERT INTO payslips (tenant_id,payroll_run_id,payroll_run_item_id,worker_id,payslip_number,snapshot) VALUES ($1,$2,$3,$4,$5,$6::jsonb)',[tenantId,runId,item.id,item.worker_id,number,JSON.stringify(item.calculation_snapshot)]);
+          const recoveries = (item.calculation_snapshot?.otherDeductions?.lines ?? []).filter((l:any)=>l.method==='balance_recovery' && Number(l.amount)>0);
+          for(const line of recoveries){
+            const applied=await m.query("UPDATE worker_deduction_assignments SET outstanding_balance=outstanding_balance-$4::numeric,status=CASE WHEN outstanding_balance-$4::numeric<=0 THEN 'completed' ELSE status END WHERE tenant_id=$1 AND id=$2 AND worker_id=$3 AND status='active' AND outstanding_balance >= $4::numeric RETURNING id",[tenantId,line.assignmentId,item.worker_id,line.amount]);
+            if(!applied.length) throw new ConflictException('The recovery balance for '+line.code+' (worker '+item.worker_number+') changed since this run was calculated. Recalculate the payroll run before finalizing.');
+          }
         }
         await m.query("UPDATE payroll_runs SET status='finalized',finalized_by=$3,finalized_at=now() WHERE tenant_id=$1 AND id=$2",[tenantId,runId,actorId]);
       }
