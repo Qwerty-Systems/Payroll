@@ -16,6 +16,7 @@ import { OrganizationModule } from './organization/organization.module';
 import { SyncModule } from './sync/sync.module';
 import { WorkerDocumentsModule } from './workers/worker-documents.module';
 import { ComplianceModule } from './compliance/compliance.module';
+import { WorkforceTimeModule } from './workforce-time/workforce-time.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { ComplianceModule } from './compliance/compliance.module';
     SyncModule,
     WorkerDocumentsModule,
     ComplianceModule,
+    WorkforceTimeModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
