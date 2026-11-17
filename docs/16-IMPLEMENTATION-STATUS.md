@@ -74,3 +74,11 @@ Worker documents are stored in private object storage with tenant-scoped metadat
 - Timesheets are generated from approved attendance, preserve attendance-line references, and support submit/approve/reject with separation of duties.
 - The workspace now exposes shift creation, leave requests and policy setup, overtime requests, timesheet generation/review and attendance correction requests.
 - Approved overtime is not yet added to payroll automatically. Leave balance accrual/proration and statutory entitlement interpretation still require an approved tenant policy and legal review.
+
+
+## Payroll component calculations (in review)
+- Worker allowances, employee deductions and employer benefits are effective-dated tenant records.
+- Fixed and percentage-of-base components are calculated against contract earnings for the payroll period.
+- Taxable allowances are included in the statutory calculation base; non-taxable allowances are included in gross earnings but excluded from that base.
+- Approved component lines, statutory breakdowns, deductions, employer benefits and net pay are preserved in each immutable payroll calculation snapshot and therefore in finalized payslips.
+- Negative net pay and contractor classification conditions remain blocking warnings. Component values are period amounts; the current model does not yet implement component-specific frequency calendars or automatic tax treatment for non-allowance benefits.
