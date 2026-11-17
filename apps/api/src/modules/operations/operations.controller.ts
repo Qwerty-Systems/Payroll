@@ -3,7 +3,7 @@ import { IsIn, IsString, MinLength } from 'class-validator';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
-import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto } from './operations.dto';
+import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeStatusDto } from './operations.dto';
 import { OperationsService } from './operations.service';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
@@ -22,6 +22,10 @@ export class OperationsController {
 
   @Get('sites') @TenantPermissions('projects.read') sites(@Req() req:TenantRequest,@Query('projectId') projectId?:string) { return this.operations.listSites(req.tenant.id,projectId); }
   @Post('sites') @TenantPermissions('projects.manage') createSite(@Req() req:TenantRequest,@Body() dto:CreateSiteDto) { return this.operations.createSite(req.tenant.id,dto); }
+
+  @Get('pay-grades') @TenantPermissions('workers.read') payGrades(@Req() req:TenantRequest) { return this.operations.listPayGrades(req.tenant.id); }
+  @Post('pay-grades') @TenantPermissions('workers.manage') createPayGrade(@Req() req:TenantRequest,@Body() dto:CreatePayGradeDto) { return this.operations.createPayGrade(req.tenant.id,req.tenant.userId,dto); }
+  @Patch('pay-grades/:id/status') @TenantPermissions('workers.manage') updatePayGrade(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdatePayGradeStatusDto) { return this.operations.setPayGradeStatus(req.tenant.id,id,dto.status); }
 
   @Get('workers') @TenantPermissions('workers.read') workers(@Req() req:TenantRequest) { return this.operations.listWorkers(req.tenant.id); }
   @Post('workers') @TenantPermissions('workers.manage') createWorker(@Req() req:TenantRequest,@Body() dto:CreateWorkerDto) { return this.operations.createWorker(req.tenant.id,dto); }
