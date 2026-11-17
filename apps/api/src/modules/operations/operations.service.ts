@@ -184,6 +184,7 @@ export class OperationsService {
     if (input.clockOut !== undefined) proposedValues.clockOut = input.clockOut;
     if (input.minutesWorked !== undefined) proposedValues.minutesWorked = input.minutesWorked;
     if (!Object.keys(proposedValues).length) throw new BadRequestException('Provide at least one attendance field to correct.');
+    if (!input.reason?.trim() || input.reason.trim().length < 5) throw new BadRequestException('A correction reason of at least five characters is required.');
     if (input.clockIn && input.clockOut && new Date(input.clockOut) <= new Date(input.clockIn)) {
       throw new BadRequestException('Clock-out must be after clock-in.');
     }
