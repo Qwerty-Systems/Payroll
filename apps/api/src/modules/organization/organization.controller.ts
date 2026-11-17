@@ -15,11 +15,11 @@ class EndAssignmentDto { @IsDateString() effectiveTo!: string; }
 export class OrganizationController {
   constructor(private readonly organization: OrganizationService) {}
   @Get('branches') @TenantPermissions('company.read') branches(@Req() req: TenantRequest) { return this.organization.listBranches(req.tenant.id); }
-  @Post('branches') @TenantPermissions('company.manage') createBranch(@Req() req: TenantRequest, @Body() dto: CreateBranchDto) { return this.organization.createBranch(req.tenant.id,dto); }
+  @Post('branches') @TenantPermissions('company.manage') createBranch(@Req() req: TenantRequest, @Body() dto: CreateBranchDto) { return this.organization.createBranch(req.tenant.id,req.tenant.userId,dto); }
   @Get('departments') @TenantPermissions('company.read') departments(@Req() req: TenantRequest) { return this.organization.listDepartments(req.tenant.id); }
-  @Post('departments') @TenantPermissions('company.manage') createDepartment(@Req() req: TenantRequest, @Body() dto: CreateDepartmentDto) { return this.organization.createDepartment(req.tenant.id,dto); }
+  @Post('departments') @TenantPermissions('company.manage') createDepartment(@Req() req: TenantRequest, @Body() dto: CreateDepartmentDto) { return this.organization.createDepartment(req.tenant.id,req.tenant.userId,dto); }
   @Get('cost-centres') @TenantPermissions('company.read') costCentres(@Req() req: TenantRequest) { return this.organization.listCostCentres(req.tenant.id); }
-  @Post('cost-centres') @TenantPermissions('company.manage') createCostCentre(@Req() req: TenantRequest, @Body() dto: CreateCostCentreDto) { return this.organization.createCostCentre(req.tenant.id,dto); }
+  @Post('cost-centres') @TenantPermissions('company.manage') createCostCentre(@Req() req: TenantRequest, @Body() dto: CreateCostCentreDto) { return this.organization.createCostCentre(req.tenant.id,req.tenant.userId,dto); }
 
   @Get('branches/:id') @TenantPermissions('company.read') getBranch(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string){return this.organization.getBranch(req.tenant.id,id);}
   @Patch('branches/:id') @TenantPermissions('company.manage') updateBranch(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateBranchDto){return this.organization.updateBranch(req.tenant.id,req.tenant.userId,id,dto);}
