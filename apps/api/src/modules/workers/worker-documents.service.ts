@@ -67,12 +67,16 @@ export class WorkerDocumentsService {
     }
   }
 
-  async createDownloadUrl(tenantId: string, workerId: string, documentId: string) {
+  async createDownloadUrl(tenantId: string, actorId: string, workerId: string, documentId: string) {
     const rows = await this.tenantDb.run(tenantId, async m => m.query(
       'SELECT object_key AS "objectKey",original_name AS "originalName" FROM worker_documents WHERE tenant_id=$1 AND worker_id=$2 AND id=$3',
       [tenantId,workerId,documentId],
     ));
     if (!rows.length) throw new NotFoundException('Worker document not found.');
+    await this.tenantDb.run(tenantId, m => m.query(
+      "INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'worker.document.download_url_issued','worker_document',$3,$4::jsonb)",
+      [tenantId,actorId,documentId,JSON.stringify({workerId,expiresInSeconds:180})],
+    ));
     return { url: await this.storage.createPrivateDownloadUrl(rows[0].objectKey, 180), fileName: rows[0].originalName, expiresIn: 180 };
   }
 }
