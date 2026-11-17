@@ -32,4 +32,32 @@ describe('calculateKenyaMonthlyPayroll',()=>{
   });
   it('rejects negative earnings',()=>expect(()=>calculateKenyaMonthlyPayroll(-1,rules)).toThrow('Gross earnings'));
   it('rejects a missing statutory rule',()=>expect(()=>calculateKenyaMonthlyPayroll(10000,rules.filter(r=>r.code!=='SHIF'))).toThrow('SHIF'));
+
+  it('rounds half-up to the exact cent where binary floating point rounds down (regression)',()=>{
+    // 341,070.00 x 2.75% = 9,379.425 exactly; the previous float implementation returned 9,379.42.
+    expect(calculateKenyaMonthlyPayroll(341070,rules).shif).toBe(9379.43);
+    // 11,000.50 x 1.5% = 165.0075 -> 165.01
+    expect(calculateKenyaMonthlyPayroll(11000.5,rules).housingLevy).toBe(165.01);
+  });
+  it('matches an independent exact-integer reference for SHIF and AHL across many salaries',()=>{
+    const ref=(cents:bigint,num:bigint,den:bigint)=>{const n=cents*num;const q=n/den;return (n%den)*2n>=den?q+1n:q;};
+    let seed=12345;const rand=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;};
+    for(let i=0;i<20000;i++){
+      const cents=BigInt(Math.floor(rand()*60_000_000)+1);
+      const r=calculateKenyaMonthlyPayroll(Number(cents)/100,rules);
+      expect(Math.round(r.shif*100)).toBe(Number(ref(cents,275n,10000n)));
+      expect(Math.round(r.housingLevy*100)).toBe(Number(ref(cents,15n,1000n)));
+    }
+  });
+  it('keeps components consistent: gross minus employee deductions equals net',()=>{
+    for(const g of [1,8999.99,9000,24000.5,32333,108000,250000.25,1_000_000]){
+      const r=calculateKenyaMonthlyPayroll(g,rules);
+      expect(Math.round(r.netBeforeOtherDeductions*100)).toBe(Math.round(r.gross*100)-Math.round(r.employeeStatutoryDeductions*100));
+      expect(Math.round(r.employeeStatutoryDeductions*100)).toBe(Math.round(r.paye*100)+Math.round(r.shif*100)+Math.round(r.nssf*100)+Math.round(r.housingLevy*100));
+    }
+  });
+  it('rejects rates that cannot be represented exactly',()=>{
+    const bad=rules.map(r=>r.code==='SHIF'?{...r,configuration:{...r.configuration,rate:0.0275000000000001}}:r);
+    expect(()=>calculateKenyaMonthlyPayroll(1000,bad)).toThrow('decimal places');
+  });
 });

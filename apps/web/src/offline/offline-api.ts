@@ -1,4 +1,4 @@
-import { getOfflineMetadata, setOfflineMetadata, type SyncCommand } from './offline-db';
+import { enqueueOfflineCommand, getOfflineMetadata, setOfflineMetadata, type SyncCommand } from './offline-db';
 import { synchronizeTenantOutbox, type SyncSummary } from './offline-sync';
 
 type ApiRequest = <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -28,9 +28,41 @@ async function getOrRegisterDevice(tenantId: string, request: ApiRequest): Promi
   return registered.id;
 }
 
+export interface AttendanceCapture {
+  workerId: string;
+  projectId: string;
+  siteId: string;
+  workDate: string;
+  minutesWorked?: number;
+  clockIn?: string;
+  clockOut?: string;
+}
+
+/**
+ * Saves an attendance record to the on-device outbox. This is the only capture path: the sync API deduplicates by
+ * command ID, so a request that reaches the server but whose response is lost can be retried without creating a
+ * duplicate record (the direct attendance endpoint has no such protection).
+ */
+export async function queueAttendanceCapture(tenantId: string, capture: AttendanceCapture): Promise<SyncCommand> {
+  if (!tenantId) throw new Error('Select a company workspace before capturing attendance.');
+  const payload: Record<string, unknown> = {
+    workerId: capture.workerId, projectId: capture.projectId, siteId: capture.siteId, workDate: capture.workDate,
+  };
+  if (capture.minutesWorked !== undefined) {
+    if (!Number.isInteger(capture.minutesWorked) || capture.minutesWorked < 0 || capture.minutesWorked > 1440) {
+      throw new Error('Minutes worked must be a whole number between 0 and 1440.');
+    }
+    payload.minutesWorked = capture.minutesWorked;
+  }
+  if (capture.clockIn) payload.clockIn = capture.clockIn;
+  if (capture.clockOut) payload.clockOut = capture.clockOut;
+  return enqueueOfflineCommand({ tenantId, entity: 'attendance', operation: 'create', recordId: crypto.randomUUID(), payload });
+}
+
 export async function synchronizeOfflineAttendance(
   tenantId: string,
   request: ApiRequest,
+  options: { ignoreBackoff?: boolean } = {},
 ): Promise<SyncSummary> {
   if (!tenantId) throw new Error('Select a company workspace before synchronizing.');
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -64,5 +96,5 @@ export async function synchronizeOfflineAttendance(
       throw new Error(`Unexpected sync status: ${outcome.status}`);
     }
     return { status: 'synced' };
-  });
+  }, options);
 }

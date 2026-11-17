@@ -38,7 +38,7 @@ describe('SyncService', () => {
       .mockResolvedValueOnce([{ id: deviceId }])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ payload_hash: payloadHash, state: 'accepted', result: { id: 'attendance-1' }, payload: attendancePayload }]);
+      .mockResolvedValueOnce([{ payload_hash: payloadHash, state: 'accepted', result: { id: 'attendance-1' }, payload: attendancePayload, actor_user_id: userId }]);
     const { service } = createService(query);
 
     const result = await service.processBatch(tenantId, userId, {
@@ -87,21 +87,53 @@ describe('SyncService', () => {
     expect(result.outcomes[0]).toMatchObject({ commandId, status: 'rejected' });
   });
 
-  it('discards a conflict, closes its command and writes an audit event atomically', async () => {
+  it('discards a conflict and audits it without rewriting the original command outcome', async () => {
     const query = jest.fn()
       .mockResolvedValueOnce([{ id: 'conflict-1', commandId, state: 'discarded', resolution: 'Reviewed duplicate capture' }])
-      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
     const { service } = createService(query);
 
     await expect(service.resolveConflict(tenantId, userId, 'conflict-1', 'Reviewed duplicate capture'))
       .resolves.toMatchObject({ id: 'conflict-1', state: 'discarded' });
 
-    expect(query).toHaveBeenCalledTimes(3);
+    expect(query).toHaveBeenCalledTimes(2);
     expect(query.mock.calls[0][0]).toContain("state='discarded'");
-    expect(query.mock.calls[1][0]).toContain("state='rejected'");
-    expect(query.mock.calls[1][1]).toEqual([tenantId, commandId, 'Reviewed duplicate capture']);
-    expect(query.mock.calls[2][0]).toContain('sync.conflict.discarded');
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('UPDATE sync_commands'))).toBe(false);
+    expect(query.mock.calls[1][0]).toContain('sync.conflict.discarded');
+  });
+
+  it('does not downgrade an accepted command when its ID is reused with a different payload', async () => {
+    const original = createHash('sha256').update(JSON.stringify(attendancePayload)).digest('hex');
+    const changed = { ...attendancePayload, minutesWorked: 600 };
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ id: deviceId }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ payload_hash: original, state: 'accepted', result: { id: 'attendance-1' }, payload: attendancePayload, actor_user_id: userId }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 'conflict-1' }]);
+    const { service } = createService(query);
+
+    const result = await service.processBatch(tenantId, userId, {
+      commands: [{ commandId, deviceId, entityType: 'attendance', operation: 'create', payload: changed }],
+    } as never);
+
+    expect(result.outcomes[0]).toMatchObject({ status: 'conflict', conflictId: 'conflict-1' });
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('UPDATE sync_commands SET state'))).toBe(false);
+  });
+
+  it('refuses to replay a command ID that another user submitted', async () => {
+    const payloadHash = createHash('sha256').update(JSON.stringify(attendancePayload)).digest('hex');
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ id: deviceId }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ payload_hash: payloadHash, state: 'accepted', result: { id: 'attendance-1' }, payload: attendancePayload, actor_user_id: 'someone-else' }]);
+    const { service } = createService(query);
+
+    await expect(service.processBatch(tenantId, userId, {
+      commands: [{ commandId, deviceId, entityType: 'attendance', operation: 'create', payload: attendancePayload }],
+    } as never)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('returns not found when a conflict was already resolved', async () => {

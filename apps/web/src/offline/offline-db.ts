@@ -22,7 +22,14 @@ export interface SyncCommand {
   attempts: number;
   state: SyncState;
   lastError?: string;
+  /** ISO time before which a failed command must not be retried automatically (exponential backoff). */
+  nextAttemptAt?: string;
+  /** ISO time the command entered the 'syncing' state; used to recover commands orphaned by a closed tab. */
+  syncingSince?: string;
 }
+
+/** A command stuck in 'syncing' longer than this was orphaned (tab closed or crashed mid-request). */
+export const STALE_SYNCING_MS = 2 * 60 * 1000;
 
 const DB_NAME = 'jengaflow-offline';
 const DB_VERSION = 1;
@@ -115,12 +122,93 @@ export async function enqueueOfflineCommand(command: Omit<SyncCommand, 'id' | 'c
   } finally { db.close(); }
 }
 
-export async function listPendingCommands(tenantId: string): Promise<SyncCommand[]> {
+export interface PendingOptions {
+  /** Manual syncs ignore retry backoff; automatic syncs respect it. */
+  ignoreBackoff?: boolean;
+  now?: number;
+}
+
+/**
+ * Commands eligible to be sent: new commands, failed commands whose backoff has elapsed, and commands orphaned in
+ * 'syncing'. Re-sending an orphaned command is safe because the server deduplicates by command ID.
+ */
+export async function listPendingCommands(tenantId: string, options: PendingOptions = {}): Promise<SyncCommand[]> {
+  const now = options.now ?? Date.now();
   const db = await openDatabase();
   try {
     const tx = db.transaction('commands', 'readonly');
     const all = await requestResult<SyncCommand[]>(tx.objectStore('commands').getAll());
-    return all.filter((command) => command.tenantId === tenantId && (command.state === 'pending' || command.state === 'failed')).sort((a,b) => a.createdAt.localeCompare(b.createdAt));
+    return all.filter((command) => {
+      if (command.tenantId !== tenantId) return false;
+      if (command.state === 'pending') return true;
+      if (command.state === 'failed') {
+        return options.ignoreBackoff || !command.nextAttemptAt || Date.parse(command.nextAttemptAt) <= now;
+      }
+      if (command.state === 'syncing') {
+        const since = command.syncingSince ? Date.parse(command.syncingSince) : 0;
+        return !Number.isFinite(since) || now - since >= STALE_SYNCING_MS;
+      }
+      return false;
+    }).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  } finally { db.close(); }
+}
+
+export async function listCommandsByState(tenantId: string, states: SyncState[]): Promise<SyncCommand[]> {
+  const db = await openDatabase();
+  try {
+    const tx = db.transaction('commands', 'readonly');
+    const all = await requestResult<SyncCommand[]>(tx.objectStore('commands').getAll());
+    return all.filter((command) => command.tenantId === tenantId && states.includes(command.state))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  } finally { db.close(); }
+}
+
+/** Counts of commands per state, for sync status indicators. Synced commands are excluded. */
+export async function countCommands(tenantId: string): Promise<Record<Exclude<SyncState, 'synced'>, number>> {
+  const counts = { pending: 0, syncing: 0, conflict: 0, failed: 0, rejected: 0 };
+  const items = await listCommandsByState(tenantId, ['pending', 'syncing', 'conflict', 'failed', 'rejected']);
+  for (const item of items) counts[item.state as keyof typeof counts] += 1;
+  return counts;
+}
+
+export async function deleteCommand(id: string): Promise<void> {
+  const db = await openDatabase();
+  try {
+    const tx = db.transaction('commands', 'readwrite');
+    tx.objectStore('commands').delete(id);
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } finally { db.close(); }
+}
+
+/**
+ * Re-queues a conflicted or rejected command under a NEW command ID in one transaction. The server permanently
+ * records the outcome of the old ID, so re-sending it unchanged would only return the same conflict or rejection.
+ * Use this after the user has corrected the underlying cause.
+ */
+export async function requeueCommand(id: string, payload?: Record<string, unknown>): Promise<SyncCommand> {
+  const db = await openDatabase();
+  try {
+    const tx = db.transaction('commands', 'readwrite');
+    const store = tx.objectStore('commands');
+    const existing = await requestResult<SyncCommand | undefined>(store.get(id));
+    if (!existing) throw new Error('This queued change no longer exists.');
+    if (existing.state !== 'conflict' && existing.state !== 'rejected') throw new Error('Only conflicted or rejected changes can be re-queued.');
+    const next: SyncCommand = {
+      ...existing, id: crypto.randomUUID(), payload: payload ?? existing.payload, createdAt: new Date().toISOString(),
+      attempts: 0, state: 'pending', lastError: undefined, nextAttemptAt: undefined, syncingSince: undefined,
+    };
+    store.delete(id);
+    store.add(next);
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    return next;
   } finally { db.close(); }
 }
 

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, feature/**]
+    branches: [main]
+  # Run on every pull request regardless of target branch (previously only main and one stale branch name).
   pull_request:
-    branches: [main, feat/attendance-correction-workflow]
 
 concurrency:
   group: jengaflow-ci-${{ github.ref }}
@@ -50,7 +50,7 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Type check
         run: pnpm typecheck
       - name: Compile API for migrations

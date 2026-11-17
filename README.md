@@ -2,7 +2,7 @@
 
 A mobile-first, multi-tenant construction workforce, site operations, payroll and business management platform for Kenya. Designed for cloud SaaS and standalone PC/site deployments with offline-first workflows and controlled cloud synchronization.
 
-> Current delivery stage: database and API foundation. Auth0 sign-in and an authenticated API diagnostic workspace are implemented; company provisioning, membership/authorization workflows, worker operations, payroll calculation and full offline sync remain under development. Do not use it for production payroll yet.
+> Current delivery stage: functional foundation. Authentication, tenant provisioning and membership, worker/project/site/attendance operations, payroll calculation with guarded finalization, and an offline attendance outbox are implemented. Payment execution, payslip delivery, billing, full offline coverage and production hardening remain under development. See `docs/16-IMPLEMENTATION-STATUS.md`. Do not use it for production payroll yet.
 
 ## Product goals
 - Manage construction companies, projects, sites, workers and employment arrangements.
@@ -47,12 +47,13 @@ See [docs/README.md](docs/README.md) for the complete requirements, architecture
 - [x] Liveness and database readiness endpoints.
 - [x] Responsive JengaFlow shell, PWA manifest and install guidance.
 - [x] Auth0 SPA sign-in, protected workspace entry and authenticated API identity check.
-- [ ] Auth0-to-platform-user provisioning, tenant membership and application authorization.
-- [ ] Worker, project, site and attendance APIs.
+- [x] Auth0-to-platform-user provisioning, tenant invitations, membership and permission-guarded APIs.
+- [x] Worker, contract, pay-grade, project, site, organization and attendance APIs, with attendance correction workflow and worker documents.
 - [x] Effective-dated Kenya statutory starter pack and tenant deduction/allowance defaults.
-- [ ] Payroll calculation and finalization engine.
+- [ ] Payroll calculation and finalization engine (calculation implemented with exact-cent arithmetic; finalization is guarded and blocked on unapproved statutory rules or unresolved classification; payment execution and payslip delivery pending).
 - [x] IndexedDB local record cache and idempotent command outbox foundation.
-- [ ] Authenticated sync API, conflict review UI and complete offline workflows.
+- [x] Authenticated sync API, offline attendance capture through the outbox, automatic retry with backoff, and sync review for conflicts and rejections.
+- [ ] Offline reference-data bootstrap, offline workflows beyond attendance, and end-to-end offline browser tests.
 - [ ] Qwerty sales workspace, subscriptions and billing.
 - [ ] Production CI, end-to-end tests and deployment hardening.
 
