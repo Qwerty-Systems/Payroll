@@ -1,16 +1,18 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
 import { ConfirmPayrollPaymentDto, CreatePayrollPeriodDto, CreatePayrollRunDto, PayrollPaymentBatchDto, ReviewPayrollRunDto, TransitionPayrollPeriodDto, UpdatePayrollPeriodDto, UpdatePayrollRunDto } from './payroll.dto';
 import { PayrollService } from './payroll.service';
+import { PayrollPostFinalizationService } from './payroll-post-finalization.service';
+import { CreatePayrollCorrectionDto, PayrollCorrectionReviewDto, PaymentFailureDto } from './payroll-post-finalization.dto';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
 @ApiTags('payroll')
 @ApiBearerAuth()
 @Controller('payroll')
 export class PayrollController {
-  constructor(private readonly payroll: PayrollService) {}
+  constructor(private readonly payroll: PayrollService, private readonly postFinalization: PayrollPostFinalizationService) {}
 
   @Get('periods') @TenantPermissions('payroll.read') listPeriods(@Req() req:TenantRequest) { return this.payroll.listPeriods(req.tenant.id); }
   @Get('periods/:id') @TenantPermissions('payroll.read') getPeriod(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.getPeriod(req.tenant.id,id); }
@@ -37,4 +39,17 @@ export class PayrollController {
   @Post('runs/:id/payment-batches') @TenantPermissions('payroll.finalize') createPaymentBatch(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:PayrollPaymentBatchDto) { return this.payroll.createPaymentBatch(req.tenant.id,req.tenant.userId,id,dto.paymentMethod); }
   @Post('payment-batches/:id/approve') @TenantPermissions('payroll.approve') approvePaymentBatch(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.approvePaymentBatch(req.tenant.id,req.tenant.userId,id); }
   @Post('payment-batches/:id/items/:itemId/confirm') @TenantPermissions('payroll.finalize') confirmPayment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Param('itemId',ParseUUIDPipe) itemId:string,@Body() dto:ConfirmPayrollPaymentDto) { return this.payroll.confirmPayment(req.tenant.id,req.tenant.userId,id,itemId,dto.providerReference); }
+
+  @Get('runs/:id/corrections') @TenantPermissions('payroll.read') listCorrections(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.postFinalization.listCorrections(req.tenant.id,id); }
+  @Post('runs/:id/corrections') @TenantPermissions('payroll.calculate') createCorrection(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:CreatePayrollCorrectionDto) { return this.postFinalization.createCorrection(req.tenant.id,req.tenant.userId,id,dto.type,dto.reason,dto.lines??[]); }
+  @Get('corrections/:id') @TenantPermissions('payroll.read') getCorrection(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.postFinalization.getCorrection(req.tenant.id,id); }
+  @Post('corrections/:id/submit') @TenantPermissions('payroll.calculate') submitCorrection(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.postFinalization.transitionCorrection(req.tenant.id,req.tenant.userId,id,'submit'); }
+  @Post('corrections/:id/approve') @TenantPermissions('payroll.approve') approveCorrection(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.postFinalization.transitionCorrection(req.tenant.id,req.tenant.userId,id,'approve'); }
+  @Post('corrections/:id/apply') @TenantPermissions('payroll.finalize') applyCorrection(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.postFinalization.transitionCorrection(req.tenant.id,req.tenant.userId,id,'apply'); }
+  @Post('corrections/:id/reject') @TenantPermissions('payroll.approve') rejectCorrection(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:PayrollCorrectionReviewDto) { return this.postFinalization.transitionCorrection(req.tenant.id,req.tenant.userId,id,'reject',dto.reason); }
+  @Get('runs/:id/remittance-schedule') @TenantPermissions('payroll.read') remittanceSchedule(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.postFinalization.remittanceSchedule(req.tenant.id,id); }
+  @Get('runs/:id/general-ledger') @TenantPermissions('payroll.read') generalLedger(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.postFinalization.generalLedgerExport(req.tenant.id,id); }
+  @Get('payslips/:id/print') @TenantPermissions('payslips.read') @Header('Content-Type','text/html; charset=utf-8') printPayslip(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.postFinalization.payslipHtml(req.tenant.id,id); }
+  @Post('payment-batches/:id/items/:itemId/fail') @TenantPermissions('payroll.finalize') failPayment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Param('itemId',ParseUUIDPipe) itemId:string,@Body() dto:PaymentFailureDto) { return this.postFinalization.markPaymentFailed(req.tenant.id,req.tenant.userId,id,itemId,dto.reason); }
+  @Post('payment-batches/:id/items/:itemId/reverse') @TenantPermissions('payroll.finalize') reversePayment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Param('itemId',ParseUUIDPipe) itemId:string,@Body() dto:PaymentFailureDto) { return this.postFinalization.reversePayment(req.tenant.id,req.tenant.userId,id,itemId,dto.reason); }
 }
