@@ -17,6 +17,7 @@ import { SyncModule } from './sync/sync.module';
 import { WorkerDocumentsModule } from './workers/worker-documents.module';
 import { PlatformComplianceModule } from './compliance/platform-compliance.module';
 import { BillingModule } from './billing/billing.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { BillingModule } from './billing/billing.module';
     WorkerDocumentsModule,
     PlatformComplianceModule,
     BillingModule,
+    ReportsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
