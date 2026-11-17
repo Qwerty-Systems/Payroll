@@ -24,7 +24,7 @@ import AssignmentTurnedInRounded from '@mui/icons-material/AssignmentTurnedInRou
 import AccountBalanceWalletRounded from '@mui/icons-material/AccountBalanceWalletRounded';
 import TenantAdministration from './TenantAdministration';
 import CloudSyncRounded from '@mui/icons-material/CloudSyncRounded';
-import { synchronizeOfflineAttendance } from '../offline/offline-api';
+import { downloadOfflineReferenceData, getCachedOfflineReferenceData, queueOfflineAttendance, synchronizeOfflineAttendance } from '../offline/offline-api';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
@@ -62,6 +62,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [syncing, setSyncing] = useState(false);
+  const [downloadingReferenceData, setDownloadingReferenceData] = useState(false);
+  const [referenceDataMessage, setReferenceDataMessage] = useState('');
   const [syncMessage, setSyncMessage] = useState('');
   const isMobile = useMediaQuery('(max-width:1199px)');
   const [contracts, setContracts] = useState<RowData[]>([]);
@@ -113,7 +115,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       projects: 'tenant/projects',
       sites: 'tenant/sites',
       attendance: 'tenant/attendance',
-      shifts: 'tenant/attendance/shifts', leaveRequests: 'tenant/attendance/leave-requests', overtimeRequests: 'tenant/attendance/overtime-requests', timesheets: 'tenant/attendance/timesheets',
+      shifts: 'tenant/attendance/shifts', leaveRequests: 'tenant/attendance/leave-requests', overtimeRequests: 'tenant/attendance/overtime-requests', timesheets: 'tenant/attendance/timesheets', conflicts: 'tenant/sync/conflicts',
       periods: 'payroll/periods',
       branches: 'tenant/organization/branches',
       departments: 'tenant/organization/departments',
@@ -123,7 +125,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     };
     const entries = await Promise.all(Object.entries(endpoints).map(async ([key, path]) => {
       try { return [key, asRows(await request<unknown>(path))] as const; }
-      catch { return [key, [] as RowData[]] as const; }
+      catch { const cached = await getCachedOfflineReferenceData<Record<string, unknown[]>>(tenantId); return [key, asRows(cached?.[key])] as const; }
     }));
     setData(Object.fromEntries(entries));
     setLoading(false);
@@ -178,6 +180,14 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to prepare the document download.');
     }
+  }
+
+
+  async function downloadReferenceData(){
+    setDownloadingReferenceData(true);setError('');setReferenceDataMessage('');
+    try{const snapshot=await downloadOfflineReferenceData(tenantId,request);const counts=['workers','projects','sites','shifts','payGrades'].map(k=>`${k}: ${Array.isArray(snapshot[k])?(snapshot[k] as unknown[]).length:0}`).join(' · ');setReferenceDataMessage('Offline reference data saved — '+counts);}
+    catch(cause){setError(cause instanceof Error?cause.message:'Unable to download offline reference data.');}
+    finally{setDownloadingReferenceData(false);}
   }
 
   async function syncOfflineQueue() {
@@ -252,11 +262,14 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
         }) });
         setNotice('Site created.');
       } else if (dialog === 'attendance') {
-        await request('tenant/attendance', { method: 'POST', body: JSON.stringify({
-          workerId: selectedWorker, projectId: selectedProject,
-          siteId: forms.siteId, workDate: forms.workDate, minutesWorked: Number(forms.minutesWorked), source: 'web',
-        }) });
-        setNotice('Attendance record captured as a draft. Submit it for approval.');
+        const attendancePayload = { workerId: selectedWorker, projectId: selectedProject, siteId: forms.siteId, workDate: forms.workDate, minutesWorked: Number(forms.minutesWorked), source: 'web' };
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const queued = await queueOfflineAttendance(tenantId, attendancePayload);
+          setNotice('Attendance saved to this device and queued for synchronization. Command ' + queued.id + '.');
+        } else {
+          await request('tenant/attendance', { method: 'POST', body: JSON.stringify(attendancePayload) });
+          setNotice('Attendance record captured as a draft. Submit it for approval.');
+        }
       } else if (dialog === 'shift') {
         const shift = await request<RowData>('tenant/attendance/shifts', { method: 'POST', body: JSON.stringify({ code: forms.shiftCode, name: forms.shiftName, startTime: forms.shiftStart, endTime: forms.shiftEnd, breakMinutes: Number(forms.shiftBreak), graceMinutes: Number(forms.shiftGrace) }) });
         if (selectedWorker) await request('tenant/attendance/shift-assignments', { method: 'POST', body: JSON.stringify({ workerId: selectedWorker, shiftId: shift.id, effectiveFrom: dateToday() }) });
@@ -316,6 +329,13 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     try{await request(`tenant/attendance/${kind}/${id}/${action}`,{method:'POST',body:JSON.stringify({reason:forms.reviewReason||'Reviewed against supporting records'})});setNotice(`${kind==='leave-requests'?'Leave':'Overtime'} request ${action}d.`);await refresh();}
     catch(cause){setError(cause instanceof Error?cause.message:'Review action failed.');}finally{setBusy(false);}
   }
+
+  async function discardOfflineConflict(id:string){
+    setBusy(true);setError('');setNotice('');
+    try{await request(`tenant/sync/conflicts/${id}/discard`,{method:'POST',body:JSON.stringify({resolution:'Reviewed duplicate offline command; retained the server-side record.'})});setNotice('Offline conflict closed. The server-side record was retained.');await refresh();}
+    catch(cause){setError(cause instanceof Error?cause.message:'Unable to resolve the offline conflict.');}finally{setBusy(false);}
+  }
+
   async function timesheetAction(id:string,action:'submit'|'approve'){
     setBusy(true);setError('');setNotice('');
     try{await request(`tenant/attendance/timesheets/${id}/${action}`,{method:'POST',body:'{}'});setNotice(`Timesheet ${action}ted.`);await refresh();}
@@ -555,10 +575,11 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               {section === 'workers' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('worker')}>Add worker</Button>}
               {section === 'pay-grades' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('payGrade')}>Create pay grade</Button>}
               {section === 'projects' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('project')}>Add project</Button>}
-              {section === 'attendance' && <><Button variant="contained" startIcon={<AddRounded />} disabled={!selectedWorker || !selectedProject} onClick={() => setDialog('attendance')}>Capture</Button><Button variant="outlined" onClick={() => setDialog('shift')}>New shift</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('leave')}>Request leave</Button><Button variant="outlined" disabled={!['owner','admin','hr_manager'].includes(membership?.role ?? '')} onClick={() => setDialog('leavePolicy')}>Leave policy</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('overtime')}>Request overtime</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('timesheet')}>Generate timesheet</Button></>}
+              {section === 'attendance' && <><Button variant="outlined" disabled={downloadingReferenceData} onClick={() => void downloadReferenceData()}>{downloadingReferenceData ? 'Downloading…' : 'Download offline data'}</Button><Button variant="contained" startIcon={<AddRounded />} disabled={!selectedWorker || !selectedProject} onClick={() => setDialog('attendance')}>Capture</Button><Button variant="outlined" onClick={() => setDialog('shift')}>New shift</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('leave')}>Request leave</Button><Button variant="outlined" disabled={!['owner','admin','hr_manager'].includes(membership?.role ?? '')} onClick={() => setDialog('leavePolicy')}>Leave policy</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('overtime')}>Request overtime</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('timesheet')}>Generate timesheet</Button></>}
               {section === 'payroll' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('period')}>New period</Button>}
             </Stack>
           </Stack>
+          {referenceDataMessage && <Alert severity="success" sx={{ mb: 2 }}>{referenceDataMessage}</Alert>}
           {loading && <Box sx={{ mb: 2 }}><Typography variant="caption" color="text.secondary">Refreshing workspace data…</Typography></Box>}
           {section !== 'organization' && section !== 'people' && <TextField fullWidth size="small" placeholder={`Search ${pageTitle[section].toLowerCase()}…`} value={searchQuery} onChange={event => setSearchQuery(event.target.value)}
             InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ color: '#87948A' }} /></InputAdornment> }}
@@ -641,6 +662,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
             <Grid size={{ xs: 12, md: 6 }}><Card variant="outlined"><CardContent><Typography fontWeight={850} sx={{mb:1}}>Leave requests</Typography><Table size="small"><TableHead><TableRow><TableCell>Worker</TableCell><TableCell>Type / Dates</TableCell><TableCell>Status</TableCell><TableCell>Review</TableCell></TableRow></TableHead><TableBody>{(data.leaveRequests??[]).map(x=><TableRow key={String(x.id)}><TableCell>{label(x.workerNumber)}</TableCell><TableCell>{label(x.leaveType)} · {label(x.startDate)}–{label(x.endDate)}</TableCell><TableCell>{label(x.status)}</TableCell><TableCell>{x.status==='pending'?<Stack direction="row"><Button size="small" disabled={busy} onClick={()=>void reviewAttendanceRequest('leave-requests',String(x.id),'approve')}>Approve</Button><Button size="small" color="error" disabled={busy} onClick={()=>void reviewAttendanceRequest('leave-requests',String(x.id),'reject')}>Reject</Button></Stack>:'—'}</TableCell></TableRow>)}{!(data.leaveRequests??[]).length&&<TableRow><TableCell colSpan={4}>No leave requests.</TableCell></TableRow>}</TableBody></Table></CardContent></Card></Grid>
             <Grid size={{ xs: 12, md: 6 }}><Card variant="outlined"><CardContent><Typography fontWeight={850} sx={{mb:1}}>Overtime requests</Typography><Table size="small"><TableHead><TableRow><TableCell>Worker</TableCell><TableCell>Date</TableCell><TableCell>Minutes</TableCell><TableCell>Status</TableCell><TableCell>Review</TableCell></TableRow></TableHead><TableBody>{(data.overtimeRequests??[]).map(x=><TableRow key={String(x.id)}><TableCell>{label(x.workerId)}</TableCell><TableCell>{label(x.workDate)}</TableCell><TableCell>{label(x.minutesRequested)}</TableCell><TableCell>{label(x.status)}</TableCell><TableCell>{x.status==='pending'?<Stack direction="row"><Button size="small" disabled={busy} onClick={()=>void reviewAttendanceRequest('overtime-requests',String(x.id),'approve')}>Approve</Button><Button size="small" color="error" disabled={busy} onClick={()=>void reviewAttendanceRequest('overtime-requests',String(x.id),'reject')}>Reject</Button></Stack>:'—'}</TableCell></TableRow>)}{!(data.overtimeRequests??[]).length&&<TableRow><TableCell colSpan={5}>No overtime requests.</TableCell></TableRow>}</TableBody></Table></CardContent></Card></Grid>
             <Grid size={{ xs: 12, md: 6 }}><Card variant="outlined"><CardContent><Typography fontWeight={850} sx={{mb:1}}>Timesheets</Typography><Table size="small"><TableHead><TableRow><TableCell>Worker</TableCell><TableCell>Period</TableCell><TableCell>Minutes</TableCell><TableCell>Status</TableCell><TableCell>Action</TableCell></TableRow></TableHead><TableBody>{(data.timesheets??[]).map(x=><TableRow key={String(x.id)}><TableCell>{label(x.workerNumber)}</TableCell><TableCell>{label(x.periodStart)}–{label(x.periodEnd)}</TableCell><TableCell>{label(x.totalMinutes)}</TableCell><TableCell>{label(x.status)}</TableCell><TableCell>{x.status==='draft'?<Button size="small" onClick={()=>void timesheetAction(String(x.id),'submit')}>Submit</Button>:x.status==='submitted'?<Button size="small" onClick={()=>void timesheetAction(String(x.id),'approve')}>Approve</Button>:'—'}</TableCell></TableRow>)}{!(data.timesheets??[]).length&&<TableRow><TableCell colSpan={5}>No timesheets generated.</TableCell></TableRow>}</TableBody></Table></CardContent></Card></Grid>
+
+            <Grid size={{ xs: 12 }}><Card variant="outlined"><CardContent><Typography fontWeight={850} sx={{mb:1}}>Offline sync conflicts</Typography><Typography variant="caption" color="text.secondary">Conflicts are never silently overwritten. Discarding keeps the server-side version and closes the local command.</Typography><Table size="small"><TableHead><TableRow><TableCell>Conflict</TableCell><TableCell>Type</TableCell><TableCell>Created</TableCell><TableCell>Action</TableCell></TableRow></TableHead><TableBody>{(data.conflicts??[]).map(x=><TableRow key={String(x.id)}><TableCell>{label(x.commandId)}</TableCell><TableCell>{label(x.conflictType)}</TableCell><TableCell>{label(x.createdAt)}</TableCell><TableCell><Button size="small" color="error" disabled={busy} onClick={()=>void discardOfflineConflict(String(x.id))}>Discard local copy</Button></TableCell></TableRow>)}{!(data.conflicts??[]).length&&<TableRow><TableCell colSpan={4}>No open offline conflicts.</TableCell></TableRow>}</TableBody></Table></CardContent></Card></Grid>
           </Grid>}
 
         </>}

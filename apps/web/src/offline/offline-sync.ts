@@ -2,6 +2,7 @@ import {
   listPendingCommands,
   updateCommand,
   type SyncCommand,
+  countOutstandingCommands,
 } from './offline-db';
 
 export type SyncResult =
@@ -34,7 +35,7 @@ export async function synchronizeTenantOutbox(
 
   for (const command of commands) {
     summary.sent += 1;
-    const syncing = { ...command, state: 'syncing' as const, attempts: command.attempts + 1 };
+    const syncing = { ...command, state: 'syncing' as const, attempts: command.attempts + 1, nextAttemptAt: undefined };
     await updateCommand(syncing);
 
     try {
@@ -51,12 +52,12 @@ export async function synchronizeTenantOutbox(
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to synchronize this change.';
-      await updateCommand({ ...syncing, state: 'failed', lastError: message });
+      const backoffMs = Math.min(15 * 60_000, 1_000 * (2 ** Math.min(syncing.attempts, 10)));
+      await updateCommand({ ...syncing, state: 'failed', lastError: message, nextAttemptAt: new Date(Date.now() + backoffMs).toISOString() });
       summary.failed += 1;
     }
   }
 
-  const pending = await listPendingCommands(tenantId);
-  summary.remaining = pending.length;
+  summary.remaining = await countOutstandingCommands(tenantId);
   return summary;
 }

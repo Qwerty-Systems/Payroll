@@ -22,6 +22,7 @@ export interface SyncCommand {
   attempts: number;
   state: SyncState;
   lastError?: string;
+  nextAttemptAt?: string;
 }
 
 const DB_NAME = 'jengaflow-offline';
@@ -120,8 +121,15 @@ export async function listPendingCommands(tenantId: string): Promise<SyncCommand
   try {
     const tx = db.transaction('commands', 'readonly');
     const all = await requestResult<SyncCommand[]>(tx.objectStore('commands').getAll());
-    return all.filter((command) => command.tenantId === tenantId && (command.state === 'pending' || command.state === 'failed')).sort((a,b) => a.createdAt.localeCompare(b.createdAt));
+    return all.filter((command) => command.tenantId === tenantId && (command.state === 'pending' || command.state === 'syncing' || (command.state === 'failed' && (!command.nextAttemptAt || Date.parse(command.nextAttemptAt) <= Date.now())))).sort((a,b) => a.createdAt.localeCompare(b.createdAt));
   } finally { db.close(); }
+}
+
+
+export async function countOutstandingCommands(tenantId:string):Promise<number>{
+  const db=await openDatabase();
+  try{const tx=db.transaction('commands','readonly');const all=await requestResult<SyncCommand[]>(tx.objectStore('commands').getAll());return all.filter(command=>command.tenantId===tenantId&&['pending','syncing','failed'].includes(command.state)).length;}
+  finally{db.close();}
 }
 
 export async function updateCommand(command: SyncCommand): Promise<void> {
