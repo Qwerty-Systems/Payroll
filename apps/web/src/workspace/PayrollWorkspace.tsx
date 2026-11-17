@@ -36,6 +36,7 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
   const [remittance,setRemittance]=useState<Row|null>(null);
   const [ledger,setLedger]=useState<Row|null>(null);
   const [providerReferences,setProviderReferences]=useState<Record<string,string>>({});
+  const [paymentReasons,setPaymentReasons]=useState<Record<string,string>>({});
   const [periodDialog,setPeriodDialog]=useState(false);
   const [periodEditing,setPeriodEditing]=useState('');
   const [periodForm,setPeriodForm]=useState({code:'',name:'',startDate:today().slice(0,8)+'01',endDate:today(),paymentDate:''});
@@ -307,7 +308,11 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
                 <TableContainer sx={{mt:1}}><Table size="small"><TableHead><TableRow>{['Employee','Amount','Status','Provider reference','Confirm'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
                   <TableBody>{asRows(paymentBatch.items).map(item=><TableRow key={item.id}><TableCell>{item.workerName} · {item.workerNumber}</TableCell><TableCell>{money(item.amount)}</TableCell><TableCell><Chip size="small" label={item.status}/></TableCell>
                     <TableCell>{item.providerReference??(item.status==='paid'?'—':<TextField size="small" value={providerReferences[item.id]??''} onChange={e=>setProviderReferences(v=>({...v,[item.id]:e.target.value}))} placeholder="Bank/M-Pesa reference"/>)}</TableCell>
-                    <TableCell>{item.status!=='paid'&&['approved','partially_paid'].includes(String(paymentBatch.status))&&<Button size="small" disabled={busy||(providerReferences[item.id]??'').trim().length<3} onClick={()=>void perform(async()=>{await request('payroll/payment-batches/'+paymentBatch.id+'/items/'+item.id+'/confirm',body('POST',{providerReference:(providerReferences[item.id]??'').trim()}));await refreshPaymentBatch(paymentBatch.id);},'Payment confirmation recorded.')}>Confirm paid</Button>}</TableCell>
+                    <TableCell><Stack spacing={.5}>
+                      {item.status!=='paid'&&['approved','partially_paid'].includes(String(paymentBatch.status))&&<Button size="small" disabled={busy||(providerReferences[item.id]??'').trim().length<3} onClick={()=>void perform(async()=>{await request('payroll/payment-batches/'+paymentBatch.id+'/items/'+item.id+'/confirm',body('POST',{providerReference:(providerReferences[item.id]??'').trim()}));await refreshPaymentBatch(paymentBatch.id);},'Payment confirmation recorded.')}>Confirm paid</Button>}
+                      {['pending','processing'].includes(String(item.status))&&<><TextField size="small" value={paymentReasons[item.id]??''} onChange={e=>setPaymentReasons(v=>({...v,[item.id]:e.target.value}))} placeholder="Failure reason"/><Button size="small" color="error" disabled={busy||(paymentReasons[item.id]??'').trim().length<5} onClick={()=>void perform(async()=>{await request('payroll/payment-batches/'+paymentBatch.id+'/items/'+item.id+'/fail',body('POST',{reason:paymentReasons[item.id].trim()}));await refreshPaymentBatch(paymentBatch.id);},'Payment marked failed.')}>Mark failed</Button></>}
+                      {item.status==='paid'&&<Button size="small" color="error" disabled={busy||(paymentReasons[item.id]??'').trim().length<5} onClick={()=>void perform(async()=>{await request('payroll/payment-batches/'+paymentBatch.id+'/items/'+item.id+'/reverse',body('POST',{reason:paymentReasons[item.id].trim()}));await refreshPaymentBatch(paymentBatch.id);},'Payment reversal recorded.')}>Reverse payment</Button>}
+                    </Stack></TableCell>
                   </TableRow>)}
                     {!asRows(paymentBatch.items).length&&<TableRow><TableCell colSpan={5}>No payment items found.</TableCell></TableRow>}
                   </TableBody></Table></TableContainer>
