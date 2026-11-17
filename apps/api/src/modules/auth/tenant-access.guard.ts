@@ -7,13 +7,13 @@ type RequestWithIdentity = { headers: Record<string, string | string[] | undefin
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   owner: ['*'],
-  admin: ['company.read','company.manage','users.read','users.manage','projects.read','projects.manage','workers.read','workers.manage','workers.documents.read','workers.documents.manage','attendance.read','attendance.capture','attendance.manage','attendance.approve','payroll.read','payroll.calculate','payroll.approve','payroll.finalize','payslips.read','reports.read','audit.read'],
+  admin: ['company.read','company.manage','users.read','users.manage','projects.read','projects.manage','workers.read','workers.manage','workers.documents.read','workers.documents.manage','attendance.read','attendance.capture','attendance.manage','attendance.approve','payroll.read','payroll.calculate','payroll.approve','payroll.finalize','payslips.read','reports.read','audit.read','billing.read','billing.manage'],
   hr_manager: ['company.read','users.read','workers.read','workers.manage','workers.documents.read','workers.documents.manage','attendance.read','attendance.manage','attendance.approve','payroll.read','payroll.calculate','payslips.read','reports.read'],
-  payroll_manager: ['company.read','workers.read','attendance.read','payroll.read','payroll.calculate','payroll.approve','payslips.read','reports.read'],
+  payroll_manager: ['company.read','workers.read','attendance.read','payroll.read','payroll.calculate','payroll.approve','payslips.read','reports.read','billing.read','billing.manage'],
   supervisor: ['projects.read','workers.read','attendance.read','attendance.capture','attendance.approve','reports.read'],
   worker: ['attendance.capture','payslips.read'],
-  accountant: ['company.read','payroll.read','payslips.read','reports.read'],
-  viewer: ['company.read','projects.read','workers.read','attendance.read','payroll.read','reports.read'],
+  accountant: ['company.read','payroll.read','payslips.read','reports.read','billing.read','billing.manage'],
+  viewer: ['company.read','projects.read','workers.read','attendance.read','payroll.read','reports.read','billing.read'],
 };
 
 @Injectable()
