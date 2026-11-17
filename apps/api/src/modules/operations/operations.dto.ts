@@ -34,7 +34,7 @@ export class CreateAttendanceDto {
 }
 
 export class CreateWorkerContractDto {
-  @IsIn(['permanent','fixed_term','casual','piece_rate','subcontractor'])
+  @IsIn(['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'])
   engagementType!: string;
 
   @IsIn(['hourly','daily','weekly','monthly','per_unit'])
@@ -55,6 +55,17 @@ export class CreateWorkerContractDto {
   @IsOptional() @IsObject()
   terms?: Record<string, unknown>;
 }
+
+export class CreateWorkerOutputDto {
+  @IsUUID() workerId!: string;
+  @IsDateString() workDate!: string;
+  @IsString() @Length(1,40) unitCode!: string;
+  @IsNumber({ maxDecimalPlaces: 4 }) @Min(0.0001) @Max(1000000000) quantity!: number;
+  @IsOptional() @IsString() @Length(1,240) description?: string;
+  @IsOptional() @IsUUID() projectId?: string;
+  @IsOptional() @IsUUID() siteId?: string;
+}
+export class RejectWorkerOutputDto { @IsString() @Length(3,500) reason!: string; }
 
 export class EndWorkerContractDto {
   @IsDateString()
