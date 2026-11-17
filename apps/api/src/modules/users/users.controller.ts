@@ -13,7 +13,7 @@ type IdentityRequest=Request & { user:Record<string,unknown> };
 export class UsersController {
   constructor(private readonly users:UsersService){}
   @Get('tenant/users') @TenantPermissions('users.read') listMembers(@Req() req:TenantRequest){return this.users.listMembers(req.tenant.id);}
-  @Post('tenant/users/invitations') @TenantPermissions('users.manage') createInvitation(@Req() req:TenantRequest,@Body() dto:CreateInvitationDto){return this.users.createInvitation(req.tenant.id,req.tenant.userId,dto);}
+  @Post('tenant/users/invitations') @TenantPermissions('users.manage') createInvitation(@Req() req:TenantRequest,@Body() dto:CreateInvitationDto){return this.users.createInvitation(req.tenant.id,req.tenant.userId,req.tenant.role,dto);}
   @Get('tenant/users/invitations') @TenantPermissions('users.manage') listInvitations(@Req() req:TenantRequest){return this.users.listInvitations(req.tenant.id);}
   @Post('tenant/users/invitations/:id/revoke') @TenantPermissions('users.manage') revokeInvitation(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string){return this.users.revokeInvitation(req.tenant.id,req.tenant.userId,id);}
   @Patch('tenant/users/memberships/:id/role') @TenantPermissions('users.manage') updateRole(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateMembershipRoleDto){return this.users.updateMembershipRole(req.tenant.id,req.tenant.userId,req.tenant.role,id,dto.role);}
