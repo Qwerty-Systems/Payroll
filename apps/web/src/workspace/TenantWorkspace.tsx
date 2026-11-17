@@ -263,7 +263,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           method: 'PATCH', body: JSON.stringify({ effectiveTo: forms.contractEndDate }),
         });
         setContracts(asRows(await request<unknown>(`tenant/workers/${selectedWorker}/contracts`)));
-        setNotice('Worker contract end date recorded.');
+        setNotice('Employee contract end date recorded.');
       } else if (dialog === 'payGrade') {
         const payload = {
           name: forms.gradeName, description: forms.gradeDescription || null,
@@ -414,7 +414,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     { value: 'people' as Section, label: 'Team access', icon: <GroupsRounded />, group: 'ADMINISTRATION' },
   ];
   const pageTitle: Record<Section, string> = {
-    overview: 'Overview', workers: 'People & workers', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
+    overview: 'Overview', workers: 'Employees', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
     attendance: 'Attendance', payroll: 'Payroll', organization: 'Organization', people: 'Team access',
   };
   const pageDescription: Record<Section, string> = {
@@ -545,7 +545,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           </Stack>
           <Grid container spacing={2} sx={{ mb: 3 }}>
             {[
-              { title: 'Active workers', amount: counts.workers, caption: 'People on your workforce', icon: <GroupsRounded />, color: '#2F6B4F', bg: '#E7F0E9', target: 'workers' as Section },
+              { title: 'Active employees', amount: counts.workers, caption: 'Employees in your company', icon: <GroupsRounded />, color: '#2F6B4F', bg: '#E7F0E9', target: 'workers' as Section },
               { title: 'Active projects', amount: counts.projects, caption: 'Projects marked active', icon: <BusinessRounded />, color: '#8B642D', bg: '#F6EFDF', target: 'projects' as Section },
               { title: 'Awaiting review', amount: counts.attendance, caption: 'Attendance submissions', icon: <AssignmentTurnedInRounded />, color: '#376A8A', bg: '#E8F0F5', target: 'attendance' as Section },
               { title: 'Payroll periods', amount: counts.periods, caption: 'Configured pay periods', icon: <AccountBalanceWalletRounded />, color: '#6D5A91', bg: '#F0ECF6', target: 'payroll' as Section },
@@ -585,7 +585,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, borderColor: '#E6EBE5', borderRadius: 3, height: '100%' }}>
                 <Typography fontWeight={850}>Quick actions</Typography><Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>Common tasks, one click away</Typography>
                 {[
-                  { title: 'Add a worker', subtitle: 'Create a workforce profile', icon: <PersonAddAlt1Rounded />, action: () => setDialog('worker') },
+                  { title: 'Add an employee', subtitle: 'Create an employee profile', icon: <PersonAddAlt1Rounded />, action: () => setDialog('worker') },
                   { title: 'Capture attendance', subtitle: 'Record work completed', icon: <EventAvailableRounded />, action: () => setSection('attendance') },
                   { title: 'Set up a pay period', subtitle: 'Prepare the next payroll cycle', icon: <CalendarMonthRounded />, action: () => { setSection('payroll'); setDialog('period'); } },
                   { title: 'Invite a teammate', subtitle: 'Give someone workspace access', icon: <GroupsRounded />, action: () => setSection('people') },
@@ -758,7 +758,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       <Box component="form" onSubmit={submit}>
         <DialogTitle>{dialog === 'worker' ? 'Add employee' : dialog === 'contract' ? 'Add employee contract' : dialog === 'endContract' ? 'End employee contract' : dialog === 'payGrade' ? (selectedPayGrade ? 'Edit pay grade' : 'Create pay grade') : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : dialog === 'payComponent' ? 'Configure pay component' : 'Create payroll period'}</DialogTitle>
         <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
-          {dialog === 'endContract' && <><Alert severity="warning">Ending a contract is effective-dated and cannot be extended. Create a new contract version if the worker is rehired.</Alert><TextField label="Effective to" type="date" required InputLabelProps={{ shrink: true }} value={forms.contractEndDate} onChange={e => setField('contractEndDate', e.target.value)} /></>}
+          {dialog === 'endContract' && <><Alert severity="warning">Ending a contract is effective-dated and cannot be extended. Create a new contract version if the employee is rehired.</Alert><TextField label="Effective to" type="date" required InputLabelProps={{ shrink: true }} value={forms.contractEndDate} onChange={e => setField('contractEndDate', e.target.value)} /></>}
           {dialog === 'worker' && <><TextField label="Employee number" required value={forms.workerNumber} onChange={e => setField('workerNumber', e.target.value)} /><TextField label="First name" required value={forms.firstName} onChange={e => setField('firstName', e.target.value)} /><TextField label="Last name" required value={forms.lastName} onChange={e => setField('lastName', e.target.value)} /><TextField label="Phone" value={forms.phone} onChange={e => setField('phone', e.target.value)} /><TextField label="Email" type="email" value={forms.email} onChange={e => setField('email', e.target.value)} /></>}
           {dialog === 'payGrade' && <>{!selectedPayGrade && <TextField label="Code" required value={forms.gradeCode} onChange={e => setField('gradeCode', e.target.value.toUpperCase())} />}<TextField label="Name" required value={forms.gradeName} onChange={e => setField('gradeName', e.target.value)} /><TextField label="Description" multiline minRows={2} value={forms.gradeDescription} onChange={e => setField('gradeDescription', e.target.value)} /><TextField select label="Pay basis" value={forms.gradePayBasis} onChange={e => setField('gradePayBasis', e.target.value)}>{['hourly','daily','weekly','monthly','per_unit'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField label="Currency" required inputProps={{ maxLength: 3 }} value={forms.gradeCurrency} onChange={e => setField('gradeCurrency', e.target.value.toUpperCase())} /><TextField label="Minimum rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMinimum} onChange={e => setField('gradeMinimum', e.target.value)} /><TextField label="Midpoint rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMidpoint} onChange={e => setField('gradeMidpoint', e.target.value)} /><TextField label="Maximum rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMaximum} onChange={e => setField('gradeMaximum', e.target.value)} /></>}
            {dialog === 'contract' && <><TextField select label="Engagement" value={forms.engagementType} onChange={e => setField('engagementType', e.target.value)}>{['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Pay basis" value={forms.payBasis} onChange={e => setField('payBasis', e.target.value)}>{['hourly','daily','weekly','monthly','per_unit'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Pay grade (optional)" value={forms.payGradeId} onChange={e => { const grade = (data.payGrades ?? []).find(item => item.id === e.target.value); setField('payGradeId', e.target.value); if (grade) setField('payBasis', String(grade.payBasis)); }}><MenuItem value="">No pay grade</MenuItem>{(data.payGrades ?? []).filter(grade => grade.status === 'active').map(grade => <MenuItem key={String(grade.id)} value={String(grade.id)}>{label(grade.code)} — {label(grade.name)}</MenuItem>)}</TextField>{forms.payBasis === 'per_unit' && <TextField label="Approved unit codes (comma-separated)" required helperText="Example: blocks, metres, deliveries. These must match approved output entries." value={forms.unitCodes} onChange={e => setField('unitCodes', e.target.value)} />}<TextField label="Rate (KES)" type="number" required value={forms.rateAmount} onChange={e => setField('rateAmount', e.target.value)} /><TextField label="Effective from" type="date" required InputLabelProps={{ shrink: true }} value={forms.effectiveFrom} onChange={e => setField('effectiveFrom', e.target.value)} /></>}
