@@ -31,7 +31,7 @@ type Membership = {
   tenantStatus: string; membershipId: string; role: string;
 };
 type RowData = Record<string, unknown> & { id?: string };
-type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'payroll' | 'billing' | 'organization' | 'people';
+type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'payroll' | 'billing' | 'organization' | 'people' | 'reports';
 type Props = {
   memberships: Membership[];
   userName?: string;
@@ -80,7 +80,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     workDate: dateToday(), minutesWorked: '480', periodCode: '', periodName: '',
     shiftCode: '', shiftName: '', shiftStart: '08:00', shiftEnd: '17:00', shiftBreak: '60', shiftGrace: '10',
     leaveType: 'annual', leaveStart: dateToday(), leaveEnd: dateToday(), leaveDays: '1', leaveReason: '', leaveYear: String(new Date().getUTCFullYear()), leaveEntitlement: '21', reviewReason: '',
-    overtimeAttendanceId: '', overtimeMinutes: '60', overtimeReason: '', timesheetStart: dateToday().slice(0,8)+'01', timesheetEnd: dateToday(), correctionClockIn: '', correctionClockOut: '', correctionMinutes: '', correctionReason: '', componentCode: '', componentName: '', componentType: 'allowance', componentMethod: 'fixed', componentAmount: '', componentTaxable: 'false', componentFrom: dateToday(), billingCustomer: '', billingEmail: '', billingCurrency: 'KES', billingDescription: '', billingQuantity: '1', billingUnitPrice: '', billingTaxRate: '0', billingDueDate: dateToday(), billingValidUntil: '', billingFrequency: 'monthly', billingNextRun: dateToday(), billingDueDays: '30', billingPlanId: '', billingInvoiceId: '', billingPaymentAmount: '', billingPaymentMethod: 'bank_transfer', billingPaymentReference: '', billingReviewReason: '',
+    overtimeAttendanceId: '', overtimeMinutes: '60', overtimeReason: '', timesheetStart: dateToday().slice(0,8)+'01', timesheetEnd: dateToday(), correctionClockIn: '', correctionClockOut: '', correctionMinutes: '', correctionReason: '', componentCode: '', componentName: '', componentType: 'allowance', componentMethod: 'fixed', componentAmount: '', componentTaxable: 'false', componentFrom: dateToday(), billingCustomer: '', billingEmail: '', billingCurrency: 'KES', billingDescription: '', billingQuantity: '1', billingUnitPrice: '', billingTaxRate: '0', billingDueDate: dateToday(), billingValidUntil: '', billingFrequency: 'monthly', billingNextRun: dateToday(), billingDueDays: '30', billingPlanId: '', billingInvoiceId: '', billingPaymentAmount: '', billingPaymentMethod: 'bank_transfer', billingPaymentReference: '', billingReviewReason: '', reportFrom: dateToday().slice(0,8)+'01', reportTo: dateToday(), reportPeriodId: '',
     startDate: dateToday().slice(0, 8) + '01', endDate: dateToday(),
   });
 
@@ -115,7 +115,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       projects: 'tenant/projects',
       sites: 'tenant/sites',
       attendance: 'tenant/attendance',
-      shifts: 'tenant/attendance/shifts', leaveRequests: 'tenant/attendance/leave-requests', overtimeRequests: 'tenant/attendance/overtime-requests', timesheets: 'tenant/attendance/timesheets', conflicts: 'tenant/sync/conflicts', billingPlans: 'tenant/billing/plans', subscriptions: 'tenant/billing/subscriptions', quotes: 'tenant/billing/quotes', invoices: 'tenant/billing/invoices', payments: 'tenant/billing/payments', recurringSchedules: 'tenant/billing/recurring-schedules',
+      shifts: 'tenant/attendance/shifts', leaveRequests: 'tenant/attendance/leave-requests', overtimeRequests: 'tenant/attendance/overtime-requests', timesheets: 'tenant/attendance/timesheets', conflicts: 'tenant/sync/conflicts', billingPlans: 'tenant/billing/plans', subscriptions: 'tenant/billing/subscriptions', quotes: 'tenant/billing/quotes', invoices: 'tenant/billing/invoices', payments: 'tenant/billing/payments', recurringSchedules: 'tenant/billing/recurring-schedules', reportDashboard: 'tenant/reports/dashboard',
       periods: 'payroll/periods',
       branches: 'tenant/organization/branches',
       departments: 'tenant/organization/departments',
@@ -188,6 +188,17 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     try{const snapshot=await downloadOfflineReferenceData(tenantId,request);const counts=['workers','projects','sites','shifts','payGrades'].map(k=>`${k}: ${Array.isArray(snapshot[k])?(snapshot[k] as unknown[]).length:0}`).join(' · ');setReferenceDataMessage('Offline reference data saved — '+counts);}
     catch(cause){setError(cause instanceof Error?cause.message:'Unable to download offline reference data.');}
     finally{setDownloadingReferenceData(false);}
+  }
+
+
+  async function downloadReport(path:string,filename:string){
+    setBusy(true);setError('');
+    try{
+      const token=await getToken();
+      const response=await fetch(`${apiBaseUrl.replace(/\\/$/,'')}/api/v1/${path}`,{headers:{Authorization:`Bearer ${token}`,'x-tenant-id':tenantId}});
+      if(!response.ok)throw new Error(await response.text()||'Report download failed.');
+      const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=filename;document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }catch(cause){setError(cause instanceof Error?cause.message:'Unable to download report.');}finally{setBusy(false);}
   }
 
   async function syncOfflineQueue() {
@@ -391,12 +402,13 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     { value: 'attendance' as Section, label: 'Attendance', icon: <EventAvailableRounded />, group: 'WORKSPACE' },
     { value: 'payroll' as Section, label: 'Payroll', icon: <PaymentsRounded />, group: 'FINANCE' },
     { value: 'billing' as Section, label: 'Billing', icon: <PaymentsRounded />, group: 'FINANCE' },
+    { value: 'reports' as Section, label: 'Reports & exports', icon: <AssessmentRounded />, group: 'FINANCE' },
     { value: 'organization' as Section, label: 'Organization', icon: <SettingsRounded />, group: 'ADMINISTRATION' },
     { value: 'people' as Section, label: 'Team access', icon: <GroupsRounded />, group: 'ADMINISTRATION' },
   ];
   const pageTitle: Record<Section, string> = {
     overview: 'Overview', workers: 'People & workers', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
-    attendance: 'Attendance', payroll: 'Payroll', billing: 'Billing & subscriptions', organization: 'Organization', people: 'Team access',
+    attendance: 'Attendance', payroll: 'Payroll', billing: 'Billing & subscriptions', reports: 'Reports & exports', organization: 'Organization', people: 'Team access',
   };
   const pageDescription: Record<Section, string> = {
     overview: 'A clear picture of your workforce and operations.',
@@ -406,6 +418,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     attendance: 'Capture work activity and review submitted records.',
     payroll: 'Manage pay periods and review payroll calculation previews.',
     billing: 'Manage subscriptions, quotes, invoices, recurring billing and payment reconciliation.',
+    reports: 'Operational dashboards and downloadable payroll, attendance and audit reports.',
     organization: 'Structure your company and assign people to teams.',
     people: 'Control who can access this company workspace.',
   };
@@ -609,7 +622,23 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           </Paper> : section === 'organization' || section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> :
             <Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
               
-              {section === 'billing' ? <Box sx={{p:{xs:1.5,md:2.5}}}>
+              
+              {section === 'reports' ? <Box sx={{p:{xs:1.5,md:2.5}}}>
+                <Typography fontWeight={850} sx={{mb:2}}>Operational overview</Typography>
+                <Grid container spacing={2}>
+                  {[
+                    ['Active workers',data.reportDashboard?.workforce?.active??0],
+                    ['Attendance this month',data.reportDashboard?.attendanceThisMonth?.total??0],
+                    ['Pending attendance',data.reportDashboard?.attendanceThisMonth?.pending??0],
+                    ['Leave awaiting review',data.reportDashboard?.pendingLeave??0],
+                    ['Overtime awaiting review',data.reportDashboard?.pendingOvertime??0],
+                    ['Open payroll runs',data.reportDashboard?.openPayrollRuns??0],
+                    ['Outstanding invoices (minor units)',data.reportDashboard?.outstandingInvoices?.balance_minor??0],
+                    ['Offline conflicts',data.reportDashboard?.openOfflineConflicts??0],
+                  ].map(([title,value])=><Grid size={{xs:12,sm:6,md:3}} key={String(title)}><Card variant="outlined"><CardContent><Typography variant="caption" color="text.secondary">{title}</Typography><Typography variant="h5" fontWeight={850}>{String(value)}</Typography></CardContent></Card></Grid>)}
+                  <Grid size={{xs:12}}><Card variant="outlined"><CardContent><Typography fontWeight={850} sx={{mb:1}}>Download reports</Typography><Stack direction={{xs:'column',md:'row'}} spacing={1} alignItems={{md:'center'}}><TextField size="small" label="From" type="date" InputLabelProps={{shrink:true}} value={forms.reportFrom} onChange={e=>setField('reportFrom',e.target.value)} /><TextField size="small" label="To" type="date" InputLabelProps={{shrink:true}} value={forms.reportTo} onChange={e=>setField('reportTo',e.target.value)} /><Button variant="outlined" disabled={busy} onClick={()=>void downloadReport(`tenant/reports/attendance.csv?from=${forms.reportFrom}&to=${forms.reportTo}`,`attendance-${forms.reportFrom}-${forms.reportTo}.csv`)}>Attendance CSV</Button><Button variant="outlined" disabled={busy} onClick={()=>void downloadReport(`tenant/reports/audit.csv?from=${forms.reportFrom}&to=${forms.reportTo}`,`audit-${forms.reportFrom}-${forms.reportTo}.csv`)}>Audit CSV</Button></Stack><Divider sx={{my:2}}/><Stack direction={{xs:'column',md:'row'}} spacing={1}><TextField select size="small" label="Payroll period" value={forms.reportPeriodId} onChange={e=>setField('reportPeriodId',e.target.value)} sx={{minWidth:260}}>{(data.periods??[]).map(p=><MenuItem key={String(p.id)} value={String(p.id)}>{label(p.name)} · {label(p.startDate)}–{label(p.endDate)}</MenuItem>)}</TextField><Button variant="contained" disabled={busy||!forms.reportPeriodId} onClick={()=>void downloadReport(`tenant/reports/payroll/${forms.reportPeriodId}.csv`,`payroll-${forms.reportPeriodId}.csv`)}>Payroll CSV</Button></Stack></CardContent></Card></Grid>
+                </Grid>
+              </Box> : section === 'billing' ? <Box sx={{p:{xs:1.5,md:2.5}}}>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{mb:2}}><Typography fontWeight={850}>Review note</Typography><TextField size="small" value={forms.billingReviewReason} onChange={e=>setField('billingReviewReason',e.target.value)} placeholder="Reason for reconciliation" sx={{flex:1}} /></Stack>
                 <Grid container spacing={2}>
                   <Grid size={{xs:12,md:6}}><Card variant="outlined"><CardContent><Typography fontWeight={850}>Available plans</Typography><Table size="small"><TableHead><TableRow><TableCell>Plan</TableCell><TableCell>Price</TableCell><TableCell>Interval</TableCell></TableRow></TableHead><TableBody>{(data.billingPlans??[]).map(p=><TableRow key={String(p.id)}><TableCell>{label(p.name)}</TableCell><TableCell>{p.priceMinor==null?'Unpriced':String(p.currency)+' '+String(p.priceMinor)}</TableCell><TableCell>{label(p.billingInterval)}</TableCell></TableRow>)}{!data.billingPlans?.length&&<TableRow><TableCell colSpan={3}>No active plans are configured.</TableCell></TableRow>}</TableBody></Table></CardContent></Card></Grid>
