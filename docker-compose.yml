@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    # Override the API image entrypoint so this one-shot service runs only the migration CLI.\n    entrypoint: ["node", "../../node_modules/typeorm/cli.js"]\n    command: ["-d", "dist/database/data-source.js", "migration:run"]
+    # Override the API image entrypoint so this one-shot service runs only the migration CLI.\n    entrypoint: ["node", "node_modules/typeorm/cli.js"]\n    command: ["-d", "dist/database/data-source.js", "migration:run"]
     restart: "no"
     environment:
       NODE_ENV: production
