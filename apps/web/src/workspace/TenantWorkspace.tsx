@@ -364,6 +364,9 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     { value: 'organization' as Section, label: 'Organization', icon: <SettingsRounded />, group: 'ADMINISTRATION' },
     { value: 'people' as Section, label: 'Team access', icon: <GroupsRounded />, group: 'ADMINISTRATION' },
   ];
+  const complianceReadableRoles = ['owner','admin','hr_manager','payroll_manager','accountant','viewer'];
+  const visibleNavItems = navItems.filter(item => item.value !== 'compliance' || complianceReadableRoles.includes(membership?.role ?? ''));
+  const navGroups = ['WORKSPACE','FINANCE','COMPLIANCE','ADMINISTRATION'].filter(group => visibleNavItems.some(item => item.group === group));
   const pageTitle: Record<Section, string> = {
     overview: 'Overview', workers: 'People & workers', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
     attendance: 'Attendance', payroll: 'Payroll', compliance: 'Compliance', organization: 'Organization', people: 'Team access',
@@ -394,11 +397,11 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       </Box>
       <Divider sx={{ borderColor: 'rgba(255,255,255,.1)' }} />
       <Box sx={{ px: 1.5, py: 2, flex: 1 }}>
-        {['WORKSPACE','FINANCE','COMPLIANCE','ADMINISTRATION'].map(group => (
+        {navGroups.map(group => (
           <Box key={group} sx={{ mb: 2 }}>
             <Typography sx={{ px: 1.5, mb: .8, color: 'rgba(255,255,255,.42)', fontSize: '.65rem', fontWeight: 800, letterSpacing: '.12em' }}>{group}</Typography>
             <List disablePadding>
-              {navItems.filter(item => item.group === group).map(item => (
+              {visibleNavItems.filter(item => item.group === group).map(item => (
                 <ListItemButton key={item.value} selected={section === item.value}
                   onClick={() => { setSection(item.value); setSearchQuery(''); setMobileNavOpen(false); }}
                   sx={{
