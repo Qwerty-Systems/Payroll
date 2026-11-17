@@ -25,6 +25,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
   const [filings,setFilings]=useState<Row[]>([]);
   const [audit,setAudit]=useState<Row[]>([]);
   const [runs,setRuns]=useState<Row[]>([]);
+  const [filingDetail,setFilingDetail]=useState<Row|null>(null);
   const [filingReport,setFilingReport]=useState<Row|null>(null);
   const [selectedPeriod,setSelectedPeriod]=useState('');
   const [dialog,setDialog]=useState('');
@@ -92,12 +93,15 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
       }else if(dialog==='ruleChange'){
         const configuration=JSON.parse(fields.configuration||'{}');
         if(!configuration||Array.isArray(configuration)||typeof configuration!=='object')throw new Error('Calculation configuration must be a JSON object.');
-        await request('compliance/rulesets/'+selectedRuleset+'/changes',{method:'POST',body:JSON.stringify({
-          ruleCode:fields.ruleCode,label:fields.label,category:fields.category,calculationMethod:fields.calculationMethod,
+        const payload={
+          ...(activeId?{}:{ruleCode:fields.ruleCode}),label:fields.label,category:fields.category,calculationMethod:fields.calculationMethod,
           configuration,effectiveFrom:fields.effectiveFrom,effectiveTo:fields.effectiveTo||undefined,
           sourceTitle:fields.sourceTitle,sourceUrl:fields.sourceUrl,verifiedOn:fields.verifiedOn,reason:fields.reason,
-        })});
-        setNotice('Effective-dated rule change saved as a draft. It will not affect payroll until reviewed and approved.');
+        };
+        await request(activeId?'compliance/rule-changes/'+activeId:'compliance/rulesets/'+selectedRuleset+'/changes',{
+          method:activeId?'PATCH':'POST',body:JSON.stringify(payload),
+        });
+        setNotice(activeId?'Rule change proposal updated. It remains inactive until independently approved.':'Effective-dated rule change saved as a draft. It will not affect payroll until reviewed and approved.');
       }else if(dialog==='prepareFiling'){
         await request('compliance/filings/prepare',{method:'POST',body:JSON.stringify({
           payrollPeriodId:fields.payrollPeriodId,payrollRunId:fields.payrollRunId,authority:fields.authority,
@@ -181,7 +185,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
       </Stack>
       <TableContainer sx={{mt:2}}><Table size="small"><TableHead><TableRow>{['Rule','Effective','Source','Status','Actions'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
         {changes.map(r=><TableRow key={r.id}><TableCell><Typography fontWeight={800}>{show(r.ruleCode)} · {show(r.label)}</Typography><Typography variant="caption" color="text.secondary">{show(r.reason)}</Typography></TableCell><TableCell>{show(r.effectiveFrom)}{r.effectiveTo?' → '+show(r.effectiveTo):' onward'}</TableCell><TableCell>{show(r.sourceTitle)}<Typography variant="caption" display="block">{show(r.verifiedOn)}</Typography></TableCell><TableCell><Chip size="small" color={statusColor(String(r.status))} label={show(r.status)}/></TableCell><TableCell>
-          {r.status==='draft'||r.status==='rejected'?<Button size="small" disabled={!canManage||busy} onClick={()=>void act('compliance/rule-changes/'+r.id+'/submit',{notes:'Submitted for independent compliance review.'},'POST','Rule change submitted for review.')}>Submit</Button>:null}
+          {r.status==='draft'||r.status==='rejected'?<><Button size="small" disabled={!canManage||busy} onClick={()=>{setFields(v=>({...v,ruleCode:String(r.ruleCode??''),label:String(r.label??''),category:String(r.category??'tax'),calculationMethod:String(r.calculationMethod??''),configuration:JSON.stringify(r.configuration??{},null,2),effectiveFrom:String(r.effectiveFrom??today()),effectiveTo:String(r.effectiveTo??''),sourceTitle:String(r.sourceTitle??''),sourceUrl:String(r.sourceUrl??''),verifiedOn:String(r.verifiedOn??today()),reason:String(r.reason??'')}));openDialog('ruleChange',String(r.id));}}>Edit</Button><Button size="small" disabled={!canManage||busy} onClick={()=>void act('compliance/rule-changes/'+r.id+'/submit',{notes:'Submitted for independent compliance review.'},'POST','Rule change submitted for review.')}>Submit</Button></>:null}
           {r.status==='submitted'&&canReview?<><Button size="small" color="success" onClick={()=>{set('decision','approve');openDialog('reviewDecision','rule-change:'+String(r.id));}}>Approve</Button><Button size="small" color="error" onClick={()=>{set('decision','reject');openDialog('reviewDecision','rule-change:'+String(r.id));}}>Reject</Button></>:null}
         </TableCell></TableRow>)}
         {!changes.length&&<TableRow><TableCell colSpan={5}>No rule change proposals yet.</TableCell></TableRow>}
@@ -202,6 +206,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
           {f.status==='submitted'&&canManage?<Button size="small" onClick={()=>{set('decision','approve');openDialog('authorityResponse',String(f.id));}}>Record acceptance</Button>:null}
           {f.status==='submitted'&&canManage?<Button size="small" color="error" onClick={()=>{set('decision','reject');openDialog('authorityResponse',String(f.id));}}>Record rejection</Button>:null}
           {f.externalReference?<Typography variant="caption" display="block">{show(f.externalReference)}</Typography>:null}
+          <Button size="small" onClick={async()=>{setBusy(true);setError('');try{setFilingDetail(await request<Row>('compliance/filings/'+f.id));}catch(e){setError(e instanceof Error?e.message:'Filing report could not be loaded.');}finally{setBusy(false);}}}>View report</Button>
         </TableCell></TableRow>)}
         {!filings.length&&<TableRow><TableCell colSpan={6}>No statutory filings prepared for this company.</TableCell></TableRow>}
       </TableBody></Table></TableContainer>
@@ -216,6 +221,42 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
       </TableBody></Table></TableContainer>
     </Paper>
 
+    <Dialog open={Boolean(filingDetail)} onClose={()=>setFilingDetail(null)} fullWidth maxWidth="lg">
+      <DialogTitle>Statutory filing report · {show(filingDetail?.authority)} · {show(filingDetail?.referencePeriod)}</DialogTitle>
+      <DialogContent>
+        {filingDetail&&(()=>{
+          const report=(filingDetail.reportSnapshot??{}) as Row;
+          const totals=(report.totals??filingDetail.totals??{}) as Row;
+          const employees=rows(report.employees);
+          return <Stack spacing={2} sx={{pt:1}}>
+            <Alert severity="info">This is a frozen report snapshot from the approved payroll run. It is a preparation report, not proof that the authority has received or accepted the filing.</Alert>
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Chip label={'Employees: '+show(totals.employeeCount??employees.length)}/>
+              <Chip label={'Gross: KES '+show(totals.grossEarnings)}/>
+              <Chip label={'Employee statutory: KES '+show(totals.employeeStatutoryAmount)}/>
+              <Chip label={'Employer statutory: KES '+show(totals.employerStatutoryAmount)}/>
+              <Chip label={'Net pay: KES '+show(totals.netPay)}/>
+            </Stack>
+            <TableContainer sx={{maxHeight:460}}><Table size="small" stickyHeader><TableHead><TableRow>{['Employee','Gross earnings','Taxable income','Statutory lines','Net pay'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
+              {employees.map((e,i)=><TableRow key={String((e.worker as Row)?.id??i)}>
+                <TableCell>{show([(e.worker as Row)?.workerNumber,(e.worker as Row)?.firstName,(e.worker as Row)?.lastName].filter(Boolean).join(' '))}</TableCell>
+                <TableCell>{show(e.grossEarnings)}</TableCell><TableCell>{show(e.taxableIncome)}</TableCell>
+                <TableCell>{rows(e.lines).map(l=>String(l.code)+': '+String(l.amount)+' ('+String(l.side)+')').join(' · ')}</TableCell>
+                <TableCell>{show(e.netPay)}</TableCell>
+              </TableRow>)}
+              {!employees.length&&<TableRow><TableCell colSpan={5}>No employee detail is available in this report snapshot.</TableCell></TableRow>}
+            </TableBody></Table></TableContainer>
+            <Button variant="outlined" onClick={()=>{
+              const blob=new Blob([JSON.stringify(filingDetail.reportSnapshot??{},null,2)],{type:'application/json'});
+              const url=URL.createObjectURL(blob);const a=document.createElement('a');
+              a.href=url;a.download='jengaflow-'+String(filingDetail.authority).toLowerCase()+'-'+String(filingDetail.referencePeriod)+'.json';
+              a.click();URL.revokeObjectURL(url);
+            }}>Download report (JSON)</Button>
+          </Stack>;
+        })()}
+      </DialogContent>
+      <DialogActions><Button onClick={()=>setFilingDetail(null)}>Close</Button></DialogActions>
+    </Dialog>
     <Dialog open={Boolean(dialog)} onClose={closeDialog} fullWidth maxWidth="md">
       <Box component="form" onSubmit={submit}>
         <DialogTitle>{dialog==='reviewRuleset'?'Submit statutory ruleset for review':dialog==='ruleChange'?'Propose an effective-dated rule change':dialog==='prepareFiling'?'Prepare statutory filing':dialog==='recordSubmission'?'Record authority submission':dialog==='authorityResponse'?'Record authority response':'Compliance review decision'}</DialogTitle>
