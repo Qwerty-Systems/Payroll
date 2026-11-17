@@ -52,11 +52,12 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [dialog, setDialog] = useState<'' | 'worker' | 'contract' | 'payGrade' | 'project' | 'site' | 'attendance' | 'period'>('');
+  const [dialog, setDialog] = useState<'' | 'worker' | 'contract' | 'payGrade' | 'endContract' | 'project' | 'site' | 'attendance' | 'period'>('');
   const [busy, setBusy] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedRun, setSelectedRun] = useState('');
+  const [selectedContract, setSelectedContract] = useState('');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -69,7 +70,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [forms, setForms] = useState<Record<string, string>>({
     workerNumber: '', firstName: '', lastName: '', phone: '', email: '',
-    engagementType: 'permanent', payBasis: 'monthly', rateAmount: '', effectiveFrom: dateToday(), unitCodes: '', payGradeId: '',
+    engagementType: 'permanent', payBasis: 'monthly', rateAmount: '', effectiveFrom: dateToday(), contractEndDate: dateToday(), unitCodes: '', payGradeId: '',
     gradeCode: '', gradeName: '', gradeDescription: '', gradePayBasis: 'monthly', gradeMinimum: '', gradeMidpoint: '', gradeMaximum: '', gradeCurrency: 'KES',
     projectCode: '', projectName: '', clientName: '', siteCode: '', siteName: '',
     workDate: dateToday(), minutesWorked: '480', periodCode: '', periodName: '',
@@ -210,6 +211,11 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           terms: forms.payBasis === 'per_unit' ? { unitCodes: (forms.unitCodes ?? '').split(',').map(x => x.trim()).filter(Boolean) } : {},
         }) });
         setNotice('Contract added to the worker history.');
+      } else if (dialog === 'endContract') {
+        await request(`tenant/workers/${selectedWorker}/contracts/${selectedContract}/end`, {
+          method: 'PATCH', body: JSON.stringify({ effectiveTo: forms.contractEndDate }),
+        });
+        setNotice('Worker contract end date recorded.');
       } else if (dialog === 'payGrade') {
         await request('tenant/pay-grades', { method: 'POST', body: JSON.stringify({
           code: forms.gradeCode, name: forms.gradeName, description: forms.gradeDescription || undefined,
@@ -247,6 +253,16 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The request could not be completed.');
     } finally { setBusy(false); }
+  }
+
+  async function updateWorkerStatus(workerId: string, status: 'active' | 'inactive' | 'suspended' | 'archived') {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await request(`tenant/workers/${workerId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      setNotice(`Worker status updated to ${status.replaceAll('_',' ')}.`);
+      await refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Worker status could not be updated.'); }
+    finally { setBusy(false); }
   }
 
   async function attendanceAction(id: string, action: 'submit' | 'approve') {
@@ -531,10 +547,15 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                 </TableCell></TableRow>}
               </TableBody></Table></TableContainer>}
               {section === 'workers' && selectedWorker && <Box sx={{ p: 2.5, borderTop: '1px solid #E8EEE8' }}>
-                <Typography fontWeight={850} sx={{ mb: 1 }}>Effective-dated contract history</Typography>
-                <TableContainer><Table size="small"><TableHead><TableRow>{['Engagement','Pay basis','Rate','From','To'].map(item => <TableCell key={item}>{item}</TableCell>)}</TableRow></TableHead><TableBody>
-                  {contracts.map(contract => <TableRow key={String(contract.id)}><TableCell>{label(contract.engagementType)}</TableCell><TableCell>{label(contract.payBasis)}</TableCell><TableCell>{label(contract.rateAmount)} {label(contract.currency)}</TableCell><TableCell>{label(contract.effectiveFrom)}</TableCell><TableCell>{label(contract.effectiveTo)}</TableCell></TableRow>)}
-                  {!contracts.length && <TableRow><TableCell colSpan={5}>No contract history is recorded for this worker.</TableCell></TableRow>}
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                  <Typography fontWeight={850}>Worker lifecycle & contract history</Typography>
+                  <Button size="small" disabled={busy} onClick={() => void updateWorkerStatus(selectedWorker, data.workers?.find(worker => worker.id === selectedWorker)?.status === 'active' ? 'inactive' : 'active')}>
+                    {data.workers?.find(worker => worker.id === selectedWorker)?.status === 'active' ? 'Deactivate worker' : 'Activate worker'}
+                  </Button>
+                </Stack>
+                <TableContainer><Table size="small"><TableHead><TableRow>{['Engagement','Pay basis','Rate','From','To','Actions'].map(item => <TableCell key={item}>{item}</TableCell>)}</TableRow></TableHead><TableBody>
+                  {contracts.map(contract => <TableRow key={String(contract.id)}><TableCell>{label(contract.engagementType)}</TableCell><TableCell>{label(contract.payBasis)}</TableCell><TableCell>{label(contract.rateAmount)} {label(contract.currency)}</TableCell><TableCell>{label(contract.effectiveFrom)}</TableCell><TableCell>{label(contract.effectiveTo)}</TableCell><TableCell>{!contract.effectiveTo && <Button size="small" onClick={() => { setSelectedContract(String(contract.id)); setField('contractEndDate', dateToday()); setDialog('endContract'); }}>End contract</Button>}</TableCell></TableRow>)}
+                  {!contracts.length && <TableRow><TableCell colSpan={6}>No contract history is recorded for this worker.</TableCell></TableRow>}
                 </TableBody></Table></TableContainer>
               </Box>}
               {section === 'workers' && selectedWorker && <Box sx={{ p: 2.5, borderTop: '1px solid #E8EEE8' }}>
@@ -570,8 +591,9 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
 
     <Dialog open={Boolean(dialog)} onClose={() => setDialog('')} fullWidth maxWidth="sm">
       <Box component="form" onSubmit={submit}>
-        <DialogTitle>{dialog === 'worker' ? 'Add worker' : dialog === 'contract' ? 'Add worker contract' : dialog === 'payGrade' ? 'Create pay grade' : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : 'Create payroll period'}</DialogTitle>
+        <DialogTitle>{dialog === 'worker' ? 'Add worker' : dialog === 'contract' ? 'Add worker contract' : dialog === 'endContract' ? 'End worker contract' : dialog === 'payGrade' ? 'Create pay grade' : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : 'Create payroll period'}</DialogTitle>
         <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
+          {dialog === 'endContract' && <><Alert severity="warning">Ending a contract is effective-dated and cannot be extended. Create a new contract version if the worker is rehired.</Alert><TextField label="Effective to" type="date" required InputLabelProps={{ shrink: true }} value={forms.contractEndDate} onChange={e => setField('contractEndDate', e.target.value)} /></>}
           {dialog === 'worker' && <><TextField label="Worker number" required value={forms.workerNumber} onChange={e => setField('workerNumber', e.target.value)} /><TextField label="First name" required value={forms.firstName} onChange={e => setField('firstName', e.target.value)} /><TextField label="Last name" required value={forms.lastName} onChange={e => setField('lastName', e.target.value)} /><TextField label="Phone" value={forms.phone} onChange={e => setField('phone', e.target.value)} /><TextField label="Email" type="email" value={forms.email} onChange={e => setField('email', e.target.value)} /></>}
           {dialog === 'payGrade' && <><TextField label="Code" required value={forms.gradeCode} onChange={e => setField('gradeCode', e.target.value.toUpperCase())} /><TextField label="Name" required value={forms.gradeName} onChange={e => setField('gradeName', e.target.value)} /><TextField label="Description" multiline minRows={2} value={forms.gradeDescription} onChange={e => setField('gradeDescription', e.target.value)} /><TextField select label="Pay basis" value={forms.gradePayBasis} onChange={e => setField('gradePayBasis', e.target.value)}>{['hourly','daily','weekly','monthly','per_unit'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField label="Currency" required inputProps={{ maxLength: 3 }} value={forms.gradeCurrency} onChange={e => setField('gradeCurrency', e.target.value.toUpperCase())} /><TextField label="Minimum rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMinimum} onChange={e => setField('gradeMinimum', e.target.value)} /><TextField label="Midpoint rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMidpoint} onChange={e => setField('gradeMidpoint', e.target.value)} /><TextField label="Maximum rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMaximum} onChange={e => setField('gradeMaximum', e.target.value)} /></>}
            {dialog === 'contract' && <><TextField select label="Engagement" value={forms.engagementType} onChange={e => setField('engagementType', e.target.value)}>{['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Pay basis" value={forms.payBasis} onChange={e => setField('payBasis', e.target.value)}>{['hourly','daily','weekly','monthly','per_unit'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Pay grade (optional)" value={forms.payGradeId} onChange={e => { const grade = (data.payGrades ?? []).find(item => item.id === e.target.value); setField('payGradeId', e.target.value); if (grade) setField('payBasis', String(grade.payBasis)); }}><MenuItem value="">No pay grade</MenuItem>{(data.payGrades ?? []).filter(grade => grade.status === 'active').map(grade => <MenuItem key={String(grade.id)} value={String(grade.id)}>{label(grade.code)} — {label(grade.name)}</MenuItem>)}</TextField>{forms.payBasis === 'per_unit' && <TextField label="Approved unit codes (comma-separated)" required helperText="Example: blocks, metres, deliveries. These must match approved output entries." value={forms.unitCodes} onChange={e => setField('unitCodes', e.target.value)} />}<TextField label="Rate (KES)" type="number" required value={forms.rateAmount} onChange={e => setField('rateAmount', e.target.value)} /><TextField label="Effective from" type="date" required InputLabelProps={{ shrink: true }} value={forms.effectiveFrom} onChange={e => setField('effectiveFrom', e.target.value)} /></>}
