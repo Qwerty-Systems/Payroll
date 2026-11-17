@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
@@ -13,6 +13,7 @@ export class PayrollController {
   constructor(private readonly payroll: PayrollService) {}
 
   @Get('periods') @TenantPermissions('payroll.read') listPeriods(@Req() req:TenantRequest) { return this.payroll.listPeriods(req.tenant.id); }
+  @Get('runs') @TenantPermissions('payroll.read') listRuns(@Req() req:TenantRequest,@Query('periodId') periodId?:string) { return this.payroll.listRuns(req.tenant.id,periodId); }
   @Post('periods') @TenantPermissions('payroll.calculate') createPeriod(@Req() req:TenantRequest,@Body() dto:CreatePayrollPeriodDto) { return this.payroll.createPeriod(req.tenant.id,req.tenant.userId,dto); }
   @Post('runs') @TenantPermissions('payroll.calculate') createRun(@Req() req:TenantRequest,@Body() dto:CreatePayrollRunDto) { return this.payroll.createRun(req.tenant.id,req.tenant.userId,dto.periodId); }
   @Post('runs/:id/calculate') @TenantPermissions('payroll.calculate') calculate(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.calculateRun(req.tenant.id,req.tenant.userId,id); }
