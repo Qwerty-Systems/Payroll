@@ -24,6 +24,17 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
   const [paymentBatches,setPaymentBatches]=useState<Row[]>([]);
   const [paymentBatch,setPaymentBatch]=useState<Row|null>(null);
   const [paymentMethod,setPaymentMethod]=useState<'manual'|'bank_transfer'|'mpesa'>('manual');
+  const [corrections,setCorrections]=useState<Row[]>([]);
+  const [correctionReason,setCorrectionReason]=useState('');
+  const [correctionType,setCorrectionType]=useState<'adjustment'|'reversal'>('adjustment');
+  const [correctionWorker,setCorrectionWorker]=useState('');
+  const [correctionCode,setCorrectionCode]=useState('PAYROLL_ADJUSTMENT');
+  const [correctionDescription,setCorrectionDescription]=useState('');
+  const [correctionEarnings,setCorrectionEarnings]=useState('0');
+  const [correctionDeduction,setCorrectionDeduction]=useState('0');
+  const [correctionEmployer,setCorrectionEmployer]=useState('0');
+  const [remittance,setRemittance]=useState<Row|null>(null);
+  const [ledger,setLedger]=useState<Row|null>(null);
   const [providerReferences,setProviderReferences]=useState<Record<string,string>>({});
   const [periodDialog,setPeriodDialog]=useState(false);
   const [periodEditing,setPeriodEditing]=useState('');
@@ -56,7 +67,7 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
 
   async function openRun(id:string) {
     setSelectedRun(id);setTab('runs');setPayslips([]);
-    try {const detail=await request<Row>('payroll/runs/'+id);setRunDetail(detail);setRunDescription(String(detail.description??''));setPaymentBatch(null);if(detail.status==='finalized'){setPaymentBatches(asRows(await request<unknown>('payroll/runs/'+id+'/payment-batches')));}else{setPaymentBatches([]);}}
+    try {const detail=await request<Row>('payroll/runs/'+id);setRunDetail(detail);setRunDescription(String(detail.description??''));setPaymentBatch(null);if(detail.status==='finalized'){setPaymentBatches(asRows(await request<unknown>('payroll/runs/'+id+'/payment-batches')));setCorrections(asRows(await request<unknown>('payroll/runs/'+id+'/corrections')));}else{setPaymentBatches([]);setCorrections([]);}}
     catch(e){setError(e instanceof Error?e.message:'Unable to load payroll run.');}
   }
 
@@ -94,6 +105,26 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
       await request('payroll/runs/'+selectedRun,body('PATCH',{description:runDescription}));
       await openRun(selectedRun);
     },'Payroll run details updated.');
+  }
+
+
+  async function createPayrollCorrection() {
+    if(!selectedRun||!correctionReason.trim())return;
+    const earnings=Number(correctionEarnings||0),deduction=Number(correctionDeduction||0),employer=Number(correctionEmployer||0);
+    const line={workerId:correctionWorker,code:correctionCode,description:correctionDescription,earningsDelta:earnings,employeeDeductionDelta:deduction,employerContributionDelta:employer,netPayDelta:earnings-deduction};
+    await perform(async()=>{
+      await request('payroll/runs/'+selectedRun+'/corrections',body('POST',{type:correctionType,reason:correctionReason,lines:correctionType==='reversal'?[]:[line]}));
+      setCorrections(asRows(await request<unknown>('payroll/runs/'+selectedRun+'/corrections')));
+      setCorrectionReason('');setCorrectionDescription('');setCorrectionEarnings('0');setCorrectionDeduction('0');setCorrectionEmployer('0');
+    },'Correction record created. Submit it for independent review.');
+  }
+
+  async function loadPayrollReports() {
+    if(!selectedRun)return;
+    await perform(async()=>{
+      const [r,l]=await Promise.all([request<Row>('payroll/runs/'+selectedRun+'/remittance-schedule'),request<Row>('payroll/runs/'+selectedRun+'/general-ledger')]);
+      setRemittance(r);setLedger(l);
+    },'Remittance schedule and ledger preview loaded.');
   }
 
   async function loadPayslips(runId:string) {
@@ -283,7 +314,44 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
               </Paper>}
             </Box>}
             {runDetail.rejectionReason&&<Alert severity="error" sx={{mt:2}}>Returned for correction: {runDetail.rejectionReason}</Alert>}
-            {runStatus==='finalized'&&<Alert severity="info" sx={{mt:2}}>Finalized payroll is read-only. Corrections must be handled through an auditable adjustment or reversal workflow; this screen will not overwrite issued payslips.</Alert>}
+
+            {runStatus==='finalized'&&<Stack spacing={2} sx={{mt:2}}>
+              <Alert severity="info">Finalized payroll is immutable. Corrections are separate auditable records and never overwrite the original run or issued payslips.</Alert>
+              <Divider/>
+              <Typography fontWeight={850}>Post-finalization corrections and reversals</Typography>
+              <Typography variant="caption" color="text.secondary">An adjustment must balance: net pay change = earnings change − employee deduction change. A full reversal is generated from the original finalized payroll.</Typography>
+              <TextField select size="small" label="Correction type" value={correctionType} onChange={e=>setCorrectionType(e.target.value as 'adjustment'|'reversal')} sx={{maxWidth:320}}>
+                <MenuItem value="adjustment">Adjustment</MenuItem><MenuItem value="reversal">Full payroll reversal</MenuItem>
+              </TextField>
+              <TextField fullWidth multiline minRows={2} label="Reason / supporting explanation" value={correctionReason} onChange={e=>setCorrectionReason(e.target.value)}/>
+              {correctionType==='adjustment'&&<Grid container spacing={1}>
+                <Grid size={{xs:12,md:4}}><TextField select fullWidth size="small" label="Employee" value={correctionWorker} onChange={e=>setCorrectionWorker(e.target.value)}>
+                  {items.map(i=><MenuItem key={i.workerId} value={i.workerId}>{i.snapshot?.worker?.workerNumber??i.workerId} · {[i.snapshot?.worker?.firstName,i.snapshot?.worker?.lastName].filter(Boolean).join(' ')}</MenuItem>)}
+                </TextField></Grid>
+                <Grid size={{xs:12,md:4}}><TextField fullWidth size="small" label="Adjustment code" value={correctionCode} onChange={e=>setCorrectionCode(e.target.value)}/></Grid>
+                <Grid size={{xs:12,md:4}}><TextField fullWidth size="small" label="Description" value={correctionDescription} onChange={e=>setCorrectionDescription(e.target.value)}/></Grid>
+                <Grid size={{xs:12,md:4}}><TextField fullWidth size="small" type="number" label="Earnings change (KES)" value={correctionEarnings} onChange={e=>setCorrectionEarnings(e.target.value)}/></Grid>
+                <Grid size={{xs:12,md:4}}><TextField fullWidth size="small" type="number" label="Employee deduction change (KES)" value={correctionDeduction} onChange={e=>setCorrectionDeduction(e.target.value)}/></Grid>
+                <Grid size={{xs:12,md:4}}><TextField fullWidth size="small" type="number" label="Employer contribution change (KES)" value={correctionEmployer} onChange={e=>setCorrectionEmployer(e.target.value)}/></Grid>
+                <Grid size={{xs:12}}><Typography variant="caption">Calculated net pay change: {money(Number(correctionEarnings||0)-Number(correctionDeduction||0))}</Typography></Grid>
+              </Grid>}
+              <Button variant="contained" disabled={busy||correctionReason.trim().length<8||(correctionType==='adjustment'&&(!correctionWorker||!correctionDescription.trim()||!correctionCode.trim()))||(correctionType==='reversal'&&corrections.some(x=>x.correctionType==='reversal'&&['submitted','approved','applied'].includes(x.status)))} onClick={()=>void createPayrollCorrection()}>
+                {correctionType==='reversal'?'Create full reversal':'Create adjustment'}
+              </Button>
+              <TableContainer><Table size="small"><TableHead><TableRow>{['Correction #','Type','Reason','Status','Created','Actions'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
+                {corrections.map(x=><TableRow key={x.id}><TableCell>{x.correctionNumber}</TableCell><TableCell>{x.correctionType}</TableCell><TableCell>{x.reason}</TableCell><TableCell><Chip size="small" label={x.status}/></TableCell><TableCell>{fmtDate(x.createdAt)}</TableCell><TableCell><Stack direction="row" spacing={.5}>
+                  {x.status==='draft'&&<Button size="small" onClick={()=>void perform(async()=>{await request('payroll/corrections/'+x.id+'/submit',body('POST',{}));setCorrections(asRows(await request<unknown>('payroll/runs/'+selectedRun+'/corrections')));},'Correction submitted for review.')}>Submit</Button>}
+                  {x.status==='submitted'&&<Button size="small" onClick={()=>void perform(async()=>{await request('payroll/corrections/'+x.id+'/approve',body('POST',{}));setCorrections(asRows(await request<unknown>('payroll/runs/'+selectedRun+'/corrections')));},'Correction approved.')}>Approve</Button>}
+                  {x.status==='approved'&&<Button size="small" color="success" onClick={()=>void perform(async()=>{await request('payroll/corrections/'+x.id+'/apply',body('POST',{}));setCorrections(asRows(await request<unknown>('payroll/runs/'+selectedRun+'/corrections')));},'Correction applied to the correction register.')}>Apply</Button>}
+                </Stack></TableCell></TableRow>)}
+                {!corrections.length&&<TableRow><TableCell colSpan={6}>No post-finalization corrections recorded.</TableCell></TableRow>}
+              </TableBody></Table></TableContainer>
+              <Divider/>
+              <Button variant="outlined" onClick={()=>void loadPayrollReports()} disabled={busy}>Load remittance & accounting reports</Button>
+              {remittance&&<Paper variant="outlined" sx={{p:2}}><Typography fontWeight={800}>Statutory remittance schedule · {remittance.periodCode}</Typography><Table size="small"><TableHead><TableRow><TableCell>Code</TableCell><TableCell align="right">Employee</TableCell><TableCell align="right">Employer</TableCell><TableCell align="right">Total</TableCell></TableRow></TableHead><TableBody>{asRows(remittance.items).map(x=><TableRow key={x.code}><TableCell>{x.code}</TableCell><TableCell align="right">{money(x.employee)}</TableCell><TableCell align="right">{money(x.employer)}</TableCell><TableCell align="right">{money(x.total)}</TableCell></TableRow>)}</TableBody></Table></Paper>}
+              {ledger&&<Paper variant="outlined" sx={{p:2}}><Typography fontWeight={800}>General ledger journal preview · {ledger.periodCode}</Typography><Table size="small"><TableHead><TableRow><TableCell>Account</TableCell><TableCell align="right">Debit</TableCell><TableCell align="right">Credit</TableCell></TableRow></TableHead><TableBody>{asRows(ledger.journal).map((x,i)=><TableRow key={i}><TableCell>{x.account}</TableCell><TableCell align="right">{money(x.debit)}</TableCell><TableCell align="right">{money(x.credit)}</TableCell></TableRow>)}</TableBody></Table><Typography variant="caption">Debit: {money(ledger.totals?.debit)} · Credit: {money(ledger.totals?.credit)}</Typography></Paper>}
+            </Stack>}
+
           </Paper>}
         </Stack>}
 
