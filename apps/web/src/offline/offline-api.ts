@@ -76,7 +76,7 @@ export async function downloadOfflineReferenceData(tenantId:string,request:ApiRe
   if(!tenantId)throw new Error('Select a company workspace before downloading reference data.');
   if(typeof navigator!=='undefined'&&!navigator.onLine)throw new Error('Connect to the internet before downloading the latest reference data.');
   const snapshot=await request<Record<string,unknown>>('tenant/sync/reference-data');
-  const cached={...snapshot,downloadedAt:new Date().toISOString()};
+  const cached:Record<string,unknown>={...snapshot,downloadedAt:new Date().toISOString()};
   await setOfflineMetadata(`reference-data:${tenantId}`,cached);
   return cached;
 }
