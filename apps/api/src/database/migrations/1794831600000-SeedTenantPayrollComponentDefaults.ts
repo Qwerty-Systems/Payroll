@@ -57,7 +57,7 @@ export class SeedTenantPayrollComponentDefaults1794831600000 implements Migratio
     `);
   }
 
-  async down(q: QueryRunner): Promise<void> {
+  async down(_q: QueryRunner): Promise<void> {
     // Seeded tenant configuration is user-editable and may already be in use.
     // It is intentionally retained on rollback rather than deleting company data.
   }
