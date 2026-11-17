@@ -53,7 +53,7 @@ export class ComplianceService {
     return this.tenantDb.run(tenantId, async m => {
       const sets = await m.query("SELECT id,name,version FROM statutory_rule_sets WHERE id=$1 AND status='published'",[ruleSetId]);
       if (!sets.length) throw new NotFoundException('A published statutory ruleset was not found.');
-      const rules = await m.query('SELECT code,calculation_method,configuration,effective_from::text,effective_to::text FROM statutory_rules WHERE rule_set_id=$1 ORDER BY code,effective_from',[ruleSetId]);
+      const rules = await m.query('SELECT code,label,category,calculation_method,configuration,effective_from::text,effective_to::text,source_title,source_url,verified_on::text FROM statutory_rules WHERE rule_set_id=$1 ORDER BY code,effective_from',[ruleSetId]);
       if (!rules.length) throw new ConflictException('This statutory ruleset contains no rules to review.');
       const hash = createHash('sha256').update(JSON.stringify(rules)).digest('hex');
       const pending = await m.query("SELECT id FROM tenant_statutory_rule_reviews WHERE tenant_id=$1 AND rule_set_id=$2 AND status='submitted' LIMIT 1",[tenantId,ruleSetId]);
@@ -284,7 +284,7 @@ export class ComplianceService {
       const rows=await m.query(`
         UPDATE statutory_filing_records SET status='submitted',external_reference=$3,submission_channel=$4,
           submission_evidence_url=$5,submitted_by=$6,submitted_at=now(),updated_at=now()
-        WHERE tenant_id=$1 AND id=$2 AND status='approved' AND reviewed_by IS DISTINCT FROM $6
+        WHERE tenant_id=$1 AND id=$2 AND status='approved' AND prepared_by IS DISTINCT FROM $6 AND reviewed_by IS DISTINCT FROM $6
         RETURNING id,status,external_reference AS "externalReference",submitted_at AS "submittedAt"
       `,[tenantId,id,dto.externalReference,dto.submissionChannel,dto.submissionEvidenceUrl??null,actorId]);
       if(!rows.length) throw new ConflictException('Only an approved filing can be recorded as submitted. Record the reference returned by the authority.');
@@ -309,7 +309,7 @@ export class ComplianceService {
 
   getFiling(tenantId:string,id:string) {
     return this.tenantDb.run(tenantId,async m=>{
-      const rows=await m.query('SELECT * FROM statutory_filing_records WHERE tenant_id=$1 AND id=$2',[tenantId,id]);
+      const rows=await m.query('SELECT id,authority,filing_type AS "filingType",reference_period AS "referencePeriod",due_date::text AS "dueDate",status,currency,totals,report_snapshot AS "reportSnapshot",preparation_notes AS "preparationNotes",review_notes AS "reviewNotes",external_reference AS "externalReference",submission_channel AS "submissionChannel",submission_evidence_url AS "submissionEvidenceUrl",prepared_at AS "preparedAt",reviewed_at AS "reviewedAt",submitted_at AS "submittedAt",accepted_at AS "acceptedAt",rejected_at AS "rejectedAt",rejection_reason AS "rejectionReason" FROM statutory_filing_records WHERE tenant_id=$1 AND id=$2',[tenantId,id]);
       if(!rows.length) throw new NotFoundException('Statutory filing not found.');
       return rows[0];
     });
