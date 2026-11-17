@@ -165,10 +165,10 @@ export class ComplianceService {
         if(!review.length) throw new ConflictException('Approve the applicable statutory ruleset review before approving a rule change.');
         const overrides=await m.query(`
           INSERT INTO tenant_statutory_rule_overrides
-            (tenant_id,rule_code,label,category,calculation_method,configuration,effective_from,effective_to,reason,approved_by,status,submitted_by,reviewed_at,review_notes,source_title,source_url,verified_on)
-          VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,'approved',$11,now(),$12,$13,$14,$15)
+            (tenant_id,rule_set_id,rule_code,label,category,calculation_method,configuration,effective_from,effective_to,reason,approved_by,status,submitted_by,reviewed_at,review_notes,source_title,source_url,verified_on)
+          VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,'approved',$12,now(),$13,$14,$15,$16)
           RETURNING id
-        `,[tenantId,change.rule_code,change.label,change.category,change.calculation_method,JSON.stringify(change.configuration),change.effective_from,change.effective_to,change.reason,actorId,change.submitted_by,dto.notes,change.source_title,change.source_url,change.verified_on]);
+        `,[tenantId,change.rule_set_id,change.rule_code,change.label,change.category,change.calculation_method,JSON.stringify(change.configuration),change.effective_from,change.effective_to,change.reason,actorId,change.submitted_by,dto.notes,change.source_title,change.source_url,change.verified_on]);
         await m.query("UPDATE tenant_statutory_rule_changes SET status='approved',review_notes=$3,reviewed_by=$4,reviewed_at=now(),applied_override_id=$5,updated_at=now() WHERE tenant_id=$1 AND id=$2",[tenantId,id,dto.notes,actorId,overrides[0].id]);
       }else{
         await m.query("UPDATE tenant_statutory_rule_changes SET status='rejected',review_notes=$3,reviewed_by=$4,reviewed_at=now(),updated_at=now() WHERE tenant_id=$1 AND id=$2",[tenantId,id,dto.notes,actorId]);
