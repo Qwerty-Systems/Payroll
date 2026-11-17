@@ -376,32 +376,6 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     } finally { setBusy(false); }
   }
 
-  async function createRun(periodId: string) {
-    setBusy(true); setError(''); setNotice('');
-    try {
-      const run = await request<RowData>('payroll/runs', { method: 'POST', body: JSON.stringify({ periodId }) });
-      const runId = String(run.id ?? '');
-      if (!runId) throw new Error('The API did not return a payroll run identifier.');
-      setSelectedRun(runId);
-      const details = await request<RowData>('payroll/runs/' + runId);
-      setData(current => ({ ...current, run: [details] }));
-      setNotice('Payroll run created. Calculate the preview to review employee-level earnings, deductions and net pay.');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to create payroll run.'); }
-    finally { setBusy(false); }
-  }
-
-  async function calculateRun() {
-    if (!selectedRun) return;
-    setBusy(true); setError(''); setNotice('');
-    try {
-      await request(`payroll/runs/${selectedRun}/calculate`, { method: 'POST', body: '{}' });
-      const result = await request<RowData>(`payroll/runs/${selectedRun}`);
-      setData(current => ({ ...current, run: [result] }));
-      setNotice('Payroll preview calculated. Review employee-level earnings, deductions and warnings before submitting the run for approval.');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Payroll calculation could not be completed.'); }
-    finally { setBusy(false); }
-  }
-
   const currentRows = (section === 'workers' ? data.workers : section === 'pay-grades' ? data.payGrades : section === 'projects' ? data.projects :
     section === 'attendance' ? data.attendance : section === 'payroll' ? data.periods :
     section === 'people' ? data.members : section === 'organization' ? data.branches : []) ?? [];
