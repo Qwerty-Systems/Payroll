@@ -53,3 +53,30 @@ export class ReviewOvertimeRequestDto {
   @IsString() @Length(3, 500) reason!: string;
   @IsOptional() @IsInt() @Min(0) @Max(1440) approvedMinutes?: number;
 }
+
+
+export class CreateTimesheetDto {
+  @IsUUID() workerId!: string;
+  @IsDateString() periodStart!: string;
+  @IsDateString() periodEnd!: string;
+  @IsOptional() @IsString() @Length(1, 1000) notes?: string;
+}
+export class CreateTimesheetLineDto {
+  @IsDateString() workDate!: string;
+  @IsOptional() @IsUUID() projectId?: string;
+  @IsOptional() @IsUUID() siteId?: string;
+  @IsInt() @Min(0) @Max(1440) minutesWorked!: number;
+  @IsOptional() @IsInt() @Min(0) @Max(1440) overtimeMinutes?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) unitsCompleted?: number;
+  @IsOptional() @IsString() @Length(1, 500) description?: string;
+}
+export class UpdateTimesheetLineDto {
+  @IsOptional() @IsDateString() workDate?: string;
+  @IsOptional() @IsUUID() projectId?: string | null;
+  @IsOptional() @IsUUID() siteId?: string | null;
+  @IsOptional() @IsInt() @Min(0) @Max(1440) minutesWorked?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(1440) overtimeMinutes?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) unitsCompleted?: number | null;
+  @IsOptional() @IsString() @Length(1, 500) description?: string | null;
+}
+export class ReviewTimesheetDto { @IsString() @Length(3, 500) reason!: string; }
