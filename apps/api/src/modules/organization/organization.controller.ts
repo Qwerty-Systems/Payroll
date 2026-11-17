@@ -34,5 +34,6 @@ export class OrganizationController {
   @Post('worker-assignments') @TenantPermissions('workers.manage') createAssignment(@Req() req: TenantRequest,@Body() dto: CreateWorkerAssignmentDto) { return this.organization.createWorkerAssignment(req.tenant.id,req.tenant.userId,dto); }
   @Get('worker-assignments/:id') @TenantPermissions('workers.read') getAssignment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string){return this.organization.getWorkerAssignment(req.tenant.id,id);}
   @Patch('worker-assignments/:id') @TenantPermissions('workers.manage') updateAssignment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateWorkerAssignmentDto){return this.organization.updateWorkerAssignment(req.tenant.id,req.tenant.userId,id,dto);}
-  @Patch('worker-assignments/:id/end') @TenantPermissions('workers.manage') endAssignment(@Req() req: TenantRequest,@Param('id',ParseUUIDPipe) id: string,@Body() dto: EndAssignmentDto) { return this.organization.endWorkerAssignment(req.tenant.id,id,dto.effectiveTo); }
+  @Patch('worker-assignments/:id/end') @TenantPermissions('workers.manage') endAssignment(@Req() req: TenantRequest,@Param('id',ParseUUIDPipe) id: string,@Body() dto: EndAssignmentDto) { return this.organization.endWorkerAssignment(req.tenant.id,req.tenant.userId,id,dto.effectiveTo); }
+  @Delete('worker-assignments/:id') @TenantPermissions('workers.manage') deleteAssignment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string){return this.organization.deleteWorkerAssignment(req.tenant.id,req.tenant.userId,id);}
 }
