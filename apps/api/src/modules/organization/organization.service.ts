@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
-import { CreateBranchDto, CreateCostCentreDto, CreateDepartmentDto, CreateWorkerAssignmentDto, UpdateBranchDto, UpdateCostCentreDto, UpdateDepartmentDto } from './organization.dto';
+import { CreateBranchDto, CreateCostCentreDto, CreateDepartmentDto, CreateWorkerAssignmentDto, UpdateBranchDto, UpdateCostCentreDto, UpdateDepartmentDto, UpdateWorkerAssignmentDto } from './organization.dto';
 
 @Injectable()
 export class OrganizationService {
@@ -69,4 +69,52 @@ export class OrganizationService {
     const rows=await m.query("UPDATE tenant_cost_centres SET status='inactive',updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status",[tenantId,id]); if(!rows.length) throw new NotFoundException('Cost centre not found.');
     await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'organization.cost_centre.archived','tenant_cost_centre',$3)",[tenantId,actorId,id]); return rows[0];
   }); }
+
+  getWorkerAssignment(tenantId:string,id:string) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const rows=await m.query(`SELECT id,worker_id AS "workerId",branch_id AS "branchId",department_id AS "departmentId",
+        cost_centre_id AS "costCentreId",project_id AS "projectId",site_id AS "siteId",
+        effective_from AS "effectiveFrom",effective_to AS "effectiveTo",status,created_by AS "createdBy",created_at AS "createdAt"
+        FROM worker_assignments WHERE tenant_id=$1 AND id=$2`,[tenantId,id]);
+      if(!rows.length) throw new NotFoundException('Worker assignment not found.');
+      return rows[0];
+    });
+  }
+
+  updateWorkerAssignment(tenantId:string,actorId:string,id:string,dto:UpdateWorkerAssignmentDto) {
+    if(dto.effectiveFrom && dto.effectiveTo && dto.effectiveTo < dto.effectiveFrom) {
+      throw new BadRequestException('Assignment end date must not precede its start date.');
+    }
+    return this.tenantDb.run(tenantId,async m=>{
+      const currentRows=await m.query(`SELECT id,worker_id AS "workerId",branch_id AS "branchId",department_id AS "departmentId",
+        cost_centre_id AS "costCentreId",project_id AS "projectId",site_id AS "siteId",
+        effective_from::text AS "effectiveFrom",effective_to::text AS "effectiveTo",status
+        FROM worker_assignments WHERE tenant_id=$1 AND id=$2 FOR UPDATE`,[tenantId,id]);
+      if(!currentRows.length) throw new NotFoundException('Worker assignment not found.');
+      const before=currentRows[0];
+      if(before.status!=='active') throw new BadRequestException('Ended assignments are immutable. Create a new effective-dated assignment instead.');
+      const after={
+        branchId:dto.branchId===undefined?before.branchId:dto.branchId,
+        departmentId:dto.departmentId===undefined?before.departmentId:dto.departmentId,
+        costCentreId:dto.costCentreId===undefined?before.costCentreId:dto.costCentreId,
+        projectId:dto.projectId===undefined?before.projectId:dto.projectId,
+        siteId:dto.siteId===undefined?before.siteId:dto.siteId,
+        effectiveFrom:dto.effectiveFrom??before.effectiveFrom,
+        effectiveTo:dto.effectiveTo===undefined?before.effectiveTo:dto.effectiveTo,
+      };
+      if(after.effectiveTo && after.effectiveTo < after.effectiveFrom) throw new BadRequestException('Assignment end date must not precede its start date.');
+      const rows=await m.query(`UPDATE worker_assignments SET branch_id=$3,department_id=$4,cost_centre_id=$5,
+        project_id=$6,site_id=$7,effective_from=$8,effective_to=$9,
+        status=CASE WHEN $9::date IS NOT NULL THEN 'ended' ELSE 'active' END
+        WHERE tenant_id=$1 AND id=$2 RETURNING id,worker_id AS "workerId",branch_id AS "branchId",
+        department_id AS "departmentId",cost_centre_id AS "costCentreId",project_id AS "projectId",site_id AS "siteId",
+        effective_from AS "effectiveFrom",effective_to AS "effectiveTo",status`,
+        [tenantId,id,after.branchId,after.departmentId,after.costCentreId,after.projectId,after.siteId,after.effectiveFrom,after.effectiveTo]);
+      await m.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+        VALUES($1,$2,'worker.assignment.updated','worker_assignment',$3,$4::jsonb)`,
+        [tenantId,actorId,id,JSON.stringify({before,after:rows[0]})]);
+      return rows[0];
+    });
+  }
+
 }

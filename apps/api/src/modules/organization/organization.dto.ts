@@ -21,3 +21,13 @@ export class UpdateCostCentreDto {
   @IsOptional() @IsString() @Length(2,160) name?:string;
   @IsOptional() @IsString() @Length(1,20) status?:string;
 }
+
+export class UpdateWorkerAssignmentDto {
+  @IsOptional() @IsUUID() branchId?: string | null;
+  @IsOptional() @IsUUID() departmentId?: string | null;
+  @IsOptional() @IsUUID() costCentreId?: string | null;
+  @IsOptional() @IsUUID() projectId?: string | null;
+  @IsOptional() @IsUUID() siteId?: string | null;
+  @IsOptional() @IsDateString() effectiveFrom?: string;
+  @IsOptional() @IsDateString() effectiveTo?: string | null;
+}

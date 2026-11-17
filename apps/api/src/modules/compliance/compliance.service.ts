@@ -7,6 +7,116 @@ import { CreateFilingDto, CreateRuleChangeDto, FilingRejectionDto, ReviewDecisio
 export class ComplianceService {
   constructor(private readonly tenantDb: TenantTransactionService) {}
 
+  getTenantSetup(tenantId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const settings = await m.query(`
+        SELECT country_code AS "countryCode",currency,timezone,pay_frequency AS "payFrequency",
+          tax_year_start_month AS "taxYearStartMonth",payroll_period_start_day AS "payrollPeriodStartDay",
+          pay_day_of_month AS "payDayOfMonth",default_tax_residency AS "defaultTaxResidency",
+          standard_days_per_month AS "standardDaysPerMonth",
+          standard_working_days_per_week AS "standardWorkingDaysPerWeek",
+          standard_hours_per_day AS "standardHoursPerDay",
+          allow_partial_month_proration AS "allowPartialMonthProration",
+          statutory_settings AS "statutorySettings",setup_completed_at AS "setupCompletedAt"
+        FROM tenant_payroll_settings WHERE tenant_id=$1
+      `,[tenantId]);
+      const assignment = await m.query(`
+        SELECT s.id AS "ruleSetId",s.name,s.version,a.effective_from::text AS "effectiveFrom",
+          r.status AS "reviewStatus",r.reviewed_at AS "reviewedAt"
+        FROM tenant_statutory_assignments a
+        JOIN statutory_rule_sets s ON s.id=a.rule_set_id
+        LEFT JOIN LATERAL (
+          SELECT status,reviewed_at FROM tenant_statutory_rule_reviews x
+          WHERE x.tenant_id=a.tenant_id AND x.rule_set_id=a.rule_set_id
+          ORDER BY x.created_at DESC LIMIT 1
+        ) r ON true
+        WHERE a.tenant_id=$1 AND a.effective_from <= CURRENT_DATE
+          AND (a.effective_to IS NULL OR a.effective_to >= CURRENT_DATE)
+        ORDER BY a.effective_from DESC LIMIT 1
+      `,[tenantId]);
+      const counts = await m.query(`
+        SELECT
+          (SELECT count(*)::int FROM statutory_rules r WHERE r.rule_set_id=(SELECT rule_set_id FROM tenant_statutory_assignments WHERE tenant_id=$1 AND effective_from<=CURRENT_DATE AND (effective_to IS NULL OR effective_to>=CURRENT_DATE) ORDER BY effective_from DESC LIMIT 1)) AS "statutoryRuleCount",
+          (SELECT count(*)::int FROM tenant_deduction_types WHERE tenant_id=$1 AND is_enabled=true) AS "deductionTemplateCount",
+          (SELECT count(*)::int FROM tenant_allowance_types WHERE tenant_id=$1 AND is_enabled=true) AS "allowanceTemplateCount"
+      `,[tenantId]);
+      return { settings:settings[0]??null,assignment:assignment[0]??null,counts:counts[0]??{} };
+    });
+  }
+
+  initializeTenantSetup(tenantId: string, actorId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const packs=await m.query(`
+        SELECT id,version FROM statutory_rule_sets
+        WHERE country_code='KE' AND status='published'
+        ORDER BY published_at DESC NULLS LAST,version DESC LIMIT 1
+      `);
+      if(!packs.length) throw new ConflictException('The Kenya statutory starter pack is not installed. Run database migrations first.');
+      await m.query(`
+        INSERT INTO tenant_payroll_settings
+          (tenant_id,currency,timezone,country_code,tax_year_start_month,payroll_period_start_day,
+           pay_day_of_month,default_tax_residency,standard_working_days_per_week,
+           allow_partial_month_proration,statutory_settings,setup_completed_at)
+        VALUES($1,'KES','Africa/Nairobi','KE',1,1,30,'resident',5,false,
+          '{"PAYE":{"enabled":true,"personalRelief":"eligible_resident_employees_only"},"NSSF":{"enabled":true,"employeeContribution":true,"employerContribution":true},"SHIF":{"enabled":true,"employeeContribution":true,"employerContribution":false},"AHL":{"enabled":true,"employeeRate":0.015,"employerRate":0.015},"NITA":{"enabled":true,"employerOnly":true},"insuranceRelief":{"enabled":false,"requiresEmployeeEvidence":true},"HELB":{"enabled":false,"requiresEmployeeNotice":true},"mortgageInterestRelief":{"enabled":false,"requiresLenderStatement":true},"postRetirementMedicalRelief":{"enabled":false,"requiresSchemeEvidence":true}}'::jsonb,now())
+        ON CONFLICT(tenant_id) DO UPDATE SET setup_completed_at=COALESCE(tenant_payroll_settings.setup_completed_at,now())
+      `,[tenantId]);
+      await m.query(`
+        INSERT INTO tenant_statutory_assignments(tenant_id,rule_set_id,effective_from)
+        SELECT $1,$2,CURRENT_DATE
+        WHERE NOT EXISTS (
+          SELECT 1 FROM tenant_statutory_assignments
+          WHERE tenant_id=$1 AND effective_from<=CURRENT_DATE
+            AND (effective_to IS NULL OR effective_to>=CURRENT_DATE)
+        )
+        ON CONFLICT(tenant_id,rule_set_id,effective_from) DO NOTHING
+      `,[tenantId,packs[0].id]);
+      await m.query(`
+        INSERT INTO tenant_deduction_types
+          (tenant_id,code,name,category,calculation_method,configuration,taxable_treatment,is_system,is_enabled,requires_approval,effective_from)
+        SELECT $1,v.code,v.name,v.category,v.method,v.config::jsonb,'review_required',true,true,true,CURRENT_DATE
+        FROM (VALUES
+          ('HELB_REPAYMENT','HELB / student loan recovery','other','fixed_amount','{"requiresAuthorityNotice":true}'),
+          ('EMPLOYEE_PENSION','Employee registered pension contribution','voluntary','fixed_amount','{"requiresSchemeEvidence":true}'),
+          ('POST_RETIREMENT_MEDICAL','Post-retirement medical fund contribution','voluntary','fixed_amount','{"requiresSchemeEvidence":true}'),
+          ('COURT_ORDER','Court-ordered deduction','other','fixed_amount','{"requiresCourtOrder":true}'),
+          ('GARNISHEE_ORDER','Garnishee order','other','fixed_amount','{"requiresCourtOrder":true}'),
+          ('STAFF_ADVANCE_RECOVERY','Salary advance recovery','recovery','balance_recovery','{"requiresSignedAcknowledgement":true}'),
+          ('STAFF_LOAN_RECOVERY','Staff loan recovery','recovery','balance_recovery','{"requiresLoanAgreement":true}'),
+          ('SACCO_CONTRIBUTION','SACCO contribution','voluntary','fixed_amount','{"requiresEmployeeConsent":true}'),
+          ('UNION_DUES','Union dues','voluntary','fixed_amount','{"requiresEmployeeConsent":true}'),
+          ('VOLUNTARY_PENSION','Voluntary pension contribution','voluntary','percentage','{"requiresEmployeeConsent":true}'),
+          ('VOLUNTARY_INSURANCE','Voluntary insurance','voluntary','fixed_amount','{"requiresEmployeeConsent":true}'),
+          ('OTHER_DEDUCTION','Other approved deduction','other','fixed_amount','{"requiresWrittenAuthorization":true}')
+        ) AS v(code,name,category,method,config)
+        WHERE NOT EXISTS(SELECT 1 FROM tenant_deduction_types d WHERE d.tenant_id=$1 AND d.code=v.code)
+        ON CONFLICT(tenant_id,code,effective_from) DO NOTHING
+      `,[tenantId]);
+      await m.query(`
+        INSERT INTO tenant_allowance_types
+          (tenant_id,code,name,calculation_method,configuration,tax_treatment,is_enabled,requires_approval,effective_from)
+        SELECT $1,v.code,v.name,v.method,v.config::jsonb,'review_required',true,true,CURRENT_DATE
+        FROM (VALUES
+          ('BASIC_SALARY','Basic monthly salary','fixed_amount','{"taxTreatment":"taxable_salary"}'),
+          ('TRANSPORT','Transport allowance','fixed_amount','{}'),
+          ('COMMUTER','Commuter allowance','fixed_amount','{}'),
+          ('HOUSING','Housing allowance','fixed_amount','{}'),
+          ('MEALS','Meals allowance','per_day','{}'),
+          ('OVERTIME','Overtime','per_hour','{"hoursBasis":"approved_hours"}'),
+          ('NIGHT_SHIFT','Night shift allowance','per_hour','{"hoursBasis":"approved_hours"}'),
+          ('TRAVEL_PER_DIEM','Travel per diem','per_day','{}'),
+          ('OTHER_ALLOWANCE','Other approved allowance','fixed_amount','{}')
+        ) AS v(code,name,method,config)
+        WHERE NOT EXISTS(SELECT 1 FROM tenant_allowance_types a WHERE a.tenant_id=$1 AND a.code=v.code)
+        ON CONFLICT(tenant_id,code,effective_from) DO NOTHING
+      `,[tenantId]);
+      await this.audit(m,tenantId,actorId,'compliance.statutory_setup.initialized','tenant_payroll_settings',tenantId,{ruleSetId:packs[0].id,version:packs[0].version,defaultsPreserved:true});
+      const settings=await m.query('SELECT currency,timezone,country_code AS "countryCode",pay_frequency AS "payFrequency",statutory_settings AS "statutorySettings" FROM tenant_payroll_settings WHERE tenant_id=$1',[tenantId]);
+      const assignment=await m.query('SELECT s.id AS "ruleSetId",s.version FROM tenant_statutory_assignments a JOIN statutory_rule_sets s ON s.id=a.rule_set_id WHERE a.tenant_id=$1 AND a.effective_from<=CURRENT_DATE AND (a.effective_to IS NULL OR a.effective_to>=CURRENT_DATE) ORDER BY a.effective_from DESC LIMIT 1',[tenantId]);
+      return {initialized:true,settings:settings[0],assignment:assignment[0],message:'Kenya payroll defaults are present. Review and approve the statutory ruleset before running payroll.'};
+    });
+  }
+
   listRuleSets(tenantId: string) {
     return this.tenantDb.run(tenantId, m => m.query(`
       SELECT s.id,s.country_code AS "countryCode",s.name,s.version,s.status,s.is_system AS "isSystem",

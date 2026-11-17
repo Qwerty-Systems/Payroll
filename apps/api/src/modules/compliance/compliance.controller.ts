@@ -15,6 +15,16 @@ type TenantRequest = Request & { tenant: { id: string; userId: string } };
 export class ComplianceController {
   constructor(private readonly compliance: ComplianceService) {}
 
+  @Get('setup')
+  @TenantPermissions('compliance.read')
+  getTenantSetup(@Req() req:TenantRequest) { return this.compliance.getTenantSetup(req.tenant.id); }
+
+  @Post('setup/initialize')
+  @TenantPermissions('compliance.manage')
+  initializeTenantSetup(@Req() req:TenantRequest) {
+    return this.compliance.initializeTenantSetup(req.tenant.id,req.tenant.userId);
+  }
+
   @Get('rulesets')
   @TenantPermissions('compliance.read')
   listRuleSets(@Req() req:TenantRequest) { return this.compliance.listRuleSets(req.tenant.id); }

@@ -22,6 +22,22 @@ JengaFlow ships with a versioned Kenya statutory baseline. Starter values are co
 | PAYE allowable deductions | SHIF, AHL, registered pension contributions (subject to KES 30,000/month cap), post-retirement medical fund (KES 15,000/month), mortgage interest (KES 30,000/month) | 16 Nov 2026 baseline snapshot | KRA PAYE page |
 | Insurance relief | 15% of qualifying premiums, capped at KES 5,000/month | 1 Jul 2023 | KRA PAYE page |
 
+## Tenant setup defaults
+
+New workspaces receive these editable defaults automatically; the migration also backfills existing workspaces without overwriting their existing settings:
+
+- Country: Kenya (KE); currency: KES; timezone: Africa/Nairobi.
+- Pay frequency: monthly; tax year starts in January; payroll period starts on day 1; suggested pay day: day 30.
+- Default tax residency: resident, but each employee's actual tax residency must be confirmed before relying on resident relief.
+- Standard work week: five days; standard day: eight hours; automatic partial-month proration: disabled.
+- PAYE, NSSF, SHIF, AHL and NITA are enabled in the starter statutory profile. Employer-side amounts are marked as employer costs.
+- Insurance relief and HELB are preconfigured as available features but disabled until employee-specific evidence or an authority notice is recorded.
+- Starter deduction templates include HELB recovery, registered pension, post-retirement medical fund, mortgage-interest evidence, court/garnishee orders, advances, loans, SACCO, union dues and voluntary deductions. Templates are not deductions against every employee; an authorised employee assignment and supporting record are required.
+- Starter allowance templates include basic monthly salary, housing, transport, commuter, meals, overtime, night shift, travel per diem and other common allowances. The initial fixed-basic-salary workflow uses only the contract's monthly basic salary; optional templates do not automatically add earnings.
+- The Compliance Workspace exposes the seeded profile and an idempotent “Auto-create missing defaults” action for older workspaces. Existing company settings are preserved.
+
+The national statutory pack is prefilled, but company review is never auto-approved. A different authorised reviewer must approve the statutory ruleset snapshot before a payroll run can be created.
+
 ## Calculation behavior
 
 - SHIF applies the configured monthly minimum after the percentage calculation, except where gross pay is zero.
