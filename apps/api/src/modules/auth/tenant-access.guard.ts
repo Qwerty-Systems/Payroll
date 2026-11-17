@@ -9,10 +9,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   owner: ['*'],
   admin: ['company.read','company.manage','users.read','users.manage','projects.read','projects.manage','workers.read','workers.manage','workers.documents.read','workers.documents.manage','attendance.read','attendance.capture','attendance.approve','payroll.read','payroll.calculate','payroll.approve','payroll.finalize','payslips.read','reports.read','audit.read','compliance.read','compliance.manage','compliance.submit','compliance.review'],
   hr_manager: ['company.read','users.read','workers.read','workers.manage','workers.documents.read','workers.documents.manage','attendance.read','attendance.approve','payroll.read','payroll.calculate','payslips.read','reports.read','audit.read','compliance.read','compliance.manage','compliance.submit'],
-  payroll_manager: ['company.read','workers.read','attendance.read','payroll.read','payroll.calculate','payroll.approve','payslips.read','reports.read','audit.read','compliance.read','compliance.manage','compliance.submit'],
+  payroll_manager: ['company.read','workers.read','attendance.read','payroll.read','payroll.calculate','payroll.approve','payslips.read','reports.read','audit.read','compliance.read','compliance.manage','compliance.submit','compliance.review'],
   supervisor: ['projects.read','workers.read','attendance.read','attendance.capture','attendance.approve','reports.read'],
   worker: ['attendance.capture','payslips.read'],
-  accountant: ['company.read','payroll.read','payslips.read','reports.read','audit.read','compliance.read'],
+  accountant: ['company.read','payroll.read','payslips.read','reports.read','audit.read','compliance.read','compliance.manage','compliance.submit','compliance.review'],
   viewer: ['company.read','projects.read','workers.read','attendance.read','payroll.read','reports.read','compliance.read'],
 };
 
