@@ -76,8 +76,18 @@ export class PayrollService {
           approvedUnits: Number(worker.approved_units),
         });
         const earnings = earningsResult.amount;
-        const statutory = calculateKenyaMonthlyPayroll(earnings,rules);
-        const classificationWarnings = ['casual','piece_rate','subcontractor','independent_contractor'].includes(worker.engagement_type)
+        const contractorNeedsReview = ['subcontractor','independent_contractor'].includes(worker.engagement_type);
+        // Do not apply employee PAYE/SHIF/NSSF deductions to a service contractor by default.
+        // Their withholding/VAT treatment is a separate reviewed workflow; payroll finalization remains blocked.
+        const statutory = contractorNeedsReview
+          ? {
+              gross: earnings, taxableIncome: 0, paye: 0, shif: 0, nssf: 0, housingLevy: 0,
+              employeeStatutoryDeductions: 0, employerNssf: 0, employerHousingLevy: 0, nita: 0,
+              employerContributions: 0, netBeforeOtherDeductions: earnings,
+              warnings: ['CONTRACTOR_TAX_TREATMENT_REQUIRES_REVIEW'], lines: [],
+            }
+          : calculateKenyaMonthlyPayroll(earnings,rules);
+        const classificationWarnings = contractorNeedsReview
           ? ['WORKER_CLASSIFICATION_REQUIRES_STATUTORY_REVIEW']
           : [];
         warnings.push(...earningsResult.warnings.map(w => worker.worker_number+':'+w));
