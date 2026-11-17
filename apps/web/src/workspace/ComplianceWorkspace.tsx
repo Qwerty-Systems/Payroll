@@ -295,13 +295,13 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
       <DialogTitle>Statutory filing report</DialogTitle>
       <DialogContent>
         {filingReport&&(()=>{
-          const snapshot=filingReport.report_snapshot??{};
+          const snapshot=filingReport.reportSnapshot??{};
           const employees=rows(snapshot.employees);
           const totals=filingReport.totals??snapshot.totals??{};
           return <Stack spacing={2} sx={{pt:1}}>
             <Alert severity="info">Prepared report snapshot. Submission to the authority is not performed by JengaFlow; use the authority portal and record its reference afterwards.</Alert>
             <Stack direction="row" spacing={1} flexWrap="wrap">
-              <Chip label={show(filingReport.authority)}/><Chip label={show(filingReport.filing_type)}/><Chip label={'Period '+show(filingReport.reference_period)}/><Chip label={'Status '+show(filingReport.status)}/>
+              <Chip label={show(filingReport.authority)}/><Chip label={show(filingReport.filingType)}/><Chip label={'Period '+show(filingReport.referencePeriod)}/><Chip label={'Status '+show(filingReport.status)}/>
             </Stack>
             <Typography variant="subtitle2" fontWeight={800}>Report totals</Typography>
             <Stack direction={{xs:'column',sm:'row'}} spacing={1}>
@@ -317,6 +317,12 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
               </TableRow>)}
               {!employees.length&&<TableRow><TableCell colSpan={5}>No employee breakdown in this report.</TableCell></TableRow>}
             </TableBody></Table></TableContainer>
+            <Button variant="outlined" onClick={()=>{
+              const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:'application/json'});
+              const url=URL.createObjectURL(blob);const link=document.createElement('a');
+              link.href=url;link.download='jengaflow-'+String(filingReport.authority).toLowerCase()+'-'+String(filingReport.referencePeriod)+'.json';
+              link.click();URL.revokeObjectURL(url);
+            }}>Download report (JSON)</Button>
           </Stack>;
         })()}
       </DialogContent>
