@@ -41,9 +41,9 @@ export class ComplianceService {
           configuration,effective_from::text AS "effectiveFrom",effective_to::text AS "effectiveTo",
           source_title AS "sourceTitle",source_url AS "sourceUrl",verified_on::text AS "verifiedOn",reason
         FROM tenant_statutory_rule_overrides
-        WHERE tenant_id=$1 AND status='approved' AND rule_set_id IS NULL
+        WHERE tenant_id=$1 AND status='approved' AND (rule_set_id=$2 OR rule_set_id IS NULL)
         ORDER BY rule_code,effective_from
-      `,[tenantId]);
+      `,[tenantId,ruleSetId]);
       return { ruleset:sets[0],rules,tenantOverrides:overrides };
     });
   }
