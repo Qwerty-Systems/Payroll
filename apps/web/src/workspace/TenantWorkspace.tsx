@@ -31,13 +31,14 @@ import { useAutoSync } from '../offline/use-auto-sync';
 import SyncReviewDialog from './SyncReviewDialog';
 import ComplianceWorkspace from './ComplianceWorkspace';
 import OrganizationWorkspace from './OrganizationWorkspace';
+import WorkforceTimeWorkspace from './WorkforceTimeWorkspace';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
   tenantStatus: string; membershipId: string; role: string;
 };
 type RowData = Record<string, unknown> & { id?: string };
-type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'payroll' | 'compliance' | 'organization' | 'people';
+type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'time-management' | 'payroll' | 'compliance' | 'organization' | 'people';
 type Props = {
   memberships: Membership[];
   userName?: string;
@@ -411,6 +412,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     { value: 'pay-grades' as Section, label: 'Pay grades', icon: <PaymentsRounded />, group: 'FINANCE' },
     { value: 'projects' as Section, label: 'Projects & sites', icon: <BusinessRounded />, group: 'WORKSPACE' },
     { value: 'attendance' as Section, label: 'Attendance', icon: <EventAvailableRounded />, group: 'WORKSPACE' },
+    { value: 'time-management' as Section, label: 'Time management', icon: <CalendarMonthRounded />, group: 'WORKSPACE' },
     { value: 'payroll' as Section, label: 'Payroll', icon: <PaymentsRounded />, group: 'FINANCE' },
     { value: 'compliance' as Section, label: 'Compliance', icon: <AssignmentTurnedInRounded />, group: 'COMPLIANCE' },
     { value: 'organization' as Section, label: 'Organization', icon: <SettingsRounded />, group: 'ADMINISTRATION' },
@@ -421,7 +423,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const navGroups = ['WORKSPACE','FINANCE','COMPLIANCE','ADMINISTRATION'].filter(group => visibleNavItems.some(item => item.group === group));
   const pageTitle: Record<Section, string> = {
     overview: 'Overview', workers: 'Employees', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
-    attendance: 'Attendance', payroll: 'Payroll', compliance: 'Compliance', organization: 'Organization', people: 'Team access',
+    attendance: 'Attendance', 'time-management': 'Time management', payroll: 'Payroll', compliance: 'Compliance', organization: 'Organization', people: 'Team access',
   };
   const pageDescription: Record<Section, string> = {
     overview: 'A clear picture of your workforce and operations.',
@@ -429,6 +431,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     'pay-grades': 'Define reusable pay bands and assign them to employee contracts.',
     projects: 'Organize projects, clients and work sites.',
     attendance: 'Capture work activity and review submitted records.',
+    'time-management': 'Manage shifts, leave balances, overtime requests and employee timesheets.',
     payroll: 'Manage pay periods and review payroll calculation previews.',
     compliance: 'Review statutory rules, approve effective-dated changes and track statutory filings.',
     organization: 'Structure your company and assign people to teams.',
@@ -649,7 +652,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                 {!(data.deductionTypes ?? []).length && <TableRow><TableCell colSpan={7}>No deduction types have been seeded for this company yet.</TableCell></TableRow>}
               </TableBody></Table></TableContainer>
             </Box>
-          </Paper></Stack> : section === 'compliance' ? <ComplianceWorkspace role={membership?.role ?? 'viewer'} periods={data.periods ?? []} request={request} /> : section === 'organization' ? <OrganizationWorkspace request={request} workers={(data.workers ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} projects={(data.projects ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} sites={(data.sites ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} /> : section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> :
+          </Paper></Stack> : section === 'time-management' ? <WorkforceTimeWorkspace workers={(data.workers ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} request={request} /> : section === 'compliance' ? <ComplianceWorkspace role={membership?.role ?? 'viewer'} periods={data.periods ?? []} request={request} /> : section === 'organization' ? <OrganizationWorkspace request={request} workers={(data.workers ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} projects={(data.projects ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} sites={(data.sites ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} /> : section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> :
             <Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
               {section === 'payroll' ? <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
                 <TableContainer><Table size="small"><TableHead><TableRow>{['Code','Period','Start','End','Status','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
