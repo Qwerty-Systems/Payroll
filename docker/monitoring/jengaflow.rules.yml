@@ -1,0 +1,47 @@
+groups:
+  - name: jengaflow-availability
+    rules:
+      - alert: JengaFlowApiUnavailable
+        expr: up{job="jengaflow-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: JengaFlow API metrics endpoint is unavailable
+          description: Prometheus has failed to scrape the API for more than two minutes.
+
+      - alert: JengaFlowDatabaseNotReady
+        expr: jengaflow_dependency_ready{dependency="database"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: JengaFlow database dependency is not ready
+          description: The API cannot establish a database connection.
+
+      - alert: JengaFlowRedisNotReady
+        expr: jengaflow_dependency_ready{dependency="redis"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: JengaFlow Redis dependency is not ready
+          description: Redis connectivity is unavailable or not configured.
+
+      - alert: JengaFlowObjectStorageNotReady
+        expr: jengaflow_dependency_ready{dependency="object_storage"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: JengaFlow object storage is not ready
+          description: Private worker document storage is unavailable or not configured.
+
+      - alert: JengaFlowHighResidentMemory
+        expr: jengaflow_process_resident_memory_bytes > 1073741824
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: JengaFlow API resident memory is above 1 GiB
+          description: Review memory growth and API workload.
