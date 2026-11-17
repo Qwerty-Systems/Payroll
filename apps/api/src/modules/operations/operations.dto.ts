@@ -54,6 +54,15 @@ export class CreatePayGradeDto {
   @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) maximumRate?: number;
 }
 export class UpdatePayGradeStatusDto { @IsIn(['active','inactive']) status!: string; }
+export class UpdatePayGradeDto {
+  @IsOptional() @IsString() @Length(2,120) name?: string;
+  @IsOptional() @IsString() @Length(1,2000) description?: string | null;
+  @IsOptional() @IsString() @Length(3,3) currency?: string;
+  @IsOptional() @IsIn(['hourly','daily','weekly','monthly','per_unit']) payBasis?: string;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) minimumRate?: number | null;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) midpointRate?: number | null;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) maximumRate?: number | null;
+}
 
 export class CreateWorkerContractDto {
   @IsIn(['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'])
