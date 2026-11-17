@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    command: ["node", "../../node_modules/typeorm/cli.js", "-d", "dist/database/data-source.js", "migration:run"]
+    # Override the API image entrypoint so this one-shot service runs only the migration CLI.\n    entrypoint: ["node", "../../node_modules/typeorm/cli.js"]\n    command: ["-d", "dist/database/data-source.js", "migration:run"]
     restart: "no"
     environment:
       NODE_ENV: production
@@ -36,6 +36,8 @@ services:
         condition: service_completed_successfully
     environment:
       NODE_ENV: production
+      # The dedicated one-shot migrate service runs before the API in Compose deployments.
+      SKIP_DATABASE_MIGRATIONS: "true"
       API_PORT: 3001
       APP_NAME: ${APP_NAME:-JengaFlow}
       APP_URL: ${APP_URL:-https://jengaflow.qwerty.co.ke}
