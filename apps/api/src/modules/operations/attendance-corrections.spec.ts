@@ -54,6 +54,6 @@ describe('Attendance correction workflow', () => {
     await expect(service.reviewAttendanceCorrection(tenantId, reviewerId, correctionId, 'approve', 'Verified source record'))
       .resolves.toMatchObject({ id: correctionId, status: 'approved' });
     expect(query.mock.calls[1][0]).toContain('UPDATE attendance_records SET');
-    expect(query.mock.calls[3][0]).toContain('attendance.correction.approve');
+    expect(query.mock.calls[3][2]).toBe('attendance.correction.approve');
   });
 });
