@@ -22,7 +22,7 @@ export class OperationsService {
     return this.tenantDb.run(tenantId, async m => {
       const worker = await m.query('SELECT id FROM workers WHERE tenant_id=$1 AND id=$2', [tenantId, workerId]);
       if (!worker.length) throw new NotFoundException('Worker not found.');
-      return m.query('SELECT id,engagement_type AS "engagementType",pay_basis AS "payBasis",rate_amount AS "rateAmount",currency,effective_from AS "effectiveFrom",effective_to AS "effectiveTo",terms,created_at AS "createdAt" FROM worker_contracts WHERE tenant_id=$1 AND worker_id=$2 ORDER BY effective_from DESC,created_at DESC', [tenantId, workerId]);
+      return m.query('SELECT id,engagement_type AS "engagementType",pay_basis AS "payBasis",rate_amount AS "rateAmount",currency,pay_grade_id AS "payGradeId",effective_from AS "effectiveFrom",effective_to AS "effectiveTo",terms,created_at AS "createdAt" FROM worker_contracts WHERE tenant_id=$1 AND worker_id=$2 ORDER BY effective_from DESC,created_at DESC', [tenantId, workerId]);
     });
   }
 
