@@ -59,7 +59,10 @@ export class PayrollPostFinalizationControls1794832700000 implements MigrationIn
         END LOOP;
       END $$;
 
-      GRANT SELECT,INSERT,UPDATE,DELETE ON payroll_corrections,payroll_correction_items TO jengaflow_app;
+      DO $ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='jengaflow_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON payroll_corrections,payroll_correction_items TO jengaflow_app; END IF;
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='jf_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON payroll_corrections,payroll_correction_items TO jf_app; END IF;
+      END $;
     `);
   }
 
