@@ -23,6 +23,13 @@ export class AttendancePlanningLeaveOvertimeTimesheets1794831600000 implements M
         UNIQUE(tenant_id,id)
       );
       CREATE INDEX worker_shift_effective_idx ON worker_shift_assignments(tenant_id,worker_id,effective_from,effective_to);
+      CREATE TABLE leave_entitlements(
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+        leave_type varchar(24) NOT NULL CHECK(leave_type IN ('annual','sick','maternity','paternity','compassionate','unpaid','other')),
+        annual_days numeric(6,2) NOT NULL CHECK(annual_days>=0),effective_from date NOT NULL,effective_to date,
+        created_by uuid REFERENCES platform_users(id) ON DELETE SET NULL,created_at timestamptz NOT NULL DEFAULT now(),
+        CHECK(effective_to IS NULL OR effective_to>=effective_from),UNIQUE(tenant_id,id),UNIQUE(tenant_id,leave_type,effective_from)
+      );
       CREATE TABLE leave_requests(
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL,worker_id uuid NOT NULL,
         leave_type varchar(24) NOT NULL CHECK(leave_type IN ('annual','sick','maternity','paternity','compassionate','unpaid','other')),
@@ -68,7 +75,7 @@ export class AttendancePlanningLeaveOvertimeTimesheets1794831600000 implements M
       );
       CREATE INDEX timesheet_queue_idx ON timesheets(tenant_id,status,period_start);
       DO $$ DECLARE t text; BEGIN
-        FOREACH t IN ARRAY ARRAY['attendance_shifts','worker_shift_assignments','leave_requests','overtime_requests','timesheets','timesheet_lines'] LOOP
+        FOREACH t IN ARRAY ARRAY['attendance_shifts','worker_shift_assignments','leave_entitlements','leave_requests','overtime_requests','timesheets','timesheet_lines'] LOOP
           EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t);
           EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY',t);
           EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id=nullif(current_setting(''app.tenant_id'',true),'''')::uuid) WITH CHECK (tenant_id=nullif(current_setting(''app.tenant_id'',true),'''')::uuid)',t);
@@ -77,6 +84,6 @@ export class AttendancePlanningLeaveOvertimeTimesheets1794831600000 implements M
     `);
   }
   async down(q:QueryRunner):Promise<void>{
-    await q.query('DROP TABLE IF EXISTS timesheet_lines,timesheets,overtime_requests,leave_requests,worker_shift_assignments,attendance_shifts CASCADE');
+    await q.query('DROP TABLE IF EXISTS timesheet_lines,timesheets,overtime_requests,leave_requests,leave_entitlements,worker_shift_assignments,attendance_shifts CASCADE');
   }
 }
