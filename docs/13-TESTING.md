@@ -20,3 +20,6 @@ Dependency and container scans, secret scanning, upload validation, CSRF/XSS che
 
 ## 13.7 Release gates
 A release cannot proceed unless lint, typecheck, unit, integration, E2E, migration and build checks pass; critical/high vulnerabilities are triaged; restore procedure is tested; and statutory configuration has documented review approval.
+
+## Payroll integration test against PostgreSQL
+`apps/api/src/modules/payroll/payroll.integration.spec.ts` runs the real payroll SQL (period, run, calculation, finalization, payslips, recovery balances) against a migrated database through a non-superuser role, so row-level security is genuinely enforced. It is skipped unless `TEST_DATABASE_URL` (owner, for seeding) and `TEST_APP_DATABASE_URL` (runtime role) are set, and CI sets both. Use a disposable database only. Mocked unit tests cannot catch SQL or driver-type errors: this test found that raw `date` columns arrive as JavaScript `Date` objects, so date columns read by the payroll engine must be selected `::text`. Run it under `TZ=Africa/Nairobi` to match the deployment timezone.
