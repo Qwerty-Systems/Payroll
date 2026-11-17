@@ -13,6 +13,12 @@ export class PayrollCatalogueRuntimeGrants1794831700000 implements MigrationInte
     await q.query(`
       DO $$
       BEGIN
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'jengaflow_app') THEN
+          GRANT USAGE ON SCHEMA public TO jengaflow_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON worker_pay_grades TO jengaflow_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_allowance_types TO jengaflow_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_deduction_types TO jengaflow_app;
+        END IF;
         IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'jf_app') THEN
           GRANT USAGE ON SCHEMA public TO jf_app;
           GRANT SELECT, INSERT, UPDATE, DELETE ON worker_pay_grades TO jf_app;
@@ -28,6 +34,11 @@ export class PayrollCatalogueRuntimeGrants1794831700000 implements MigrationInte
     await q.query(`
       DO $$
       BEGIN
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'jengaflow_app') THEN
+          REVOKE SELECT, INSERT, UPDATE, DELETE ON worker_pay_grades FROM jengaflow_app;
+          REVOKE SELECT, INSERT, UPDATE, DELETE ON tenant_allowance_types FROM jengaflow_app;
+          REVOKE SELECT, INSERT, UPDATE, DELETE ON tenant_deduction_types FROM jengaflow_app;
+        END IF;
         IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'jf_app') THEN
           REVOKE SELECT, INSERT, UPDATE, DELETE ON worker_pay_grades FROM jf_app;
           REVOKE SELECT, INSERT, UPDATE, DELETE ON tenant_allowance_types FROM jf_app;
