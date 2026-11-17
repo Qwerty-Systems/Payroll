@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsIn, IsObject, IsOptional, IsString, Length, MaxLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsObject, IsOptional, IsString, IsUrl, IsUUID, Length, MaxLength } from 'class-validator';
 
 const categories = ['tax','employee_deduction','employer_contribution','tax_relief','allowable_deduction','levy'];
 export class SubmitRuleReviewDto {
@@ -18,7 +18,7 @@ export class CreateRuleChangeDto {
   @IsDateString() effectiveFrom!: string;
   @IsOptional() @IsDateString() effectiveTo?: string;
   @IsString() @Length(2,240) sourceTitle!: string;
-  @IsString() @Length(8,2000) sourceUrl!: string;
+  @IsUrl({ require_protocol: true }) @Length(8,2000) sourceUrl!: string;
   @IsDateString() verifiedOn!: string;
   @IsString() @Length(10,2000) reason!: string;
 }
@@ -35,8 +35,8 @@ export class UpdateRuleChangeDto {
   @IsOptional() @IsString() @Length(10,2000) reason?: string;
 }
 export class CreateFilingDto {
-  @IsString() @Length(2,80) payrollPeriodId!: string;
-  @IsString() @Length(2,80) payrollRunId!: string;
+  @IsUUID() payrollPeriodId!: string;
+  @IsUUID() payrollRunId!: string;
   @IsIn(['KRA','NSSF','SHA','HOUSING_LEVY','NITA','OTHER']) authority!: string;
   @IsString() @Length(2,80) filingType!: string;
   @IsOptional() @IsDateString() dueDate?: string;
@@ -45,7 +45,7 @@ export class CreateFilingDto {
 export class SubmitFilingDto {
   @IsString() @Length(2,180) externalReference!: string;
   @IsString() @Length(2,40) submissionChannel!: string;
-  @IsOptional() @IsString() @MaxLength(2000) submissionEvidenceUrl?: string;
+  @IsOptional() @IsUrl({ require_protocol: true }) @MaxLength(2000) submissionEvidenceUrl?: string;
 }
 export class FilingRejectionDto {
   @IsString() @Length(10,2000) reason!: string;
