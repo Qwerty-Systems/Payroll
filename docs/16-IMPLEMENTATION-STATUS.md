@@ -11,7 +11,7 @@
 - Tenant payroll settings, default allowance/deduction catalogue and worker assignment tables.
 - Tenant statutory pack assignment and date-based rule resolution service, plus approved tenant override service.
 - Responsive JengaFlow marketing website, PWA manifest, service-worker shell caching and app install metadata.
-- IndexedDB record store and durable command outbox foundation; authenticated tenant sync API for device registration/revocation, idempotent attendance command ingestion, cursor-based attendance pull and audited conflict discard. Browser-to-API orchestration and conflict-resolution UI remain incomplete.
+- IndexedDB record store and durable command outbox foundation; authenticated tenant sync API for device registration/revocation, idempotent attendance command ingestion, cursor-based attendance pull and audited conflict discard. The React workspace now exposes an authenticated outbox sync action, reuses a registered browser device ID from IndexedDB metadata, submits attendance-create commands, and records server conflicts/rejections locally. Reference-data bootstrap, offline attendance capture UI, conflict review/resolution UI, retry scheduling, and end-to-end offline tests remain incomplete.
 - Coolify Compose stack using existing managed PostgreSQL/Redis environment variables; separate local Compose overlay for disconnected site deployments.
 
 ## Current API health endpoints
@@ -33,7 +33,7 @@ pnpm --filter @jengaflow/api migration:run
 Migrations are a controlled deployment step and are not run automatically by the API on startup.
 
 ## Offline deployment
-The browser-side IndexedDB store and command outbox are foundations. The API supports registered-device attendance command ingestion, idempotent replay detection, attendance pull cursors and audited conflict discard. The browser client is not yet wired to the API; reference-data bootstrap, retry UX, conflict-resolution UI, duplicate-punch review, and end-to-end offline tests remain incomplete. For a fully disconnected site, the local Compose overlay provides local PostgreSQL and Redis volumes; site-to-cloud replication is a separate follow-on component.
+The browser-side IndexedDB store and command outbox are foundations. The API supports registered-device attendance command ingestion, idempotent replay detection, attendance pull cursors and audited conflict discard. The browser client now submits queued attendance-create commands through the authenticated API and records outcomes in IndexedDB. It does not yet provide reference-data bootstrap, offline attendance capture UI, a conflict review/resolution interface, automatic retry scheduling, duplicate-punch review, or end-to-end offline tests. For a fully disconnected site, the local Compose overlay provides local PostgreSQL and Redis volumes; site-to-cloud replication is a separate follow-on component.
 
 ## Tenant isolation rule
 All tenant-owned repository access must run through TenantTransactionService after authenticating the actor and verifying tenant membership. The service sets PostgreSQL tenant context only for the lifetime of the transaction. Do not use session-level SET for tenant context with pooled connections.

@@ -23,6 +23,8 @@ import CalendarMonthRounded from '@mui/icons-material/CalendarMonthRounded';
 import AssignmentTurnedInRounded from '@mui/icons-material/AssignmentTurnedInRounded';
 import AccountBalanceWalletRounded from '@mui/icons-material/AccountBalanceWalletRounded';
 import TenantAdministration from './TenantAdministration';
+import CloudSyncRounded from '@mui/icons-material/CloudSyncRounded';
+import { synchronizeOfflineAttendance } from '../offline/offline-api';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
@@ -57,6 +59,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [selectedRun, setSelectedRun] = useState('');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
   const isMobile = useMediaQuery('(max-width:1199px)');
   const [contracts, setContracts] = useState<RowData[]>([]);
   const [forms, setForms] = useState<Record<string, string>>({
@@ -122,6 +126,17 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       .catch(() => { if (active) setContracts([]); });
     return () => { active = false; };
   }, [request, selectedWorker]);
+
+  async function syncOfflineQueue() {
+    setSyncing(true); setSyncMessage(''); setError('');
+    try {
+      const summary = await synchronizeOfflineAttendance(tenantId, request);
+      setSyncMessage(`Offline sync complete: ${summary.synced} sent, ${summary.conflicts} conflicts, ${summary.rejected} rejected, ${summary.remaining} remaining.`);
+      if (summary.conflicts || summary.rejected || summary.failed) setError('Some offline changes need attention. Review the sync status before relying on these records.');
+      await refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Offline synchronization failed.'); }
+    finally { setSyncing(false); }
+  }
 
   const counts = useMemo(() => ({
     workers: (data.workers ?? []).filter(row => row.status === 'active').length,
@@ -296,6 +311,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           <Typography fontWeight={850} sx={{ fontSize: '.9rem' }}>{membership?.displayName ?? 'Company workspace'}</Typography>
           <Typography variant="caption" color="text.secondary">{membership?.slug ?? 'JengaFlow'} · {membership?.role ?? 'Member'}</Typography>
         </Box>
+        <Button size="small" variant="outlined" startIcon={<CloudSyncRounded />} onClick={() => void syncOfflineQueue()} disabled={syncing || !tenantId} sx={{ whiteSpace: 'nowrap' }}>{syncing ? 'Syncing…' : 'Sync offline'}</Button>
         <TextField select size="small" value={tenantId} onChange={event => { setTenantId(event.target.value); setSection('overview'); }}
           sx={{ minWidth: { xs: 128, sm: 190 }, maxWidth: 220, '& .MuiOutlinedInput-root': { bgcolor: '#F7F8F6', borderRadius: 2 } }}
           aria-label="Company workspace">
@@ -324,6 +340,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       <Box sx={{ maxWidth: 1600, mx: 'auto', px: { xs: 2, sm: 3, xl: 4 }, py: { xs: 2.5, md: 4 } }}>
         {error && <Alert severity="error" sx={{ mb: 2.5, borderRadius: 2 }} onClose={() => setError('')}>{error}</Alert>}
         {notice && <Alert severity="success" sx={{ mb: 2.5, borderRadius: 2 }} onClose={() => setNotice('')}>{notice}</Alert>}
+        {syncMessage && <Alert severity="info" sx={{ mb: 2.5, borderRadius: 2 }} onClose={() => setSyncMessage('')}>{syncMessage}</Alert>}
         {section === 'overview' ? <>
           <Box sx={{
             p: { xs: 2.5, md: 3.5 }, mb: 3, borderRadius: 4, color: '#FFFFFF',

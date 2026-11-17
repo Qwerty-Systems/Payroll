@@ -6,7 +6,8 @@ import {
 
 export type SyncResult =
   | { status: 'synced'; serverVersion?: string }
-  | { status: 'conflict'; message: string };
+  | { status: 'conflict'; message: string }
+  | { status: 'rejected'; message: string };
 
 export type SyncSender = (command: SyncCommand) => Promise<SyncResult>;
 
@@ -14,6 +15,7 @@ export interface SyncSummary {
   sent: number;
   synced: number;
   conflicts: number;
+  rejected: number;
   failed: number;
   remaining: number;
 }
@@ -28,7 +30,7 @@ export async function synchronizeTenantOutbox(
   send: SyncSender,
 ): Promise<SyncSummary> {
   const commands = await listPendingCommands(tenantId);
-  const summary: SyncSummary = { sent: 0, synced: 0, conflicts: 0, failed: 0, remaining: commands.length };
+  const summary: SyncSummary = { sent: 0, synced: 0, conflicts: 0, rejected: 0, failed: 0, remaining: commands.length };
 
   for (const command of commands) {
     summary.sent += 1;
@@ -37,7 +39,10 @@ export async function synchronizeTenantOutbox(
 
     try {
       const result = await send(syncing);
-      if (result.status === 'conflict') {
+      if (result.status === 'rejected') {
+        await updateCommand({ ...syncing, state: 'rejected', lastError: result.message });
+        summary.rejected += 1;
+      } else if (result.status === 'conflict') {
         await updateCommand({ ...syncing, state: 'conflict', lastError: result.message });
         summary.conflicts += 1;
       } else {

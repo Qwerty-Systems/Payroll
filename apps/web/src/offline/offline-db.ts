@@ -1,5 +1,5 @@
 export type OfflineEntity = 'workers' | 'projects' | 'sites' | 'attendance';
-export type SyncState = 'pending' | 'syncing' | 'synced' | 'conflict' | 'failed';
+export type SyncState = 'pending' | 'syncing' | 'synced' | 'conflict' | 'failed' | 'rejected';
 
 export interface OfflineRecord {
   id: string;
@@ -54,6 +54,28 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error('Offline database request failed.'));
   });
+}
+
+export async function getOfflineMetadata<T>(key: string): Promise<T | undefined> {
+  const db = await openDatabase();
+  try {
+    const tx = db.transaction('metadata', 'readonly');
+    const item = await requestResult<{ key: string; value: T } | undefined>(tx.objectStore('metadata').get(key));
+    return item?.value;
+  } finally { db.close(); }
+}
+
+export async function setOfflineMetadata<T>(key: string, value: T): Promise<void> {
+  const db = await openDatabase();
+  try {
+    const tx = db.transaction('metadata', 'readwrite');
+    tx.objectStore('metadata').put({ key, value });
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } finally { db.close(); }
 }
 
 export async function saveOfflineRecord(record: OfflineRecord): Promise<void> {
