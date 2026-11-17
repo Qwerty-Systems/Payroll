@@ -39,3 +39,16 @@ export class ReconcileBillingPaymentDto {
 }
 
 export class ConvertQuoteDto { @IsDateString() dueDate!:string; }
+
+export class CreateBillingPlanDto {
+  @IsString() @Length(2,40) code!:string;
+  @IsString() @Length(2,120) name!:string;
+  @IsOptional() @IsString() @Length(0,500) description?:string;
+  @IsInt() @Min(0) priceMinor!:number;
+  @IsString() @Length(3,3) currency!:string;
+  @IsIn(['monthly','yearly']) billingInterval!:string;
+  @IsObject() features!:Record<string,unknown>;
+  @IsOptional() @IsInt() @Min(1) seatLimit?:number;
+  @IsOptional() @IsInt() @Min(1) workerLimit?:number;
+}
+export class UpdateBillingPlanStatusDto { @IsIn(['active','inactive']) status!:string; }
