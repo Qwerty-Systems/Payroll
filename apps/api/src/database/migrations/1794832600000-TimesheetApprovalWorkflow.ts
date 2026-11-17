@@ -22,8 +22,7 @@ export class TimesheetApprovalWorkflow1794832600000 implements MigrationInterfac
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
         CHECK (period_end >= period_start),
-        CHECK ((status IN ('draft','rejected') AND reviewed_at IS NULL) OR (status IN ('submitted','approved') AND submitted_at IS NOT NULL)),
-        CHECK (status <> 'approved' OR reviewed_at IS NOT NULL),
+        CHECK ((status='draft' AND reviewed_at IS NULL) OR (status='rejected' AND reviewed_at IS NOT NULL) OR (status='submitted' AND submitted_at IS NOT NULL AND reviewed_at IS NULL) OR (status='approved' AND submitted_at IS NOT NULL AND reviewed_at IS NOT NULL)),
         UNIQUE (tenant_id,id),
         FOREIGN KEY (tenant_id,worker_id) REFERENCES workers(tenant_id,id) ON DELETE RESTRICT
       );
