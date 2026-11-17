@@ -14,6 +14,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { UsersModule } from './users/users.module';
 import { OrganizationModule } from './organization/organization.module';
 import { SyncModule } from './sync/sync.module';
+import { WorkerDocumentsModule } from './workers/worker-documents.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { SyncModule } from './sync/sync.module';
     UsersModule,
     OrganizationModule,
     SyncModule,
+    WorkerDocumentsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
