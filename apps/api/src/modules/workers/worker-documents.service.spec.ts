@@ -10,15 +10,16 @@ describe('WorkerDocumentsService', () => {
   let tenantDb: { run: jest.Mock };
   let storage: { putPrivateObject: jest.Mock; deletePrivateObject: jest.Mock; createPrivateDownloadUrl: jest.Mock };
   let service: WorkerDocumentsService;
+  let runCount = 0;
 
   beforeEach(() => {
+    runCount = 0;
     tenantDb = {
       run: jest.fn(async (_tenantId: string, work: (manager: { query: jest.Mock }) => Promise<unknown>) => {
-        const manager = { query: jest.fn()
-          .mockResolvedValueOnce([{ id: workerId }])
-          .mockResolvedValueOnce([{ id: '44444444-4444-4444-8444-444444444444', workerId, documentType: 'contract' }])
-          .mockResolvedValueOnce([]) };
-        return work(manager);
+        const query = jest.fn();
+        if (runCount++ === 0) query.mockResolvedValueOnce([{ id: workerId }]);
+        else query.mockResolvedValueOnce([{ id: '44444444-4444-4444-8444-444444444444', workerId, documentType: 'contract' }]).mockResolvedValueOnce([]);
+        return work({ query });
       }),
     };
     storage = {
