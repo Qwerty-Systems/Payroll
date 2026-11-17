@@ -145,6 +145,22 @@ export class SyncService {
     });
   }
 
+
+  pullReferenceData(tenantId:string){
+    return this.tenantDb.run(tenantId,async m=>{
+      const [workers,projects,sites,shifts,payGrades,leaveEntitlements]=await Promise.all([
+        m.query("SELECT id,worker_number AS \"workerNumber\",first_name AS \"firstName\",last_name AS \"lastName\",status FROM workers WHERE tenant_id=$1 AND status='active' ORDER BY worker_number LIMIT 2000",[tenantId]),
+        m.query("SELECT id,project_code AS \"projectCode\",name,status FROM projects WHERE tenant_id=$1 AND status='active' ORDER BY project_code LIMIT 1000",[tenantId]),
+        m.query("SELECT id,project_id AS \"projectId\",site_code AS \"siteCode\",name,status FROM sites WHERE tenant_id=$1 AND status='active' ORDER BY site_code LIMIT 2000",[tenantId]),
+        m.query("SELECT id,code,name,start_time AS \"startTime\",end_time AS \"endTime\",break_minutes AS \"breakMinutes\",grace_minutes AS \"graceMinutes\" FROM attendance_shifts WHERE tenant_id=$1 AND status='active' ORDER BY code",[tenantId]),
+        m.query("SELECT id,code,name,pay_basis AS \"payBasis\",currency FROM worker_pay_grades WHERE tenant_id=$1 AND status='active' ORDER BY code",[tenantId]),
+        m.query("SELECT leave_type AS \"leaveType\",annual_days AS \"annualDays\",effective_from AS \"effectiveFrom\",effective_to AS \"effectiveTo\" FROM leave_entitlements WHERE tenant_id=$1 AND effective_from<=CURRENT_DATE AND (effective_to IS NULL OR effective_to>=CURRENT_DATE) ORDER BY leave_type,effective_from DESC",[tenantId]),
+      ]);
+      return {generatedAt:new Date().toISOString(),workers,projects,sites,shifts,payGrades,leaveEntitlements};
+    });
+  }
+
+
   listConflicts(tenantId: string) {
     return this.tenantDb.run(tenantId, (m) => m.query(
       "SELECT id,command_id AS \"commandId\",conflict_type AS \"conflictType\",client_payload AS \"clientPayload\",server_payload AS \"serverPayload\",state,resolution,created_at AS \"createdAt\" FROM sync_conflicts WHERE tenant_id=$1 AND state='open' ORDER BY created_at DESC",
