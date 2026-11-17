@@ -5,7 +5,7 @@ import { TenantPermissions } from '../auth/tenant-access.decorator';
 import { ConfirmPayrollPaymentDto, CreatePayrollPeriodDto, CreatePayrollRunDto, PayrollPaymentBatchDto } from './payroll.dto';
 import { PayrollService } from './payroll.service';
 
-type TenantRequest = Request & { tenant: { id: string; userId: string } };
+type TenantRequest = Request & { tenant: { id: string; userId: string; role: string } };
 @ApiTags('payroll')
 @ApiBearerAuth()
 @Controller('payroll')
@@ -21,8 +21,8 @@ export class PayrollController {
   @Post('runs/:id/approve') @TenantPermissions('payroll.approve') approve(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.transitionRun(req.tenant.id,req.tenant.userId,id,'approve'); }
   @Post('runs/:id/finalize') @TenantPermissions('payroll.finalize') finalize(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.transitionRun(req.tenant.id,req.tenant.userId,id,'finalize'); }
 
-  @Get('runs/:id/payslips') @TenantPermissions('payslips.read') listPayslips(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.listPayslips(req.tenant.id,id); }
-  @Get('payslips/:id') @TenantPermissions('payslips.read') getPayslip(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.getPayslip(req.tenant.id,id); }
+  @Get('runs/:id/payslips') @TenantPermissions('payslips.read') listPayslips(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.listPayslips(req.tenant.id,id,{ role: req.tenant.role, userId: req.tenant.userId }); }
+  @Get('payslips/:id') @TenantPermissions('payslips.read') getPayslip(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.getPayslip(req.tenant.id,id,{ role: req.tenant.role, userId: req.tenant.userId }); }
   @Post('runs/:id/payment-batches') @TenantPermissions('payroll.finalize') createPaymentBatch(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:PayrollPaymentBatchDto) { return this.payroll.createPaymentBatch(req.tenant.id,req.tenant.userId,id,dto.paymentMethod); }
   @Post('payment-batches/:id/approve') @TenantPermissions('payroll.approve') approvePaymentBatch(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.approvePaymentBatch(req.tenant.id,req.tenant.userId,id); }
   @Post('payment-batches/:id/items/:itemId/confirm') @TenantPermissions('payroll.finalize') confirmPayment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Param('itemId',ParseUUIDPipe) itemId:string,@Body() dto:ConfirmPayrollPaymentDto) { return this.payroll.confirmPayment(req.tenant.id,req.tenant.userId,id,itemId,dto.providerReference); }

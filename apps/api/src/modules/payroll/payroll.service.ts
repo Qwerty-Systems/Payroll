@@ -9,6 +9,17 @@ import { blockingWarnings, calculateAllowances, calculateOtherDeductions, type A
 const ENGINE_VERSION = 'jengaflow-ke-0.2.0';
 const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
+export interface PayslipViewer { role: string; userId: string }
+
+/**
+ * Staff roles read every payslip in the workspace. The `worker` role may read only the payslips of the worker record
+ * linked to its own user; an unlinked worker user therefore sees nothing.
+ */
+export function payslipScope(viewer: PayslipViewer, paramIndex: number): { sql: string; params: string[] } {
+  if (viewer.role !== 'worker') return { sql: '', params: [] };
+  return { sql: ` AND worker_id IN (SELECT id FROM workers WHERE tenant_id=$1 AND user_id=$${paramIndex})`, params: [viewer.userId] };
+}
+
 @Injectable()
 export class PayrollService {
   constructor(private readonly tenantDb: TenantTransactionService) {}
@@ -188,18 +199,21 @@ export class PayrollService {
 
   getRun(tenantId: string, runId: string) { return this.tenantDb.run(tenantId,async m=>{const runs=await m.query('SELECT id,period_id AS "periodId",run_number AS "runNumber",status,engine_version AS "engineVersion",totals,warnings,input_hash AS "inputHash",created_at AS "createdAt",calculated_at AS "calculatedAt",submitted_at AS "submittedAt",approved_at AS "approvedAt",finalized_at AS "finalizedAt" FROM payroll_runs WHERE tenant_id=$1 AND id=$2',[tenantId,runId]);if(!runs.length)throw new NotFoundException('Payroll run not found.');const items=await m.query('SELECT id,worker_id AS "workerId",earnings,employee_deductions AS "employeeDeductions",employer_contributions AS "employerContributions",net_pay AS "netPay",calculation_snapshot AS snapshot FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2 ORDER BY created_at',[tenantId,runId]);return {...runs[0],items};}); }
 
-  listPayslips(tenantId: string, runId: string) {
+  listPayslips(tenantId: string, runId: string, viewer: PayslipViewer = { role: 'admin', userId: '' }) {
     return this.tenantDb.run(tenantId, async m => {
       const run = await m.query("SELECT status FROM payroll_runs WHERE tenant_id=$1 AND id=$2",[tenantId,runId]);
       if (!run.length) throw new NotFoundException('Payroll run not found.');
       if (run[0].status !== 'finalized') throw new ConflictException('Payslips are issued only after payroll finalization.');
-      return m.query('SELECT id,worker_id AS "workerId",payslip_number AS "payslipNumber",snapshot,issued_at AS "issuedAt" FROM payslips WHERE tenant_id=$1 AND payroll_run_id=$2 ORDER BY payslip_number',[tenantId,runId]);
+      const scope = payslipScope(viewer, 3);
+      return m.query(`SELECT id,worker_id AS "workerId",payslip_number AS "payslipNumber",snapshot,issued_at AS "issuedAt" FROM payslips WHERE tenant_id=$1 AND payroll_run_id=$2${scope.sql} ORDER BY payslip_number`,[tenantId,runId,...scope.params]);
     });
   }
 
-  getPayslip(tenantId: string, payslipId: string) {
+  getPayslip(tenantId: string, payslipId: string, viewer: PayslipViewer = { role: 'admin', userId: '' }) {
     return this.tenantDb.run(tenantId, async m => {
-      const rows = await m.query('SELECT id,worker_id AS "workerId",payslip_number AS "payslipNumber",snapshot,issued_at AS "issuedAt" FROM payslips WHERE tenant_id=$1 AND id=$2',[tenantId,payslipId]);
+      const scope = payslipScope(viewer, 3);
+      // A worker asking for someone else's payslip gets the same "not found" as a missing one: no existence oracle.
+      const rows = await m.query(`SELECT id,worker_id AS "workerId",payslip_number AS "payslipNumber",snapshot,issued_at AS "issuedAt" FROM payslips WHERE tenant_id=$1 AND id=$2${scope.sql}`,[tenantId,payslipId,...scope.params]);
       if (!rows.length) throw new NotFoundException('Payslip not found.');
       return rows[0];
     });

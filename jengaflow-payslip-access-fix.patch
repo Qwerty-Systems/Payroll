@@ -1,0 +1,310 @@
+From 8e060837d120662240058a7042baf84efa9c5829 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 17 Nov 2026 10:05:11 +0000
+Subject: [PATCH] fix(payroll): restrict worker role to own payslips; add
+ worker-user link
+
+---
+ .../1794831600000-WorkerUserLink.ts           | 27 +++++++++++++
+ .../operations/operations.controller.ts       |  5 ++-
+ .../src/modules/operations/operations.dto.ts  |  5 +++
+ .../modules/operations/operations.service.ts  | 22 +++++++++-
+ .../operations/worker-user-link.spec.ts       | 40 +++++++++++++++++++
+ .../src/modules/payroll/payroll.controller.ts |  6 +--
+ .../src/modules/payroll/payroll.service.ts    | 22 ++++++++--
+ .../modules/payroll/payslip-access.spec.ts    | 38 ++++++++++++++++++
+ docs/16-IMPLEMENTATION-STATUS.md              |  7 ++++
+ 9 files changed, 162 insertions(+), 10 deletions(-)
+ create mode 100644 apps/api/src/database/migrations/1794831600000-WorkerUserLink.ts
+ create mode 100644 apps/api/src/modules/operations/worker-user-link.spec.ts
+ create mode 100644 apps/api/src/modules/payroll/payslip-access.spec.ts
+
+diff --git a/apps/api/src/database/migrations/1794831600000-WorkerUserLink.ts b/apps/api/src/database/migrations/1794831600000-WorkerUserLink.ts
+new file mode 100644
+index 0000000..8866316
+--- /dev/null
++++ b/apps/api/src/database/migrations/1794831600000-WorkerUserLink.ts
+@@ -0,0 +1,27 @@
++import { MigrationInterface, QueryRunner } from 'typeorm';
++
++/**
++ * Links a worker record to the platform user (tenant membership) who is that worker. Without this link the `worker`
++ * role could not be limited to its own payslips. The composite foreign key guarantees the linked user is a member of
++ * the same tenant; a user can be linked to at most one worker per tenant.
++ */
++export class WorkerUserLink1794831600000 implements MigrationInterface {
++  name = 'WorkerUserLink1794831600000';
++
++  async up(q: QueryRunner): Promise<void> {
++    await q.query(`
++      ALTER TABLE workers ADD COLUMN user_id uuid;
++      ALTER TABLE workers ADD CONSTRAINT workers_tenant_membership_fk
++        FOREIGN KEY (tenant_id, user_id) REFERENCES tenant_memberships(tenant_id, user_id) ON DELETE RESTRICT;
++      CREATE UNIQUE INDEX workers_tenant_user_uidx ON workers(tenant_id, user_id) WHERE user_id IS NOT NULL;
++    `);
++  }
++
++  async down(q: QueryRunner): Promise<void> {
++    await q.query(`
++      DROP INDEX IF EXISTS workers_tenant_user_uidx;
++      ALTER TABLE workers DROP CONSTRAINT IF EXISTS workers_tenant_membership_fk;
++      ALTER TABLE workers DROP COLUMN IF EXISTS user_id;
++    `);
++  }
++}
+diff --git a/apps/api/src/modules/operations/operations.controller.ts b/apps/api/src/modules/operations/operations.controller.ts
+index 21e2fcb..55f7bd1 100644
+--- a/apps/api/src/modules/operations/operations.controller.ts
++++ b/apps/api/src/modules/operations/operations.controller.ts
+@@ -1,9 +1,9 @@
+-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
++import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query, Req } from '@nestjs/common';
+ import { IsIn, IsString, MinLength } from 'class-validator';
+ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+ import type { Request } from 'express';
+ import { TenantPermissions } from '../auth/tenant-access.decorator';
+-import { CreateAttendanceDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeStatusDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto } from './operations.dto';
++import { CreateAttendanceDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeStatusDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto, LinkWorkerUserDto } from './operations.dto';
+ import { OperationsService } from './operations.service';
+ 
+ type TenantRequest = Request & { tenant: { id: string; userId: string } };
+@@ -36,6 +36,7 @@ export class OperationsController {
+   @Get('workers') @TenantPermissions('workers.read') workers(@Req() req:TenantRequest) { return this.operations.listWorkers(req.tenant.id); }
+   @Get('workers/:id') @TenantPermissions('workers.read') getWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.getWorker(req.tenant.id,id); }
+   @Patch('workers/:id') @TenantPermissions('workers.manage') editWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateWorkerDto) { return this.operations.updateWorker(req.tenant.id,req.tenant.userId,id,dto); }
++  @Put('workers/:id/user-link') @TenantPermissions('workers.manage') linkWorkerUser(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:LinkWorkerUserDto) { return this.operations.linkWorkerUser(req.tenant.id,req.tenant.userId,id,dto); }
+   @Delete('workers/:id') @TenantPermissions('workers.manage') archiveWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.archiveWorker(req.tenant.id,req.tenant.userId,id); }
+   @Post('workers') @TenantPermissions('workers.manage') createWorker(@Req() req:TenantRequest,@Body() dto:CreateWorkerDto) { return this.operations.createWorker(req.tenant.id,dto); }
+   @Patch('workers/:id/status') @TenantPermissions('workers.manage') updateWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:StatusDto) { return this.operations.setWorkerStatus(req.tenant.id,id,dto.status); }
+diff --git a/apps/api/src/modules/operations/operations.dto.ts b/apps/api/src/modules/operations/operations.dto.ts
+index f184108..3cca812 100644
+--- a/apps/api/src/modules/operations/operations.dto.ts
++++ b/apps/api/src/modules/operations/operations.dto.ts
+@@ -120,3 +120,8 @@ export class UpdateWorkerDto {
+   @IsOptional() @IsString() @Length(7,32) phone?: string | null;
+   @IsOptional() @IsEmail() email?: string | null;
+ }
++
++export class LinkWorkerUserDto {
++  /** Platform user who is this worker; null/omitted unlinks. The user must hold an active `worker` membership. */
++  @IsOptional() @IsUUID() userId?: string | null;
++}
+diff --git a/apps/api/src/modules/operations/operations.service.ts b/apps/api/src/modules/operations/operations.service.ts
+index 2ab9148..819e860 100644
+--- a/apps/api/src/modules/operations/operations.service.ts
++++ b/apps/api/src/modules/operations/operations.service.ts
+@@ -1,6 +1,6 @@
+ import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+ import { TenantTransactionService } from '../../database/tenant-transaction.service';
+-import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, CreateWorkerOutputDto, CreatePayGradeDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto } from './operations.dto';
++import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, CreateWorkerOutputDto, CreatePayGradeDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto, LinkWorkerUserDto } from './operations.dto';
+ 
+ @Injectable()
+ export class OperationsService {
+@@ -100,6 +100,26 @@ export class OperationsService {
+     });
+   }
+ 
++  /** Links (or unlinks) the platform user who is this worker, so the `worker` role can read only its own payslips. */
++  linkWorkerUser(tenantId: string, actorId: string, workerId: string, dto: LinkWorkerUserDto) {
++    const userId = dto.userId ?? null;
++    return this.tenantDb.run(tenantId, async (m) => {
++      const workers = await m.query('SELECT id,user_id FROM workers WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId, workerId]);
++      if (!workers.length) throw new NotFoundException('Worker not found.');
++      if (userId) {
++        const members = await m.query("SELECT role FROM tenant_memberships WHERE tenant_id=$1 AND user_id=$2 AND status='active'", [tenantId, userId]);
++        if (!members.length) throw new BadRequestException('That user has no active membership in this workspace.');
++        if (members[0].role !== 'worker') throw new BadRequestException('Only users with the worker role can be linked to a worker record.');
++        const taken = await m.query('SELECT id FROM workers WHERE tenant_id=$1 AND user_id=$2 AND id<>$3', [tenantId, userId, workerId]);
++        if (taken.length) throw new ConflictException('That user is already linked to another worker record.');
++      }
++      await m.query('UPDATE workers SET user_id=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2', [tenantId, workerId, userId]);
++      await m.query("INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,'worker',$4,$5::jsonb)",
++        [tenantId, actorId, userId ? 'worker.user_linked' : 'worker.user_unlinked', workerId, JSON.stringify({ previousUserId: workers[0].user_id ?? null, userId })]);
++      return { id: workerId, userId };
++    });
++  }
++
+   updateWorker(tenantId: string, actorId: string, id: string, dto: UpdateWorkerDto) {
+     return this.tenantDb.run(tenantId, async m => {
+       const found = await m.query('SELECT worker_number AS "workerNumber",first_name AS "firstName",middle_name AS "middleName",last_name AS "lastName",phone,email,status FROM workers WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId,id]);
+diff --git a/apps/api/src/modules/operations/worker-user-link.spec.ts b/apps/api/src/modules/operations/worker-user-link.spec.ts
+new file mode 100644
+index 0000000..796b77f
+--- /dev/null
++++ b/apps/api/src/modules/operations/worker-user-link.spec.ts
+@@ -0,0 +1,40 @@
++import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
++import { OperationsService } from './operations.service';
++
++describe('OperationsService.linkWorkerUser', () => {
++  const T = 't1', ACTOR = 'actor', W = 'w1', U = 'u1';
++  function svc(query: jest.Mock) {
++    const tenantDb = { run: jest.fn(async (_t: string, work: (m: { query: jest.Mock }) => unknown) => work({ query })) };
++    return new OperationsService(tenantDb as never);
++  }
++
++  it('404s for an unknown worker', async () => {
++    await expect(svc(jest.fn().mockResolvedValueOnce([])).linkWorkerUser(T, ACTOR, W, { userId: U })).rejects.toBeInstanceOf(NotFoundException);
++  });
++
++  it('requires an active membership in the same workspace', async () => {
++    const q = jest.fn().mockResolvedValueOnce([{ id: W, user_id: null }]).mockResolvedValueOnce([]);
++    await expect(svc(q).linkWorkerUser(T, ACTOR, W, { userId: U })).rejects.toBeInstanceOf(BadRequestException);
++  });
++
++  it('only links users holding the worker role', async () => {
++    const q = jest.fn().mockResolvedValueOnce([{ id: W, user_id: null }]).mockResolvedValueOnce([{ role: 'admin' }]);
++    await expect(svc(q).linkWorkerUser(T, ACTOR, W, { userId: U })).rejects.toThrow('worker role');
++  });
++
++  it('refuses a user already linked to another worker', async () => {
++    const q = jest.fn().mockResolvedValueOnce([{ id: W, user_id: null }]).mockResolvedValueOnce([{ role: 'worker' }]).mockResolvedValueOnce([{ id: 'other' }]);
++    await expect(svc(q).linkWorkerUser(T, ACTOR, W, { userId: U })).rejects.toBeInstanceOf(ConflictException);
++  });
++
++  it('links and audits; unlinking skips membership checks', async () => {
++    const q = jest.fn().mockResolvedValueOnce([{ id: W, user_id: null }]).mockResolvedValueOnce([{ role: 'worker' }]).mockResolvedValueOnce([]).mockResolvedValue([]);
++    await expect(svc(q).linkWorkerUser(T, ACTOR, W, { userId: U })).resolves.toEqual({ id: W, userId: U });
++    expect(q.mock.calls.some(c => String(c[0]).includes('INSERT INTO audit_events') && c[1][2] === 'worker.user_linked')).toBe(true);
++
++    const q2 = jest.fn().mockResolvedValueOnce([{ id: W, user_id: U }]).mockResolvedValue([]);
++    await expect(svc(q2).linkWorkerUser(T, ACTOR, W, { userId: null })).resolves.toEqual({ id: W, userId: null });
++    expect(q2.mock.calls.some(c => String(c[0]).includes('tenant_memberships'))).toBe(false);
++    expect(q2.mock.calls.some(c => c[1]?.[2] === 'worker.user_unlinked')).toBe(true);
++  });
++});
+diff --git a/apps/api/src/modules/payroll/payroll.controller.ts b/apps/api/src/modules/payroll/payroll.controller.ts
+index 7d668c6..23f18ca 100644
+--- a/apps/api/src/modules/payroll/payroll.controller.ts
++++ b/apps/api/src/modules/payroll/payroll.controller.ts
+@@ -5,7 +5,7 @@ import { TenantPermissions } from '../auth/tenant-access.decorator';
+ import { ConfirmPayrollPaymentDto, CreatePayrollPeriodDto, CreatePayrollRunDto, PayrollPaymentBatchDto } from './payroll.dto';
+ import { PayrollService } from './payroll.service';
+ 
+-type TenantRequest = Request & { tenant: { id: string; userId: string } };
++type TenantRequest = Request & { tenant: { id: string; userId: string; role: string } };
+ @ApiTags('payroll')
+ @ApiBearerAuth()
+ @Controller('payroll')
+@@ -21,8 +21,8 @@ export class PayrollController {
+   @Post('runs/:id/approve') @TenantPermissions('payroll.approve') approve(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.transitionRun(req.tenant.id,req.tenant.userId,id,'approve'); }
+   @Post('runs/:id/finalize') @TenantPermissions('payroll.finalize') finalize(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.transitionRun(req.tenant.id,req.tenant.userId,id,'finalize'); }
+ 
+-  @Get('runs/:id/payslips') @TenantPermissions('payslips.read') listPayslips(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.listPayslips(req.tenant.id,id); }
+-  @Get('payslips/:id') @TenantPermissions('payslips.read') getPayslip(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.getPayslip(req.tenant.id,id); }
++  @Get('runs/:id/payslips') @TenantPermissions('payslips.read') listPayslips(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.listPayslips(req.tenant.id,id,{ role: req.tenant.role, userId: req.tenant.userId }); }
++  @Get('payslips/:id') @TenantPermissions('payslips.read') getPayslip(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.getPayslip(req.tenant.id,id,{ role: req.tenant.role, userId: req.tenant.userId }); }
+   @Post('runs/:id/payment-batches') @TenantPermissions('payroll.finalize') createPaymentBatch(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:PayrollPaymentBatchDto) { return this.payroll.createPaymentBatch(req.tenant.id,req.tenant.userId,id,dto.paymentMethod); }
+   @Post('payment-batches/:id/approve') @TenantPermissions('payroll.approve') approvePaymentBatch(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.approvePaymentBatch(req.tenant.id,req.tenant.userId,id); }
+   @Post('payment-batches/:id/items/:itemId/confirm') @TenantPermissions('payroll.finalize') confirmPayment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Param('itemId',ParseUUIDPipe) itemId:string,@Body() dto:ConfirmPayrollPaymentDto) { return this.payroll.confirmPayment(req.tenant.id,req.tenant.userId,id,itemId,dto.providerReference); }
+diff --git a/apps/api/src/modules/payroll/payroll.service.ts b/apps/api/src/modules/payroll/payroll.service.ts
+index f57d7b1..1ddaf9e 100644
+--- a/apps/api/src/modules/payroll/payroll.service.ts
++++ b/apps/api/src/modules/payroll/payroll.service.ts
+@@ -9,6 +9,17 @@ import { blockingWarnings, calculateAllowances, calculateOtherDeductions, type A
+ const ENGINE_VERSION = 'jengaflow-ke-0.2.0';
+ const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+ 
++export interface PayslipViewer { role: string; userId: string }
++
++/**
++ * Staff roles read every payslip in the workspace. The `worker` role may read only the payslips of the worker record
++ * linked to its own user; an unlinked worker user therefore sees nothing.
++ */
++export function payslipScope(viewer: PayslipViewer, paramIndex: number): { sql: string; params: string[] } {
++  if (viewer.role !== 'worker') return { sql: '', params: [] };
++  return { sql: ` AND worker_id IN (SELECT id FROM workers WHERE tenant_id=$1 AND user_id=$${paramIndex})`, params: [viewer.userId] };
++}
++
+ @Injectable()
+ export class PayrollService {
+   constructor(private readonly tenantDb: TenantTransactionService) {}
+@@ -188,18 +199,21 @@ export class PayrollService {
+ 
+   getRun(tenantId: string, runId: string) { return this.tenantDb.run(tenantId,async m=>{const runs=await m.query('SELECT id,period_id AS "periodId",run_number AS "runNumber",status,engine_version AS "engineVersion",totals,warnings,input_hash AS "inputHash",created_at AS "createdAt",calculated_at AS "calculatedAt",submitted_at AS "submittedAt",approved_at AS "approvedAt",finalized_at AS "finalizedAt" FROM payroll_runs WHERE tenant_id=$1 AND id=$2',[tenantId,runId]);if(!runs.length)throw new NotFoundException('Payroll run not found.');const items=await m.query('SELECT id,worker_id AS "workerId",earnings,employee_deductions AS "employeeDeductions",employer_contributions AS "employerContributions",net_pay AS "netPay",calculation_snapshot AS snapshot FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2 ORDER BY created_at',[tenantId,runId]);return {...runs[0],items};}); }
+ 
+-  listPayslips(tenantId: string, runId: string) {
++  listPayslips(tenantId: string, runId: string, viewer: PayslipViewer = { role: 'admin', userId: '' }) {
+     return this.tenantDb.run(tenantId, async m => {
+       const run = await m.query("SELECT status FROM payroll_runs WHERE tenant_id=$1 AND id=$2",[tenantId,runId]);
+       if (!run.length) throw new NotFoundException('Payroll run not found.');
+       if (run[0].status !== 'finalized') throw new ConflictException('Payslips are issued only after payroll finalization.');
+-      return m.query('SELECT id,worker_id AS "workerId",payslip_number AS "payslipNumber",snapshot,issued_at AS "issuedAt" FROM payslips WHERE tenant_id=$1 AND payroll_run_id=$2 ORDER BY payslip_number',[tenantId,runId]);
++      const scope = payslipScope(viewer, 3);
++      return m.query(`SELECT id,worker_id AS "workerId",payslip_number AS "payslipNumber",snapshot,issued_at AS "issuedAt" FROM payslips WHERE tenant_id=$1 AND payroll_run_id=$2${scope.sql} ORDER BY payslip_number`,[tenantId,runId,...scope.params]);
+     });
+   }
+ 
+-  getPayslip(tenantId: string, payslipId: string) {
++  getPayslip(tenantId: string, payslipId: string, viewer: PayslipViewer = { role: 'admin', userId: '' }) {
+     return this.tenantDb.run(tenantId, async m => {
+-      const rows = await m.query('SELECT id,worker_id AS "workerId",payslip_number AS "payslipNumber",snapshot,issued_at AS "issuedAt" FROM payslips WHERE tenant_id=$1 AND id=$2',[tenantId,payslipId]);
++      const scope = payslipScope(viewer, 3);
++      // A worker asking for someone else's payslip gets the same "not found" as a missing one: no existence oracle.
++      const rows = await m.query(`SELECT id,worker_id AS "workerId",payslip_number AS "payslipNumber",snapshot,issued_at AS "issuedAt" FROM payslips WHERE tenant_id=$1 AND id=$2${scope.sql}`,[tenantId,payslipId,...scope.params]);
+       if (!rows.length) throw new NotFoundException('Payslip not found.');
+       return rows[0];
+     });
+diff --git a/apps/api/src/modules/payroll/payslip-access.spec.ts b/apps/api/src/modules/payroll/payslip-access.spec.ts
+new file mode 100644
+index 0000000..dfaafce
+--- /dev/null
++++ b/apps/api/src/modules/payroll/payslip-access.spec.ts
+@@ -0,0 +1,38 @@
++import { PayrollService, payslipScope } from './payroll.service';
++
++describe('payslip access scoping', () => {
++  it('does not restrict staff roles', () => {
++    for (const role of ['owner', 'admin', 'hr_manager', 'payroll_manager', 'accountant']) {
++      expect(payslipScope({ role, userId: 'u1' }, 3)).toEqual({ sql: '', params: [] });
++    }
++  });
++
++  it('restricts the worker role to the worker record linked to its own user', () => {
++    const scope = payslipScope({ role: 'worker', userId: 'user-1' }, 3);
++    expect(scope.sql).toContain('user_id=$3');
++    expect(scope.sql).toContain('tenant_id=$1');
++    expect(scope.params).toEqual(['user-1']);
++  });
++
++  function serviceWith(query: jest.Mock) {
++    const tenantDb = { run: jest.fn(async (_t: string, work: (m: { query: jest.Mock }) => unknown) => work({ query })) };
++    return new PayrollService(tenantDb as never);
++  }
++
++  it('getPayslip passes the viewer scope to SQL so another worker\'s payslip is "not found"', async () => {
++    const query = jest.fn().mockResolvedValueOnce([]);
++    await expect(serviceWith(query).getPayslip('t1', 'p1', { role: 'worker', userId: 'u1' })).rejects.toThrow('Payslip not found.');
++    expect(query.mock.calls[0][0]).toContain('user_id=$3');
++    expect(query.mock.calls[0][1]).toEqual(['t1', 'p1', 'u1']);
++  });
++
++  it('listPayslips scopes a worker but not a payroll manager', async () => {
++    const q1 = jest.fn().mockResolvedValueOnce([{ status: 'finalized' }]).mockResolvedValueOnce([]);
++    await serviceWith(q1).listPayslips('t1', 'r1', { role: 'worker', userId: 'u1' });
++    expect(q1.mock.calls[1][1]).toEqual(['t1', 'r1', 'u1']);
++    const q2 = jest.fn().mockResolvedValueOnce([{ status: 'finalized' }]).mockResolvedValueOnce([]);
++    await serviceWith(q2).listPayslips('t1', 'r1', { role: 'payroll_manager', userId: 'u2' });
++    expect(q2.mock.calls[1][1]).toEqual(['t1', 'r1']);
++    expect(q2.mock.calls[1][0]).not.toContain('user_id');
++  });
++});
+diff --git a/docs/16-IMPLEMENTATION-STATUS.md b/docs/16-IMPLEMENTATION-STATUS.md
+index f97b79c..52db20e 100644
+--- a/docs/16-IMPLEMENTATION-STATUS.md
++++ b/docs/16-IMPLEMENTATION-STATUS.md
+@@ -76,3 +76,10 @@ Worker documents are stored in private object storage with tenant-scoped metadat
+ - Tooling: shared ESLint flat config (`eslint.base.mjs`, per-app configs) replaces the placeholder lint scripts and runs in CI; API and web Dockerfiles install with `--frozen-lockfile`.
+ - Still open: offline workflows beyond attendance, end-to-end offline browser tests, conflict *resolution* that keeps both records (only discard/re-queue exists), and the remaining items in "Not yet production-ready" above (payments, payslips, billing, observability, restore drill).
+ 
++
++## Payslip access control (security fix)
++- Previously the `worker` role held `payslips.read` but payslip queries were scoped only by tenant, so any worker could read every payslip in the workspace by listing a run or guessing a payslip ID.
++- `workers.user_id` (migration `1794831600000`) now links a worker record to a platform user. The link is enforced by a composite foreign key to `tenant_memberships(tenant_id,user_id)` and is unique per tenant.
++- `GET payroll/runs/:id/payslips` and `GET payroll/payslips/:id` restrict the `worker` role to the payslips of its own linked worker record. A worker user with no link sees nothing, and another worker's payslip returns the same 404 as a missing one. Staff roles are unchanged.
++- `PUT tenant/workers/:id/user-link` (`workers.manage`) links or unlinks a user. The user must hold an active `worker` membership in the workspace; the change is audited. **Existing worker users must be linked before they can see their own payslips.** There is no UI for this yet.
++- Still open: payment destinations. `payroll_payment_batch_items.destination_reference_encrypted` is never populated and no bank/M-Pesa details are stored for workers, so payment-file export and provider execution cannot be built until a destination-capture and encryption (key management) design is agreed. Payslip PDF rendering and delivery are also not implemented.
+-- 
+2.43.0
+

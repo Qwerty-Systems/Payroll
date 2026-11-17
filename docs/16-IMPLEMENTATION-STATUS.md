@@ -76,3 +76,10 @@ Worker documents are stored in private object storage with tenant-scoped metadat
 - Tooling: shared ESLint flat config (`eslint.base.mjs`, per-app configs) replaces the placeholder lint scripts and runs in CI; API and web Dockerfiles install with `--frozen-lockfile`.
 - Still open: offline workflows beyond attendance, end-to-end offline browser tests, conflict *resolution* that keeps both records (only discard/re-queue exists), and the remaining items in "Not yet production-ready" above (payments, payslips, billing, observability, restore drill).
 
+
+## Payslip access control (security fix)
+- Previously the `worker` role held `payslips.read` but payslip queries were scoped only by tenant, so any worker could read every payslip in the workspace by listing a run or guessing a payslip ID.
+- `workers.user_id` (migration `1794831600000`) now links a worker record to a platform user. The link is enforced by a composite foreign key to `tenant_memberships(tenant_id,user_id)` and is unique per tenant.
+- `GET payroll/runs/:id/payslips` and `GET payroll/payslips/:id` restrict the `worker` role to the payslips of its own linked worker record. A worker user with no link sees nothing, and another worker's payslip returns the same 404 as a missing one. Staff roles are unchanged.
+- `PUT tenant/workers/:id/user-link` (`workers.manage`) links or unlinks a user. The user must hold an active `worker` membership in the workspace; the change is audited. **Existing worker users must be linked before they can see their own payslips.** There is no UI for this yet.
+- Still open: payment destinations. `payroll_payment_batch_items.destination_reference_encrypted` is never populated and no bank/M-Pesa details are stored for workers, so payment-file export and provider execution cannot be built until a destination-capture and encryption (key management) design is agreed. Payslip PDF rendering and delivery are also not implemented.

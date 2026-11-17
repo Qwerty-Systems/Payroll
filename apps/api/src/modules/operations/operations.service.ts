@@ -1,6 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
+<<<<<<< ours
 import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, CreateWorkerOutputDto, CreatePayGradeDto } from './operations.dto';
+=======
+import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, CreateWorkerOutputDto, CreatePayGradeDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto, LinkWorkerUserDto } from './operations.dto';
+>>>>>>> theirs
 
 @Injectable()
 export class OperationsService {
@@ -14,6 +18,138 @@ export class OperationsService {
   listWorkers(tenantId: string) { return this.tenantDb.run(tenantId, (m) => m.query('SELECT id, worker_number AS "workerNumber", first_name AS "firstName", middle_name AS "middleName", last_name AS "lastName", phone, email, status, created_at AS "createdAt" FROM workers WHERE tenant_id=$1 AND status <> \'archived\' ORDER BY created_at DESC', [tenantId])); }
   createWorker(tenantId: string, dto: CreateWorkerDto) { return this.tenantDb.run(tenantId, async (m) => { const rows = await m.query('INSERT INTO workers (tenant_id,worker_number,first_name,middle_name,last_name,phone,email) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,worker_number AS "workerNumber",first_name AS "firstName",middle_name AS "middleName",last_name AS "lastName",phone,email,status', [tenantId,dto.workerNumber.trim(),dto.firstName.trim(),dto.middleName?.trim() ?? null,dto.lastName.trim(),dto.phone ?? null,dto.email?.toLowerCase() ?? null]); return rows[0]; }); }
   async setWorkerStatus(tenantId: string, id: string, status: string) { if (!['active','inactive','suspended','archived'].includes(status)) throw new BadRequestException('Invalid worker status.'); return this.tenantDb.run(tenantId, async (m) => { const rows = await m.query('UPDATE workers SET status=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,worker_number AS "workerNumber",status', [tenantId,id,status]); if (!rows.length) throw new NotFoundException('Worker not found.'); return rows[0]; }); }
+<<<<<<< ours
+=======
+
+  getProject(tenantId: string, id: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT id,project_code AS "projectCode",name,client_name AS "clientName",status,start_date::text AS "startDate",end_date::text AS "endDate",created_at AS "createdAt",updated_at AS "updatedAt" FROM projects WHERE tenant_id=$1 AND id=$2', [tenantId,id]);
+      if (!rows.length) throw new NotFoundException('Project not found.');
+      return rows[0];
+    });
+  }
+
+  updateProjectDetails(tenantId: string, actorId: string, id: string, dto: UpdateProjectDto) {
+    return this.tenantDb.run(tenantId, async m => {
+      const found = await m.query('SELECT project_code AS "projectCode",name,client_name AS "clientName",status,start_date::text AS "startDate",end_date::text AS "endDate" FROM projects WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId,id]);
+      if (!found.length) throw new NotFoundException('Project not found.');
+      const before = found[0];
+      const next = {
+        projectCode: dto.projectCode === undefined ? before.projectCode : dto.projectCode.trim(),
+        name: dto.name === undefined ? before.name : dto.name.trim(),
+        clientName: dto.clientName === undefined ? before.clientName : dto.clientName?.trim() || null,
+        status: dto.status ?? before.status,
+        startDate: dto.startDate === undefined ? before.startDate : dto.startDate,
+        endDate: dto.endDate === undefined ? before.endDate : dto.endDate,
+      };
+      if (!['planning','active','on_hold','completed','cancelled'].includes(next.status)) throw new BadRequestException('Invalid project status.');
+      if (next.startDate && next.endDate && next.endDate < next.startDate) throw new BadRequestException('Project end date must not precede its start date.');
+      const rows = await m.query('UPDATE projects SET project_code=$3,name=$4,client_name=$5,status=$6,start_date=$7,end_date=$8,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,project_code AS "projectCode",name,client_name AS "clientName",status,start_date::text AS "startDate",end_date::text AS "endDate",updated_at AS "updatedAt"', [tenantId,id,next.projectCode,next.name,next.clientName,next.status,next.startDate,next.endDate]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'project.updated','project',$3,$4::jsonb)", [tenantId,actorId,id,JSON.stringify({before,after:rows[0]})]);
+      return rows[0];
+    });
+  }
+
+  archiveProject(tenantId: string, actorId: string, id: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query("UPDATE projects SET status='cancelled',updated_at=now() WHERE tenant_id=$1 AND id=$2 AND status<>'cancelled' RETURNING id,project_code AS \"projectCode\",status", [tenantId,id]);
+      if (!rows.length) {
+        const exists = await m.query('SELECT id FROM projects WHERE tenant_id=$1 AND id=$2', [tenantId,id]);
+        if (!exists.length) throw new NotFoundException('Project not found.');
+        return { id, status: 'cancelled' };
+      }
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'project.archived','project',$3)", [tenantId,actorId,id]);
+      return rows[0];
+    });
+  }
+
+  getSite(tenantId: string, id: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT id,project_id AS "projectId",site_code AS "siteCode",name,address,status,created_at AS "createdAt",updated_at AS "updatedAt" FROM sites WHERE tenant_id=$1 AND id=$2', [tenantId,id]);
+      if (!rows.length) throw new NotFoundException('Site not found.');
+      return rows[0];
+    });
+  }
+
+  updateSite(tenantId: string, actorId: string, id: string, dto: UpdateSiteDto) {
+    return this.tenantDb.run(tenantId, async m => {
+      const found = await m.query('SELECT project_id AS "projectId",site_code AS "siteCode",name,address,status FROM sites WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId,id]);
+      if (!found.length) throw new NotFoundException('Site not found.');
+      const before = found[0];
+      const projectId = dto.projectId === undefined ? before.projectId : dto.projectId;
+      if (projectId) {
+        const project = await m.query("SELECT id FROM projects WHERE tenant_id=$1 AND id=$2 AND status IN ('planning','active')", [tenantId,projectId]);
+        if (!project.length) throw new BadRequestException('Select an active project in this workspace.');
+      }
+      const status = dto.status ?? before.status;
+      if (!['active','inactive'].includes(status)) throw new BadRequestException('Site status must be active or inactive.');
+      const rows = await m.query('UPDATE sites SET project_id=$3,site_code=$4,name=$5,address=$6,status=$7,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,project_id AS "projectId",site_code AS "siteCode",name,address,status,updated_at AS "updatedAt"', [tenantId,id,projectId,dto.siteCode === undefined ? before.siteCode : dto.siteCode.trim(),dto.name === undefined ? before.name : dto.name.trim(),dto.address === undefined ? before.address : dto.address,status]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'site.updated','site',$3,$4::jsonb)", [tenantId,actorId,id,JSON.stringify({before,after:rows[0]})]);
+      return rows[0];
+    });
+  }
+
+  archiveSite(tenantId: string, actorId: string, id: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query("UPDATE sites SET status='inactive',updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status", [tenantId,id]);
+      if (!rows.length) throw new NotFoundException('Site not found.');
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'site.archived','site',$3)", [tenantId,actorId,id]);
+      return rows[0];
+    });
+  }
+
+  getWorker(tenantId: string, id: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT id,worker_number AS "workerNumber",first_name AS "firstName",middle_name AS "middleName",last_name AS "lastName",phone,email,status,created_at AS "createdAt",updated_at AS "updatedAt" FROM workers WHERE tenant_id=$1 AND id=$2', [tenantId,id]);
+      if (!rows.length) throw new NotFoundException('Worker not found.');
+      return rows[0];
+    });
+  }
+
+  /** Links (or unlinks) the platform user who is this worker, so the `worker` role can read only its own payslips. */
+  linkWorkerUser(tenantId: string, actorId: string, workerId: string, dto: LinkWorkerUserDto) {
+    const userId = dto.userId ?? null;
+    return this.tenantDb.run(tenantId, async (m) => {
+      const workers = await m.query('SELECT id,user_id FROM workers WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId, workerId]);
+      if (!workers.length) throw new NotFoundException('Worker not found.');
+      if (userId) {
+        const members = await m.query("SELECT role FROM tenant_memberships WHERE tenant_id=$1 AND user_id=$2 AND status='active'", [tenantId, userId]);
+        if (!members.length) throw new BadRequestException('That user has no active membership in this workspace.');
+        if (members[0].role !== 'worker') throw new BadRequestException('Only users with the worker role can be linked to a worker record.');
+        const taken = await m.query('SELECT id FROM workers WHERE tenant_id=$1 AND user_id=$2 AND id<>$3', [tenantId, userId, workerId]);
+        if (taken.length) throw new ConflictException('That user is already linked to another worker record.');
+      }
+      await m.query('UPDATE workers SET user_id=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2', [tenantId, workerId, userId]);
+      await m.query("INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,'worker',$4,$5::jsonb)",
+        [tenantId, actorId, userId ? 'worker.user_linked' : 'worker.user_unlinked', workerId, JSON.stringify({ previousUserId: workers[0].user_id ?? null, userId })]);
+      return { id: workerId, userId };
+    });
+  }
+
+  updateWorker(tenantId: string, actorId: string, id: string, dto: UpdateWorkerDto) {
+    return this.tenantDb.run(tenantId, async m => {
+      const found = await m.query('SELECT worker_number AS "workerNumber",first_name AS "firstName",middle_name AS "middleName",last_name AS "lastName",phone,email,status FROM workers WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId,id]);
+      if (!found.length) throw new NotFoundException('Worker not found.');
+      const before = found[0];
+      const rows = await m.query('UPDATE workers SET worker_number=$3,first_name=$4,middle_name=$5,last_name=$6,phone=$7,email=$8,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,worker_number AS "workerNumber",first_name AS "firstName",middle_name AS "middleName",last_name AS "lastName",phone,email,status,updated_at AS "updatedAt"', [tenantId,id,dto.workerNumber === undefined ? before.workerNumber : dto.workerNumber.trim(),dto.firstName === undefined ? before.firstName : dto.firstName.trim(),dto.middleName === undefined ? before.middleName : dto.middleName?.trim() || null,dto.lastName === undefined ? before.lastName : dto.lastName.trim(),dto.phone === undefined ? before.phone : dto.phone,dto.email === undefined ? before.email : dto.email?.trim().toLowerCase() || null]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'worker.updated','worker',$3,$4::jsonb)", [tenantId,actorId,id,JSON.stringify({before,after:rows[0]})]);
+      return rows[0];
+    });
+  }
+
+  archiveWorker(tenantId: string, actorId: string, id: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const worker = await m.query('SELECT id,status FROM workers WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId,id]);
+      if (!worker.length) throw new NotFoundException('Worker not found.');
+      const activeContract = await m.query("SELECT id FROM worker_contracts WHERE tenant_id=$1 AND worker_id=$2 AND (effective_to IS NULL OR effective_to >= CURRENT_DATE) LIMIT 1", [tenantId,id]);
+      if (activeContract.length) throw new ConflictException('End the worker contract before archiving this worker.');
+      const rows = await m.query("UPDATE workers SET status='archived',updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,worker_number AS \"workerNumber\",status", [tenantId,id]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'worker.archived','worker',$3)", [tenantId,actorId,id]);
+      return rows[0];
+    });
+  }
+
+>>>>>>> theirs
   listAttendance(tenantId: string, workDate?: string) { return this.tenantDb.run(tenantId, (m) => m.query('SELECT id,worker_id AS "workerId",project_id AS "projectId",site_id AS "siteId",work_date AS "workDate",clock_in AS "clockIn",clock_out AS "clockOut",minutes_worked AS "minutesWorked",source,status,created_at AS "createdAt" FROM attendance_records WHERE tenant_id=$1 AND ($2::date IS NULL OR work_date=$2::date) ORDER BY work_date DESC,created_at DESC LIMIT 500', [tenantId,workDate ?? null])); }
   createAttendance(tenantId: string, actorId: string, dto: CreateAttendanceDto) { return this.tenantDb.run(tenantId, async (m) => { if (dto.clockIn && dto.clockOut && new Date(dto.clockOut) < new Date(dto.clockIn)) throw new BadRequestException('Clock-out must be after clock-in.'); const rows = await m.query('INSERT INTO attendance_records (tenant_id,worker_id,project_id,site_id,work_date,clock_in,clock_out,minutes_worked,source,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,worker_id AS "workerId",project_id AS "projectId",site_id AS "siteId",work_date AS "workDate",clock_in AS "clockIn",clock_out AS "clockOut",minutes_worked AS "minutesWorked",source,status', [tenantId,dto.workerId,dto.projectId,dto.siteId,dto.workDate,dto.clockIn ?? null,dto.clockOut ?? null,dto.minutesWorked ?? null,dto.source ?? 'web',actorId]); await m.query("INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,'attendance.created','attendance',$3,$4::jsonb)",[tenantId,actorId,rows[0].id,JSON.stringify({workDate:dto.workDate,source:dto.source ?? 'web'})]); return rows[0]; }); }
   async transitionAttendance(tenantId: string, actorId: string, id: string, action: 'submit'|'approve'|'reject', reason?: string) { return this.tenantDb.run(tenantId, async (m) => { const current = await m.query('SELECT id,created_by,status FROM attendance_records WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]); if (!current.length) throw new NotFoundException('Attendance record not found.'); const record = current[0] as { id:string; created_by:string|null; status:string }; const target = action === 'submit' ? 'submitted' : action === 'approve' ? 'approved' : 'rejected'; const allowed = action === 'submit' ? ['draft'] : ['submitted']; if (!allowed.includes(record.status)) throw new BadRequestException('Attendance record is not in a state that permits this transition.'); if (action === 'approve' && record.created_by === actorId) throw new BadRequestException('Separation of duties: the person who created attendance cannot approve it.'); if (action === 'reject' && (!reason || reason.trim().length < 3)) throw new BadRequestException('A rejection reason of at least three characters is required.'); const field = action === 'submit' ? 'submitted_by' : action === 'approve' ? 'approved_by' : 'rejected_by'; const rows = await m.query('UPDATE attendance_records SET status=$3,'+field+'=$4,rejection_reason=$5,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status',[tenantId,id,target,actorId,action === 'reject' ? reason!.trim() : null]); await m.query('INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,\'attendance\',$4,$5::jsonb)',[tenantId,actorId,'attendance.'+action,id,JSON.stringify({from:record.status,to:target,reason:action === 'reject' ? reason!.trim() : undefined})]); return rows[0]; }); }
