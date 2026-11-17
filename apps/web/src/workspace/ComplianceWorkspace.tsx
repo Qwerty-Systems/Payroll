@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import {
-  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
+  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider,
   MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, Typography,
 } from '@mui/material';
@@ -41,7 +41,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
     externalReference:'',submissionChannel:'iTax / authority portal',submissionEvidenceUrl:'',
   });
   const set=(key:string,value:string)=>setFields(v=>({...v,[key]:value}));
-  const canManage=['owner','admin','hr_manager','payroll_manager'].includes(role);
+  const canManage=['owner','admin','hr_manager','payroll_manager','accountant'].includes(role);
   const canReview=['owner','admin','payroll_manager','accountant'].includes(role);
 
   const reload=useCallback(async()=>{
@@ -52,7 +52,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
     ]);
     const next=rows(sets);setRulesets(next);
     setChanges(rows(proposals));setFilings(rows(filingRows));setAudit(rows(auditRows));
-    if(!selectedRuleset && next.length) setSelectedRuleset(String(next[0].id));
+    if(!selectedRuleset && next[0]?.id) setSelectedRuleset(String(next[0].id));
   },[request,selectedRuleset]);
 
   useEffect(()=>{void reload().catch(e=>setError(e instanceof Error?e.message:'Compliance data could not be loaded.'));},[reload]);
