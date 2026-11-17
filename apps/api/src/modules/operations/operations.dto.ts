@@ -34,7 +34,7 @@ export class CreateAttendanceDto {
 }
 
 export class CreateWorkerContractDto {
-  @IsIn(['permanent','fixed_term','casual','piece_rate','subcontractor'])
+  @IsIn(['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'])
   engagementType!: string;
 
   @IsIn(['hourly','daily','weekly','monthly','per_unit'])
