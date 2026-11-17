@@ -37,3 +37,5 @@ export class ReconcileBillingPaymentDto {
   @IsIn(['confirm','reverse']) action!:string;
   @IsString() @Length(5,1000) reason!:string;
 }
+
+export class ConvertQuoteDto { @IsDateString() dueDate!:string; }
