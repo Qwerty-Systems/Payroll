@@ -12,13 +12,13 @@ export class WorkerDocumentsController {
   constructor(private readonly documents: WorkerDocumentsService) {}
 
   @Get()
-  @TenantPermissions('workers.read')
+  @TenantPermissions('workers.documents.read')
   list(@Req() req: TenantRequest, @Param('workerId',ParseUUIDPipe) workerId: string) {
     return this.documents.list(req.tenant.id,workerId);
   }
 
   @Post()
-  @TenantPermissions('workers.manage')
+  @TenantPermissions('workers.documents.manage')
   @UseInterceptors(FileInterceptor('file',{ limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: (_req,file,callback) => {
     const allowed = ['application/pdf','image/jpeg','image/png','image/webp'];
     callback(allowed.includes(file.mimetype) ? null : new BadRequestException('Only PDF, JPEG, PNG and WebP files are accepted.'),allowed.includes(file.mimetype));
@@ -34,7 +34,7 @@ export class WorkerDocumentsController {
   }
 
   @Get(':documentId/download')
-  @TenantPermissions('workers.read')
+  @TenantPermissions('workers.documents.read')
   download(
     @Req() req: TenantRequest,
     @Param('workerId',ParseUUIDPipe) workerId: string,
