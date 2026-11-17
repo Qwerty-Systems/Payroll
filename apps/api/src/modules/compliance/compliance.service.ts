@@ -58,7 +58,7 @@ export class ComplianceService {
            pay_day_of_month,default_tax_residency,standard_working_days_per_week,
            allow_partial_month_proration,statutory_settings,setup_completed_at)
         VALUES($1,'KES','Africa/Nairobi','KE',1,1,30,'resident',5,false,
-          '{"PAYE":{"enabled":true,"personalRelief":"eligible_resident_employees_only"},"NSSF":{"enabled":true,"employeeContribution":true,"employerContribution":true},"SHIF":{"enabled":true,"employeeContribution":true,"employerContribution":false},"AHL":{"enabled":true,"employeeRate":0.015,"employerRate":0.015},"NITA":{"enabled":true,"employerOnly":true},"insuranceRelief":{"enabled":false,"requiresEmployeeEvidence":true},"HELB":{"enabled":false,"requiresEmployeeNotice":true}}'::jsonb,now())
+          '{"PAYE":{"enabled":true,"personalRelief":"eligible_resident_employees_only"},"NSSF":{"enabled":true,"employeeContribution":true,"employerContribution":true},"SHIF":{"enabled":true,"employeeContribution":true,"employerContribution":false},"AHL":{"enabled":true,"employeeRate":0.015,"employerRate":0.015},"NITA":{"enabled":true,"employerOnly":true},"insuranceRelief":{"enabled":false,"requiresEmployeeEvidence":true},"HELB":{"enabled":false,"requiresEmployeeNotice":true},"mortgageInterestRelief":{"enabled":false,"requiresLenderStatement":true},"postRetirementMedicalRelief":{"enabled":false,"requiresSchemeEvidence":true}}'::jsonb,now())
         ON CONFLICT(tenant_id) DO UPDATE SET setup_completed_at=COALESCE(tenant_payroll_settings.setup_completed_at,now())
       `,[tenantId]);
       await m.query(`
@@ -79,7 +79,6 @@ export class ComplianceService {
           ('HELB_REPAYMENT','HELB / student loan recovery','other','fixed_amount','{"requiresAuthorityNotice":true}'),
           ('EMPLOYEE_PENSION','Employee registered pension contribution','voluntary','fixed_amount','{"requiresSchemeEvidence":true}'),
           ('POST_RETIREMENT_MEDICAL','Post-retirement medical fund contribution','voluntary','fixed_amount','{"requiresSchemeEvidence":true}'),
-          ('MORTGAGE_INTEREST','Owner-occupied mortgage interest relief','voluntary','fixed_amount','{"requiresLenderStatement":true}'),
           ('COURT_ORDER','Court-ordered deduction','other','fixed_amount','{"requiresCourtOrder":true}'),
           ('GARNISHEE_ORDER','Garnishee order','other','fixed_amount','{"requiresCourtOrder":true}'),
           ('STAFF_ADVANCE_RECOVERY','Salary advance recovery','recovery','balance_recovery','{"requiresSignedAcknowledgement":true}'),
