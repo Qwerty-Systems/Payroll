@@ -29,13 +29,14 @@ import { countCommands } from '../offline/offline-db';
 import { cacheReferenceData, loadCachedReferenceData, REFERENCE_ENTITIES, type ReferenceRows } from '../offline/reference-data';
 import { useAutoSync } from '../offline/use-auto-sync';
 import SyncReviewDialog from './SyncReviewDialog';
+import ComplianceWorkspace from './ComplianceWorkspace';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
   tenantStatus: string; membershipId: string; role: string;
 };
 type RowData = Record<string, unknown> & { id?: string };
-type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'payroll' | 'organization' | 'people';
+type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'payroll' | 'compliance' | 'organization' | 'people';
 type Props = {
   memberships: Membership[];
   userName?: string;
@@ -359,12 +360,13 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     { value: 'projects' as Section, label: 'Projects & sites', icon: <BusinessRounded />, group: 'WORKSPACE' },
     { value: 'attendance' as Section, label: 'Attendance', icon: <EventAvailableRounded />, group: 'WORKSPACE' },
     { value: 'payroll' as Section, label: 'Payroll', icon: <PaymentsRounded />, group: 'FINANCE' },
+    { value: 'compliance' as Section, label: 'Compliance', icon: <AssignmentTurnedInRounded />, group: 'COMPLIANCE' },
     { value: 'organization' as Section, label: 'Organization', icon: <SettingsRounded />, group: 'ADMINISTRATION' },
     { value: 'people' as Section, label: 'Team access', icon: <GroupsRounded />, group: 'ADMINISTRATION' },
   ];
   const pageTitle: Record<Section, string> = {
     overview: 'Overview', workers: 'People & workers', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
-    attendance: 'Attendance', payroll: 'Payroll', organization: 'Organization', people: 'Team access',
+    attendance: 'Attendance', payroll: 'Payroll', compliance: 'Compliance', organization: 'Organization', people: 'Team access',
   };
   const pageDescription: Record<Section, string> = {
     overview: 'A clear picture of your workforce and operations.',
@@ -373,6 +375,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     projects: 'Organize projects, clients and work sites.',
     attendance: 'Capture work activity and review submitted records.',
     payroll: 'Manage pay periods and review payroll calculation previews.',
+    compliance: 'Review statutory rules, approve effective-dated changes and track statutory filings.',
     organization: 'Structure your company and assign people to teams.',
     people: 'Control who can access this company workspace.',
   };
@@ -391,7 +394,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       </Box>
       <Divider sx={{ borderColor: 'rgba(255,255,255,.1)' }} />
       <Box sx={{ px: 1.5, py: 2, flex: 1 }}>
-        {['WORKSPACE','FINANCE','ADMINISTRATION'].map(group => (
+        {['WORKSPACE','FINANCE','COMPLIANCE','ADMINISTRATION'].map(group => (
           <Box key={group} sx={{ mb: 2 }}>
             <Typography sx={{ px: 1.5, mb: .8, color: 'rgba(255,255,255,.42)', fontSize: '.65rem', fontWeight: 800, letterSpacing: '.12em' }}>{group}</Typography>
             <List disablePadding>
@@ -564,7 +567,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
             </Stack>
           </Stack>
           {loading && <Box sx={{ mb: 2 }}><Typography variant="caption" color="text.secondary">Refreshing workspace data…</Typography></Box>}
-          {section !== 'organization' && section !== 'people' && <TextField fullWidth size="small" placeholder={`Search ${pageTitle[section].toLowerCase()}…`} value={searchQuery} onChange={event => setSearchQuery(event.target.value)}
+          {section !== 'organization' && section !== 'people' && section !== 'compliance' && <TextField fullWidth size="small" placeholder={`Search ${pageTitle[section].toLowerCase()}…`} value={searchQuery} onChange={event => setSearchQuery(event.target.value)}
             InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ color: '#87948A' }} /></InputAdornment> }}
             sx={{ mb: 2, maxWidth: 520, '& .MuiOutlinedInput-root': { bgcolor: '#FFFFFF', borderRadius: 2 } }} />}
           {section === 'pay-grades' ? <Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
@@ -572,7 +575,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               {(data.payGrades ?? []).filter(row => !searchQuery || JSON.stringify(row).toLowerCase().includes(searchQuery.toLowerCase())).map(row => <TableRow key={String(row.id)} hover><TableCell>{label(row.code)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.name)}</Typography><Typography variant="caption" color="text.secondary">{label(row.description)}</Typography></TableCell><TableCell>{label(row.payBasis)}</TableCell><TableCell>{label(row.minimumRate)}</TableCell><TableCell>{label(row.midpointRate)}</TableCell><TableCell>{label(row.maximumRate)}</TableCell><TableCell>{label(row.currency)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Button size="small" disabled={busy} onClick={async () => { setBusy(true); try { await request(`tenant/pay-grades/${row.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: row.status === 'active' ? 'inactive' : 'active' }) }); setNotice(`Pay grade ${row.status === 'active' ? 'deactivated' : 'reactivated'}.`); await refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Pay grade status could not be updated.'); } finally { setBusy(false); } }}>{row.status === 'active' ? 'Deactivate' : 'Reactivate'}</Button></TableCell></TableRow>)}
               {!(data.payGrades ?? []).length && <TableRow><TableCell colSpan={9} sx={{ py: 5, textAlign: 'center' }}>No pay grades yet. Create a pay grade to define a reusable rate band.</TableCell></TableRow>}
             </TableBody></Table></TableContainer>
-          </Paper> : section === 'organization' || section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> :
+          </Paper> : section === 'compliance' ? <ComplianceWorkspace role={membership?.role ?? 'viewer'} periods={data.periods ?? []} request={request} /> : section === 'organization' || section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> :
             <Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
               {section === 'payroll' ? <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
                 <TableContainer><Table size="small"><TableHead><TableRow>{['Code','Period','Start','End','Status','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
