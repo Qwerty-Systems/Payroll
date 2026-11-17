@@ -5,6 +5,7 @@ import { TenantPermissions } from '../auth/tenant-access.decorator';
 import {
   CreateLeaveRequestDto, CreateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
+  CreateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
 } from './workforce-time.dto';
 import { WorkforceTimeService } from './workforce-time.service';
 
@@ -114,4 +115,59 @@ export class WorkforceTimeController {
   rejectOvertimeRequest(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewOvertimeRequestDto) {
     return this.service.reviewOvertimeRequest(req.tenant.id, req.tenant.userId, id, 'reject', dto);
   }
+
+  @Get('timesheets')
+  @TenantPermissions('attendance.read')
+  listTimesheets(@Req() req: TenantRequest, @Query('status') status?: string, @Query('workerId') workerId?: string) {
+    return this.service.listTimesheets(req.tenant.id, status, workerId);
+  }
+
+  @Post('timesheets')
+  @TenantPermissions('attendance.capture')
+  createTimesheet(@Req() req: TenantRequest, @Body() dto: CreateTimesheetDto) {
+    return this.service.createTimesheet(req.tenant.id, req.tenant.userId, dto);
+  }
+
+  @Get('timesheets/:id')
+  @TenantPermissions('attendance.read')
+  getTimesheet(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.getTimesheet(req.tenant.id, id);
+  }
+
+  @Post('timesheets/:id/lines')
+  @TenantPermissions('attendance.capture')
+  createTimesheetLine(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateTimesheetLineDto) {
+    return this.service.createTimesheetLine(req.tenant.id, req.tenant.userId, id, dto);
+  }
+
+  @Patch('timesheets/:id/lines/:lineId')
+  @TenantPermissions('attendance.capture')
+  updateTimesheetLine(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Param('lineId', ParseUUIDPipe) lineId: string, @Body() dto: UpdateTimesheetLineDto) {
+    return this.service.updateTimesheetLine(req.tenant.id, req.tenant.userId, id, lineId, dto);
+  }
+
+  @Delete('timesheets/:id/lines/:lineId')
+  @TenantPermissions('attendance.capture')
+  deleteTimesheetLine(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Param('lineId', ParseUUIDPipe) lineId: string) {
+    return this.service.deleteTimesheetLine(req.tenant.id, req.tenant.userId, id, lineId);
+  }
+
+  @Post('timesheets/:id/submit')
+  @TenantPermissions('attendance.capture')
+  submitTimesheet(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.submitTimesheet(req.tenant.id, req.tenant.userId, id);
+  }
+
+  @Post('timesheets/:id/approve')
+  @TenantPermissions('attendance.approve')
+  approveTimesheet(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewTimesheetDto) {
+    return this.service.reviewTimesheet(req.tenant.id, req.tenant.userId, id, 'approve', dto);
+  }
+
+  @Post('timesheets/:id/reject')
+  @TenantPermissions('attendance.approve')
+  rejectTimesheet(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewTimesheetDto) {
+    return this.service.reviewTimesheet(req.tenant.id, req.tenant.userId, id, 'reject', dto);
+  }
+
 }
