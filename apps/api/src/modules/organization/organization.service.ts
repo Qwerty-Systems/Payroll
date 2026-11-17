@@ -20,11 +20,29 @@ export class OrganizationService {
       return rows[0];
     });
   }
-  endWorkerAssignment(tenantId: string, id: string, effectiveTo: string) {
-    return this.tenantDb.run(tenantId, async m => {
-      const rows = await m.query("UPDATE worker_assignments SET status='ended',effective_to=$3 WHERE tenant_id=$1 AND id=$2 AND status='active' AND $3::date >= effective_from RETURNING id,status,effective_to AS \"effectiveTo\"",[tenantId,id,effectiveTo]);
-      if (!rows.length) throw new NotFoundException('Active assignment not found or end date precedes its start date.');
+  endWorkerAssignment(tenantId:string,actorId:string,id:string,effectiveTo:string) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const beforeRows=await m.query('SELECT id,worker_id AS "workerId",effective_from::text AS "effectiveFrom",effective_to::text AS "effectiveTo",status FROM worker_assignments WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);
+      if(!beforeRows.length) throw new NotFoundException('Worker assignment not found.');
+      if(beforeRows[0].status!=='active') throw new BadRequestException('Only active assignments can be ended.');
+      const rows=await m.query("UPDATE worker_assignments SET status='ended',effective_to=$3 WHERE tenant_id=$1 AND id=$2 AND status='active' AND $3::date >= effective_from RETURNING id,status,effective_to AS \"effectiveTo\"",[tenantId,id,effectiveTo]);
+      if(!rows.length) throw new BadRequestException('Assignment end date must not precede its start date.');
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'worker.assignment.ended','worker_assignment',$3,$4::jsonb)",[tenantId,actorId,id,JSON.stringify({before:beforeRows[0],after:rows[0]})]);
       return rows[0];
+    });
+  }
+
+  deleteWorkerAssignment(tenantId:string,actorId:string,id:string) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const rows=await m.query('SELECT id,worker_id AS "workerId",branch_id AS "branchId",department_id AS "departmentId",cost_centre_id AS "costCentreId",project_id AS "projectId",site_id AS "siteId",effective_from::text AS "effectiveFrom",effective_to::text AS "effectiveTo",status FROM worker_assignments WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);
+      if(!rows.length) throw new NotFoundException('Worker assignment not found.');
+      try { await m.query('DELETE FROM worker_assignments WHERE tenant_id=$1 AND id=$2',[tenantId,id]); }
+      catch(error) {
+        if(typeof error==='object' && error!==null && 'code' in error && (error as {code?:string}).code==='23503') throw new BadRequestException('This assignment is referenced by other records and cannot be deleted. End it instead to preserve payroll history.');
+        throw error;
+      }
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'worker.assignment.deleted','worker_assignment',$3,$4::jsonb)",[tenantId,actorId,id,JSON.stringify({deleted:rows[0]})]);
+      return {id,deleted:true};
     });
   }
 
@@ -94,6 +112,7 @@ export class OrganizationService {
       const before=currentRows[0];
       if(before.status!=='active') throw new BadRequestException('Ended assignments are immutable. Create a new effective-dated assignment instead.');
       const after={
+        workerId:dto.workerId===undefined?before.workerId:dto.workerId,
         branchId:dto.branchId===undefined?before.branchId:dto.branchId,
         departmentId:dto.departmentId===undefined?before.departmentId:dto.departmentId,
         costCentreId:dto.costCentreId===undefined?before.costCentreId:dto.costCentreId,
@@ -103,13 +122,13 @@ export class OrganizationService {
         effectiveTo:dto.effectiveTo===undefined?before.effectiveTo:dto.effectiveTo,
       };
       if(after.effectiveTo && after.effectiveTo < after.effectiveFrom) throw new BadRequestException('Assignment end date must not precede its start date.');
-      const rows=await m.query(`UPDATE worker_assignments SET branch_id=$3,department_id=$4,cost_centre_id=$5,
-        project_id=$6,site_id=$7,effective_from=$8,effective_to=$9,
+      const rows=await m.query(`UPDATE worker_assignments SET worker_id=$3,branch_id=$4,department_id=$5,cost_centre_id=$6,
+        project_id=$7,site_id=$8,effective_from=$9,effective_to=$10,
         status=CASE WHEN $9::date IS NOT NULL THEN 'ended' ELSE 'active' END
         WHERE tenant_id=$1 AND id=$2 RETURNING id,worker_id AS "workerId",branch_id AS "branchId",
         department_id AS "departmentId",cost_centre_id AS "costCentreId",project_id AS "projectId",site_id AS "siteId",
         effective_from AS "effectiveFrom",effective_to AS "effectiveTo",status`,
-        [tenantId,id,after.branchId,after.departmentId,after.costCentreId,after.projectId,after.siteId,after.effectiveFrom,after.effectiveTo]);
+        [tenantId,id,after.workerId,after.branchId,after.departmentId,after.costCentreId,after.projectId,after.siteId,after.effectiveFrom,after.effectiveTo]);
       await m.query(`INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
         VALUES($1,$2,'worker.assignment.updated','worker_assignment',$3,$4::jsonb)`,
         [tenantId,actorId,id,JSON.stringify({before,after:rows[0]})]);
