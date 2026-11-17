@@ -12,7 +12,7 @@ describe('Payroll statutory compliance gate', () => {
     const service=new PayrollService({run:jest.fn()} as any);
     await expect((service as any).assertApprovedRulesSnapshot({query},tenantId,rulesetId,start,end))
       .rejects.toThrow(/changes during this payroll period/i);
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(2);
   });
 
   it('requires an approved ruleset review covering the entire payroll period', async () => {

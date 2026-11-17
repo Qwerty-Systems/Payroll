@@ -26,7 +26,7 @@ describe('ComplianceService', () => {
     })).resolves.toMatchObject({id:reviewId,status:'submitted'});
     expect(query.mock.calls[3][0]).toContain('rules_snapshot_hash');
     expect(query.mock.calls[3][1][4]).toMatch(/^[a-f0-9]{64}$/);
-    expect(query.mock.calls[4][0]).toContain('compliance.ruleset.review_submitted');
+    expect(query.mock.calls[4][1][2]).toBe('compliance.ruleset.review_submitted');
   });
 
   it('prevents a ruleset reviewer from approving their own submission',async()=>{
@@ -40,12 +40,13 @@ describe('ComplianceService', () => {
   it('requires an independently approved ruleset before a rule change can be approved',async()=>{
     const changeId='123e4567-e89b-42d3-a456-426614174005';
     const query=jest.fn()
-      .mockResolvedValueOnce([{id:changeId,status:'submitted',submitted_by:otherActor,rule_set_id:ruleSetId,effective_from:'2026-11-01'}])
+      .mockResolvedValueOnce([{id:changeId,status:'submitted',submitted_by:otherActor,rule_set_id:ruleSetId,rule_code:'PAYE',category:'tax',calculation_method:'progressive_annualized',effective_from:'2026-11-01'}])
+      .mockResolvedValueOnce([{category:'tax',calculation_method:'progressive_annualized'}])
       .mockResolvedValueOnce([]);
     const svc=service(query);
     await expect(svc.decideRuleChange(tenantId,actorId,changeId,'approve',{notes:'Reviewed source.'}))
       .rejects.toBeInstanceOf(ConflictException);
-    expect(query.mock.calls[1][0]).toContain("status='approved'");
+    expect(query.mock.calls[2][0]).toContain("status='approved'");
   });
 
   it('does not prepare a statutory filing from an unapproved payroll run',async()=>{

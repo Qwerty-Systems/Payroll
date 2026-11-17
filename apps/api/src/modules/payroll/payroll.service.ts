@@ -7,7 +7,7 @@ import { CreatePayrollPeriodDto } from './payroll.dto';
 import { calculateContractEarnings } from './contract-earnings';
 import { blockingWarnings, calculateAllowances, calculateOtherDeductions, type AllowanceAssignmentInput, type DeductionAssignmentInput } from './adjustments';
 
-const ENGINE_VERSION = 'jengaflow-ke-0.2.0';
+const ENGINE_VERSION = 'jengaflow-ke-0.3.0';
 const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 @Injectable()

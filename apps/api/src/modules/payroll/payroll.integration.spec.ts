@@ -8,7 +8,7 @@
  * Run the migrations first. Never point these at a database that holds real data.
  */
 import 'reflect-metadata';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { Pool } from 'pg';
 import { ConflictException } from '@nestjs/common';
@@ -53,6 +53,20 @@ suite('Payroll flow against PostgreSQL (RLS enforced)', () => {
     rulesetId = set.id; originalApproval = set.compliance_approved_at;
     await q("UPDATE statutory_rule_sets SET compliance_approved_at=now() WHERE id=$1", [rulesetId]);
     rules = await q("SELECT code,calculation_method,configuration FROM statutory_rules WHERE rule_set_id=$1", [rulesetId]);
+    // Payroll runs require a tenant-scoped review of the exact effective-dated rule snapshot.
+    const reviewRules = await q(`
+      SELECT code,label,category,calculation_method,configuration,effective_from::text,effective_to::text,
+        source_title,source_url,verified_on::text
+      FROM statutory_rules WHERE rule_set_id=$1 ORDER BY code,effective_from
+    `, [rulesetId]);
+    const rulesSnapshotHash = createHash('sha256').update(JSON.stringify(reviewRules)).digest('hex');
+    await q(`
+      INSERT INTO tenant_statutory_rule_reviews
+        (tenant_id,rule_set_id,status,effective_from,effective_to,rules_snapshot_hash,
+         submission_notes,review_notes,submitted_by,submitted_at,reviewed_by,reviewed_at)
+      VALUES($1,$2,'approved','2026-01-01',NULL,$3,'Integration test setup',
+        'Reviewed by a separate test approver',$4,now(),$5,now())
+    `, [tenantId,rulesetId,rulesSnapshotHash,creator,approver]);
 
     workerId = (await q("INSERT INTO workers (tenant_id,worker_number,first_name,last_name,status) VALUES ($1,'W001','Amani','Otieno','active') RETURNING id", [tenantId]))[0].id;
     await q("INSERT INTO worker_contracts (tenant_id,worker_id,engagement_type,pay_basis,rate_amount,effective_from) VALUES ($1,$2,'permanent','monthly',100000,'2026-01-01')", [tenantId, workerId]);

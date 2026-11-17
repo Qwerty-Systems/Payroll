@@ -678,23 +678,37 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                     </Grid>
                     {warnings.length > 0 && <Alert severity="warning" sx={{ mb: 1.5 }}><Typography fontWeight={800} sx={{ mb: .5 }}>Items requiring review</Typography>{warnings.map((warning, index) => <Typography key={index} variant="body2">{warning}</Typography>)}</Alert>}
                     <TableContainer component={Paper} variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 2 }}>
-                      <Table size="small"><TableHead><TableRow>{['Employee','Basic + allowances','Statutory deductions','Other deductions','Net pay'].map(title => <TableCell key={title}>{title}</TableCell>)}</TableRow></TableHead>
+                      <Table size="small"><TableHead><TableRow>{['Employee','Basic salary','Employee statutory deductions','Employer contributions','Other deductions','Net pay'].map(title => <TableCell key={title}>{title}</TableCell>)}</TableRow></TableHead>
                         <TableBody>
                           {items.map(item => {
                             const snapshot = (item.snapshot ?? {}) as Record<string, any>;
                             const person = snapshot.worker ?? {};
                             const earnings = snapshot.earnings ?? {};
                             const statutory = snapshot.statutory ?? {};
+                            const statutoryLines = Array.isArray(statutory.lines) ? statutory.lines as Array<{code:string;amount:number;side:'employee'|'employer'}> : [];
+                            const employeeLines = statutoryLines.filter(line => line.side === 'employee');
+                            const employerLines = statutoryLines.filter(line => line.side === 'employer');
                             const deductions = snapshot.otherDeductions ?? {};
+                            const money = (value: unknown) => 'KES ' + Number(value ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2});
                             return <TableRow key={String(item.id)}>
                               <TableCell><Typography fontWeight={750}>{[person.firstName,person.middleName,person.lastName].filter(Boolean).join(' ') || label(person.workerNumber)}</Typography><Typography variant="caption" color="text.secondary">{label(person.workerNumber)}</Typography></TableCell>
-                              <TableCell>KES {Number(earnings.grossPay ?? item.earnings ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</TableCell>
-                              <TableCell>KES {Number(statutory.employeeStatutoryDeductions ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</TableCell>
-                              <TableCell>KES {Number(deductions.total ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</TableCell>
-                              <TableCell><Typography fontWeight={850}>KES {Number(item.netPay ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</Typography></TableCell>
+                              <TableCell>{money(earnings.amount ?? item.earnings)}</TableCell>
+                              <TableCell>
+                                <Typography fontWeight={800}>{money(statutory.employeeStatutoryDeductions)}</Typography>
+                                {employeeLines.map(line => <Typography key={line.code} variant="caption" color="text.secondary" display="block">{line.code.replaceAll('_',' ')} · {money(line.amount)}</Typography>)}
+                              </TableCell>
+                              <TableCell>
+                                <Typography fontWeight={800}>{money(statutory.employerContributions)}</Typography>
+                                {employerLines.map(line => <Typography key={line.code} variant="caption" color="text.secondary" display="block">{line.code.replaceAll('_',' ')} · {money(line.amount)}</Typography>)}
+                              </TableCell>
+                              <TableCell>
+                                <Typography fontWeight={800}>{money(deductions.total)}</Typography>
+                                {(Array.isArray(deductions.lines) ? deductions.lines : []).map((line: {code:string;amount:number}) => <Typography key={line.code} variant="caption" color="text.secondary" display="block">{line.code} · {money(line.amount)}</Typography>)}
+                              </TableCell>
+                              <TableCell><Typography fontWeight={850}>{money(item.netPay)}</Typography></TableCell>
                             </TableRow>;
                           })}
-                          {!items.length && <TableRow><TableCell colSpan={5} sx={{ py: 3, textAlign: 'center' }}>No employee calculation lines were returned for this run.</TableCell></TableRow>}
+                          {!items.length && <TableRow><TableCell colSpan={6} sx={{ py: 3, textAlign: 'center' }}>No employee calculation lines were returned for this run.</TableCell></TableRow>}
                         </TableBody>
                       </Table>
                     </TableContainer>
