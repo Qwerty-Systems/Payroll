@@ -13,7 +13,9 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "db:migrate": "pnpm --filter @jengaflow/api migration:run",
-    "db:seed:demo": "pnpm --filter @jengaflow/api seed:demo"
+    "db:seed:demo": "pnpm --filter @jengaflow/api seed:demo",
+    "db:migrate:prod": "docker compose run --build --rm migrate",
+    "db:migrate:show:prod": "docker compose run --build --rm migrate node ../../node_modules/typeorm/cli.js -d dist/database/data-source.js migration:show"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
