@@ -69,7 +69,7 @@ export class IdentityService {
              pay_day_of_month,default_tax_residency,standard_working_days_per_week,
              allow_partial_month_proration,statutory_settings,setup_completed_at)
           VALUES ($1,$2,$3,'KE',1,1,30,'resident',5,false,
-            '{"PAYE":{"enabled":true,"personalRelief":"eligible_resident_employees_only"},"NSSF":{"enabled":true,"employeeContribution":true,"employerContribution":true},"SHIF":{"enabled":true,"employeeContribution":true,"employerContribution":false},"AHL":{"enabled":true,"employeeRate":0.015,"employerRate":0.015},"NITA":{"enabled":true,"employerOnly":true},"insuranceRelief":{"enabled":false,"requiresEmployeeEvidence":true},"HELB":{"enabled":false,"requiresEmployeeNotice":true}}'::jsonb,now())
+            '{"PAYE":{"enabled":true,"personalRelief":"eligible_resident_employees_only"},"NSSF":{"enabled":true,"employeeContribution":true,"employerContribution":true},"SHIF":{"enabled":true,"employeeContribution":true,"employerContribution":false},"AHL":{"enabled":true,"employeeRate":0.015,"employerRate":0.015},"NITA":{"enabled":true,"employerOnly":true},"insuranceRelief":{"enabled":false,"requiresEmployeeEvidence":true},"HELB":{"enabled":false,"requiresEmployeeNotice":true},"mortgageInterestRelief":{"enabled":false,"requiresLenderStatement":true},"postRetirementMedicalRelief":{"enabled":false,"requiresSchemeEvidence":true}}'::jsonb,now())
           ON CONFLICT (tenant_id) DO NOTHING
         `, [tenant.id, currency, dto.timezone ?? 'Africa/Nairobi']);
         await manager.query("INSERT INTO tenant_statutory_assignments (tenant_id, rule_set_id, effective_from) SELECT $1, id, CURRENT_DATE FROM statutory_rule_sets WHERE country_code = 'KE' AND status = 'published' ORDER BY published_at DESC NULLS LAST LIMIT 1 ON CONFLICT (tenant_id, rule_set_id, effective_from) DO NOTHING", [tenant.id]);
@@ -90,7 +90,6 @@ export class IdentityService {
           ['HELB_REPAYMENT','HELB / student loan recovery','other','fixed_amount'],
           ['EMPLOYEE_PENSION','Employee registered pension contribution','voluntary','fixed_amount'],
           ['POST_RETIREMENT_MEDICAL','Post-retirement medical fund contribution','voluntary','fixed_amount'],
-          ['MORTGAGE_INTEREST','Owner-occupied residential mortgage interest relief','voluntary','fixed_amount'],
           ['OTHER_DEDUCTION','Other approved deduction','other','fixed_amount'],
         ];
         for (const [code, name, category, method] of deductionSeeds) {
