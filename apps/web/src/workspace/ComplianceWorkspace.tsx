@@ -18,6 +18,7 @@ const statusColor = (s:string) => s==='approved'||s==='accepted'?'success':s==='
 
 export default function ComplianceWorkspace({role,periods,request}:Props) {
   const [rulesets,setRulesets]=useState<Row[]>([]);
+  const [setup,setSetup]=useState<Row|null>(null);
   const [selectedRuleset,setSelectedRuleset]=useState('');
   const [rules,setRules]=useState<Row[]>([]);
   const [overrides,setOverrides]=useState<Row[]>([]);
@@ -45,11 +46,12 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
 
   const reload=useCallback(async()=>{
     setError('');
-    const [sets,proposals,filingRows,auditRows]=await Promise.all([
+    const [sets,proposals,filingRows,auditRows,setupData]=await Promise.all([
       request<unknown>('compliance/rulesets'),request<unknown>('compliance/rule-changes'),
       request<unknown>('compliance/filings'),request<unknown>('compliance/audit?limit=150'),
+      request<Row>('compliance/setup'),
     ]);
-    const next=rows(sets);setRulesets(next);
+    const next=rows(sets);setRulesets(next);setSetup(setupData);
     setChanges(rows(proposals));setFilings(rows(filingRows));setAudit(rows(auditRows));
     if(!selectedRuleset && next[0]?.id) setSelectedRuleset(String(next[0].id));
   },[request,selectedRuleset]);
@@ -76,6 +78,15 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
       await request(path,{method,body:body===undefined?undefined:JSON.stringify(body)});
       setNotice(success);await reload();
     }catch(e){setError(e instanceof Error?e.message:'The compliance action failed.');}
+    finally{setBusy(false);}
+  }
+  async function initializeSetup(){
+    setBusy(true);setError('');setNotice('');
+    try{
+      const result=await request<Row>('compliance/setup/initialize',{method:'POST',body:'{}'});
+      setNotice(String(result.message??'Kenya statutory and payroll defaults are ready for review.'));
+      await reload();
+    }catch(e){setError(e instanceof Error?e.message:'Starter payroll setup could not be initialized.');}
     finally{setBusy(false);}
   }
   function openDialog(name:string,id=''){setActiveId(id);setDialog(name);setError('');setNotice('');}
@@ -143,6 +154,33 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
   return <Stack spacing={2.5}>
     {error&&<Alert severity="error" onClose={()=>setError('')}>{error}</Alert>}
     {notice&&<Alert severity="success" onClose={()=>setNotice('')}>{notice}</Alert>}
+    <Paper variant="outlined" sx={{p:{xs:2,md:2.5},borderColor:'#DCE7DE',borderRadius:3}}>
+      <Stack direction={{xs:'column',md:'row'}} justifyContent="space-between" alignItems={{md:'center'}} spacing={1.5}>
+        <Box>
+          <Typography variant="h6" fontWeight={900}>Kenya payroll starter setup</Typography>
+          <Typography variant="body2" color="text.secondary">Prefilled national rules, monthly KES settings and editable deduction templates. Re-running setup only fills missing defaults; it does not overwrite your company settings.</Typography>
+        </Box>
+        <Button variant="contained" disabled={!canManage||busy} onClick={()=>void initializeSetup()}>Auto-create missing defaults</Button>
+      </Stack>
+      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{mt:1.5}}>
+        <Chip size="small" label={'Country '+show(setup?.settings?.countryCode??'KE')}/>
+        <Chip size="small" label={'Currency '+show(setup?.settings?.currency??'KES')}/>
+        <Chip size="small" label={'Timezone '+show(setup?.settings?.timezone??'Africa/Nairobi')}/>
+        <Chip size="small" label={'Pay frequency '+show(setup?.settings?.payFrequency??'monthly')}/>
+        <Chip size="small" label={'Tax residency default '+show(setup?.settings?.defaultTaxResidency??'resident')}/>
+        <Chip size="small" label={'Pay day '+show(setup?.settings?.payDayOfMonth??30)}/>
+      </Stack>
+      <Stack direction={{xs:'column',sm:'row'}} spacing={1} sx={{mt:1.5}}>
+        <Paper variant="outlined" sx={{p:1.5,flex:1}}><Typography variant="caption" color="text.secondary">Statutory rules</Typography><Typography variant="h5" fontWeight={900}>{show(setup?.counts?.statutoryRuleCount??rules.length)}</Typography></Paper>
+        <Paper variant="outlined" sx={{p:1.5,flex:1}}><Typography variant="caption" color="text.secondary">Deduction templates</Typography><Typography variant="h5" fontWeight={900}>{show(setup?.counts?.deductionTemplateCount??'—')}</Typography></Paper>
+        <Paper variant="outlined" sx={{p:1.5,flex:1}}><Typography variant="caption" color="text.secondary">Allowance templates</Typography><Typography variant="h5" fontWeight={900}>{show(setup?.counts?.allowanceTemplateCount??'—')}</Typography></Paper>
+      </Stack>
+      <Alert severity={setup?.assignment?.reviewStatus==='approved'?'success':'warning'} sx={{mt:1.5}}>
+        {setup?.assignment?.reviewStatus==='approved'
+          ? 'The assigned Kenya ruleset has company approval.'
+          : 'Defaults are prefilled, but a separate authorised reviewer must approve the statutory ruleset before payroll can be calculated.'}
+      </Alert>
+    </Paper>
     <Paper variant="outlined" sx={{p:{xs:2,md:2.5},borderColor:'#E4EAE3',borderRadius:3}}>
       <Stack direction={{xs:'column',md:'row'}} justifyContent="space-between" alignItems={{md:'center'}} spacing={1.5}>
         <Box><Typography variant="h6" fontWeight={900}>Statutory rules and approvals</Typography><Typography variant="body2" color="text.secondary">Review the statutory baseline assigned to this company before processing payroll.</Typography></Box>
