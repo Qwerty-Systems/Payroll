@@ -321,7 +321,7 @@ export class PayrollService {
       const run=rows[0];
       if(action==='submit') {
         if(run.status!=='calculated') throw new ConflictException('Only a calculated payroll run can be submitted.');
-        await m.query("UPDATE payroll_runs SET status='submitted',submitted_by=$3,submitted_at=now() WHERE tenant_id=$1 AND id=$2",[tenantId,runId,actorId]);
+        await m.query("UPDATE payroll_runs SET status='submitted',submitted_by=$3,submitted_at=now(),rejected_by=NULL,rejected_at=NULL,rejection_reason=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2",[tenantId,runId,actorId]);
       } else if(action==='approve') {
         if(run.status!=='submitted') throw new ConflictException('Only a submitted payroll run can be approved.');
         if(run.created_by===actorId || run.submitted_by===actorId) throw new BadRequestException('Separation of duties: the payroll creator or submitter cannot approve this run.');
