@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/rules/jengaflow.rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  - job_name: jengaflow-api
+    metrics_path: /api/v1/health/metrics
+    static_configs:
+      - targets: ['api:3001']
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/metrics-token
