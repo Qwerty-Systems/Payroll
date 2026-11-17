@@ -99,7 +99,6 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
   }
 
   const selectedPeriodRow=periods.find(p=>p.id===selectedPeriod);
-  const selectedRunRow=runs.find(r=>r.id===selectedRun);
   const totals=(runDetail?.totals??{}) as Record<string,unknown>;
   const items=asRows(runDetail?.items);
   const warnings=Array.isArray(runDetail?.warnings)?runDetail!.warnings.map(String):[];
