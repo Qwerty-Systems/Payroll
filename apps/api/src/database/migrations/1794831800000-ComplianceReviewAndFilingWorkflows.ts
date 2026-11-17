@@ -130,7 +130,8 @@ export class ComplianceReviewAndFilingWorkflows1794831800000 implements Migratio
           OR OLD.entity_type IN ('statutory_rule_review','statutory_rule_change','statutory_filing') THEN
           RAISE EXCEPTION 'Compliance audit records are immutable.';
         END IF;
-        RETURN OLD;
+        IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+        RETURN NEW;
       END $audit$;
       DROP TRIGGER IF EXISTS compliance_audit_immutable ON audit_events;
       CREATE TRIGGER compliance_audit_immutable
