@@ -4,7 +4,23 @@ export type KenyaPayrollResult = {
   employeeStatutoryDeductions: number; employerNssf: number; employerHousingLevy: number; nita: number;
   employerContributions: number; netBeforeOtherDeductions: number; warnings: string[]; lines: Array<{ code: string; amount: number; side: 'employee'|'employer' }>;
 };
-const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+/*
+ * Exact arithmetic: amounts are BigInt cents and rates are scaled integers (RATE_SCALE), so no binary floating point
+ * is involved in any statutory figure. Every percentage is rounded half-up to the cent exactly once.
+ */
+const RATE_SCALE = 1_000_000_000_000n; // rates carry up to 12 decimal places
+const toCents = (kes: number): bigint => BigInt(Math.round(kes * 100));
+const fromCents = (cents: bigint): number => Number(cents) / 100;
+const toScaledRate = (rate: number, label: string): bigint => {
+  const fixed = rate.toFixed(12);
+  if (Number(fixed) !== rate) throw new Error(label + ' has more than 12 decimal places.');
+  return BigInt(fixed.replace('.', ''));
+};
+/** Divides non-negative integers rounding half-up. */
+const divRoundHalfUp = (numerator: bigint, denominator: bigint): bigint => (numerator * 2n + denominator) / (denominator * 2n);
+const percentOf = (cents: bigint, scaledRate: bigint): bigint => divRoundHalfUp(cents * scaledRate, RATE_SCALE);
+const minBig = (a: bigint, b: bigint): bigint => (a < b ? a : b);
+const maxBig = (a: bigint, b: bigint): bigint => (a > b ? a : b);
 const config = (rules: Map<string, StatutoryRule>, code: string) => {
   const rule = rules.get(code);
   if (!rule) throw new Error('Missing effective statutory rule: ' + code);
@@ -14,7 +30,7 @@ const config = (rules: Map<string, StatutoryRule>, code: string) => {
 /** Pure monthly salaried-employee statutory calculation. It intentionally rejects unsupported or incomplete rule packs. */
 export function calculateKenyaMonthlyPayroll(grossInput: number, sourceRules: StatutoryRule[]): KenyaPayrollResult {
   if (!Number.isFinite(grossInput) || grossInput < 0) throw new Error('Gross earnings must be a finite non-negative amount.');
-  const gross = money(grossInput);
+  const gross = toCents(grossInput);
   const rules = new Map<string, StatutoryRule>(sourceRules.map(rule => [rule.code, rule] as const));
   const payeCfg = config(rules,'PAYE');
   const shifCfg = config(rules,'SHIF');
@@ -32,41 +48,48 @@ export function calculateKenyaMonthlyPayroll(grossInput: number, sourceRules: St
   const nitaAmount = Number(nitaCfg.amount);
   if (![shifRate,nssfRate,employerNssfRate,nssfUpper,ahlRate,employerAhlRate,nitaAmount].every(Number.isFinite) || [shifRate,nssfRate,employerNssfRate,ahlRate,employerAhlRate,nitaAmount].some(v => v < 0) || nssfUpper <= 0) throw new Error('One or more statutory rates or limits are invalid.');
 
-  const shif = money(gross * shifRate);
-  const nssf = money(Math.min(gross,nssfUpper) * nssfRate);
-  const employerNssf = money(Math.min(gross,nssfUpper) * employerNssfRate);
-  const housingLevy = money(gross * ahlRate);
-  const employerHousingLevy = money(gross * employerAhlRate);
+  const shif = percentOf(gross, toScaledRate(shifRate,'SHIF rate'));
+  const pensionable = minBig(gross, toCents(nssfUpper));
+  const nssf = percentOf(pensionable, toScaledRate(nssfRate,'NSSF employee rate'));
+  const employerNssf = percentOf(pensionable, toScaledRate(employerNssfRate,'NSSF employer rate'));
+  const housingLevy = percentOf(gross, toScaledRate(ahlRate,'AHL employee rate'));
+  const employerHousingLevy = percentOf(gross, toScaledRate(employerAhlRate,'AHL employer rate'));
   const allowableCfg = config(rules,'PAYE_ALLOWABLE_DEDUCTIONS');
   const components = allowableCfg.components as Array<{code:string;capMonthly:number|null}> | undefined;
   if (!Array.isArray(components)) throw new Error('PAYE allowable deduction configuration is missing.');
   const nssfCap = components.find(c => c.code === 'REGISTERED_PENSION_AND_NSSF')?.capMonthly;
-  const pensionDeduction = nssfCap === null || nssfCap === undefined ? nssf : Math.min(nssf,Number(nssfCap));
-  const taxableIncome = money(Math.max(0,gross - shif - housingLevy - pensionDeduction));
-  const annualTaxable = taxableIncome * 12;
-  let lower = 0; let annualTax = 0;
+  const pensionDeduction = nssfCap === null || nssfCap === undefined ? nssf : minBig(nssf, toCents(Number(nssfCap)));
+  const taxableIncome = maxBig(0n, gross - shif - housingLevy - pensionDeduction);
+  const annualTaxable = taxableIncome * 12n;
+  // Tax is accumulated unrounded (cents x RATE_SCALE) across bands and rounded once, after dividing by 12 and applying relief.
+  let lower = 0n; let annualTaxScaled = 0n;
   for (const band of bands) {
-    const upper = band.upTo === null ? Number.POSITIVE_INFINITY : band.upTo;
-    const taxableInBand = Math.max(0,Math.min(annualTaxable,upper)-lower);
-    annualTax += taxableInBand * band.rate;
+    const upper = band.upTo === null ? null : toCents(band.upTo);
+    const ceiling = upper === null ? annualTaxable : minBig(annualTaxable, upper);
+    const taxableInBand = maxBig(0n, ceiling - lower);
+    annualTaxScaled += taxableInBand * toScaledRate(band.rate,'PAYE band rate');
+    if (upper === null || annualTaxable <= upper) break;
     lower = upper;
-    if (annualTaxable <= upper) break;
   }
-  const monthlyRelief = Number(payeCfg.monthlyPersonalRelief ?? 0);
-  const paye = money(Math.max(0,annualTax / 12 - monthlyRelief));
-  const nita = money(nitaAmount);
-  const employeeStatutoryDeductions = money(paye + shif + nssf + housingLevy);
-  const employerContributions = money(employerNssf + employerHousingLevy + nita);
-  const netBeforeOtherDeductions = money(gross - employeeStatutoryDeductions);
+  const monthlyReliefCents = toCents(Number(payeCfg.monthlyPersonalRelief ?? 0));
+  const payeScaledNumerator = maxBig(0n, annualTaxScaled - monthlyReliefCents * 12n * RATE_SCALE);
+  const paye = divRoundHalfUp(payeScaledNumerator, 12n * RATE_SCALE);
+  const nita = toCents(nitaAmount);
+  const employeeStatutoryDeductions = paye + shif + nssf + housingLevy;
+  const employerContributions = employerNssf + employerHousingLevy + nita;
+  const netBeforeOtherDeductions = gross - employeeStatutoryDeductions;
   const warnings: string[] = [];
-  if (netBeforeOtherDeductions < 0) warnings.push('NET_PAY_NEGATIVE');
+  if (netBeforeOtherDeductions < 0n) warnings.push('NET_PAY_NEGATIVE');
   if (payeCfg.annualBands && (payeCfg.annualBands as unknown[]).length) warnings.push('PAYE_CALCULATION_ASSUMES_FULL_MONTHLY_RESIDENT_EMPLOYMENT_AND_STANDARD_RELIEF');
   return {
-    gross,taxableIncome,paye,shif,nssf,housingLevy,employeeStatutoryDeductions,employerNssf,employerHousingLevy,nita,employerContributions,netBeforeOtherDeductions,warnings,
+    gross: fromCents(gross), taxableIncome: fromCents(taxableIncome), paye: fromCents(paye), shif: fromCents(shif), nssf: fromCents(nssf),
+    housingLevy: fromCents(housingLevy), employeeStatutoryDeductions: fromCents(employeeStatutoryDeductions), employerNssf: fromCents(employerNssf),
+    employerHousingLevy: fromCents(employerHousingLevy), nita: fromCents(nita), employerContributions: fromCents(employerContributions),
+    netBeforeOtherDeductions: fromCents(netBeforeOtherDeductions), warnings,
     lines:[
-      {code:'PAYE',amount:paye,side:'employee'},{code:'SHIF',amount:shif,side:'employee'},{code:'NSSF',amount:nssf,side:'employee'},
-      {code:'AHL',amount:housingLevy,side:'employee'},{code:'NSSF_EMPLOYER',amount:employerNssf,side:'employer'},
-      {code:'AHL_EMPLOYER',amount:employerHousingLevy,side:'employer'},{code:'NITA',amount:nita,side:'employer'},
+      {code:'PAYE',amount:fromCents(paye),side:'employee'},{code:'SHIF',amount:fromCents(shif),side:'employee'},{code:'NSSF',amount:fromCents(nssf),side:'employee'},
+      {code:'AHL',amount:fromCents(housingLevy),side:'employee'},{code:'NSSF_EMPLOYER',amount:fromCents(employerNssf),side:'employer'},
+      {code:'AHL_EMPLOYER',amount:fromCents(employerHousingLevy),side:'employer'},{code:'NITA',amount:fromCents(nita),side:'employer'},
     ],
   };
 }

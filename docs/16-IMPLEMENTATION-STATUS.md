@@ -65,3 +65,11 @@ Worker documents are stored in private object storage with tenant-scoped metadat
 - Approved attendance records can receive tenant-scoped correction requests with a reason and proposed clock-in, clock-out and/or minutes-worked values.
 - A single pending correction is allowed per attendance record. The requester cannot approve their own correction; approval/rejection requires a review reason and is audited.
 - The correction request table enforces tenant RLS and a composite tenant/attendance foreign key. This does not yet replace the remaining shift, leave, overtime and timesheet workflows.
+
+## Offline sync hardening and payroll rounding (in review)
+- Payroll statutory arithmetic uses exact integer cents and scaled rates with a single half-up rounding per figure. The previous float rounding was off by KES 0.01 on roughly 1 in 10,000 salaries for SHIF and 1 in 1,000 for the Affordable Housing Levy (for example KES 341,070.00 SHIF is 9,379.43, not 9,379.42).
+- Sync server: a reused command ID with a different payload now records a conflict without overwriting the original command's outcome, and resolving a conflict no longer rewrites that original command. A command ID can only be replayed by the user who first submitted it.
+- Browser outbox: attendance capture now always goes through the on-device outbox (the direct attendance endpoint is not idempotent, so a lost response could duplicate records). Commands orphaned in `syncing` by a closed tab are recovered; failed commands retry with exponential backoff (30s to 15 min); runs are single-flight per tenant; a network outage stops the run without consuming attempts on queued commands; sync runs automatically on reconnect, tab focus and a one-minute interval. The workspace no longer blanks tables when a refresh fails offline.
+- A sync review dialog lists conflicts, rejections and retrying commands and lets a user discard or re-queue them (re-queueing issues a new command ID).
+- Still open: offline reference-data bootstrap (the capture form needs workers/sites loaded online first), offline workflows beyond attendance, duplicate-punch review, end-to-end offline browser tests, ESLint configuration (lint scripts are placeholders), and installing with a frozen lockfile inside the API and web Dockerfiles.
+

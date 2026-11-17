@@ -59,10 +59,14 @@ export class SyncService {
 
       const payloadHash = createHash('sha256').update(JSON.stringify(command.payload)).digest('hex');
       const existing = await m.query(
-        'SELECT payload_hash,state,result,payload FROM sync_commands WHERE tenant_id=$1 AND command_id=$2 FOR UPDATE',
+        'SELECT payload_hash,state,result,payload,actor_user_id FROM sync_commands WHERE tenant_id=$1 AND command_id=$2 FOR UPDATE',
         [tenantId, command.commandId],
       );
       if (existing.length) {
+        // A command ID belongs to the user who first submitted it; never disclose another user's stored result.
+        if (existing[0].actor_user_id && existing[0].actor_user_id !== actorId) {
+          throw new ForbiddenException('This command ID was already used by another user.');
+        }
         if (existing[0].payload_hash === payloadHash) {
           return { commandId: command.commandId, status: existing[0].state, result: existing[0].result, idempotentReplay: true };
         }
@@ -74,7 +78,7 @@ export class SyncService {
           "INSERT INTO sync_conflicts(tenant_id,command_id,conflict_type,client_payload,server_payload) VALUES($1,$2,'COMMAND_ID_REUSED_WITH_DIFFERENT_PAYLOAD',$3::jsonb,$4::jsonb) RETURNING id",
           [tenantId, command.commandId, JSON.stringify(command.payload), JSON.stringify(existing[0].payload)],
         );
-        await m.query("UPDATE sync_commands SET state='conflict' WHERE tenant_id=$1 AND command_id=$2", [tenantId, command.commandId]);
+        // The original command keeps its recorded outcome so a legitimate replay of it still returns that outcome.
         return { commandId: command.commandId, status: 'conflict', conflictId: conflict[0].id, message: 'This command ID was already used with a different payload.' };
       }
 
@@ -159,10 +163,6 @@ export class SyncService {
         [tenantId, id, resolution.trim(), actorId],
       );
       if (!rows.length) throw new NotFoundException('Open sync conflict not found.');
-      await m.query(
-        "UPDATE sync_commands SET state='rejected',result=jsonb_set(result,'{resolution}',to_jsonb($3::text),true),processed_at=now() WHERE tenant_id=$1 AND command_id=$2",
-        [tenantId, rows[0].commandId, resolution.trim()],
-      );
       await m.query(
         "INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'sync.conflict.discarded','sync_conflict',$3,$4::jsonb)",
         [tenantId, actorId, id, JSON.stringify({ resolution: resolution.trim(), commandId: rows[0].commandId })],

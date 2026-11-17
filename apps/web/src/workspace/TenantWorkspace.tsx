@@ -24,7 +24,10 @@ import AssignmentTurnedInRounded from '@mui/icons-material/AssignmentTurnedInRou
 import AccountBalanceWalletRounded from '@mui/icons-material/AccountBalanceWalletRounded';
 import TenantAdministration from './TenantAdministration';
 import CloudSyncRounded from '@mui/icons-material/CloudSyncRounded';
-import { synchronizeOfflineAttendance } from '../offline/offline-api';
+import { queueAttendanceCapture, synchronizeOfflineAttendance } from '../offline/offline-api';
+import { countCommands } from '../offline/offline-db';
+import { useAutoSync } from '../offline/use-auto-sync';
+import SyncReviewDialog from './SyncReviewDialog';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
@@ -62,6 +65,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [searchQuery, setSearchQuery] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  const [queueCounts, setQueueCounts] = useState({ pending: 0, syncing: 0, conflict: 0, failed: 0, rejected: 0 });
+  const [reviewOpen, setReviewOpen] = useState(false);
   const isMobile = useMediaQuery('(max-width:1199px)');
   const [contracts, setContracts] = useState<RowData[]>([]);
   const [workerDocuments, setWorkerDocuments] = useState<RowData[]>([]);
@@ -117,9 +122,10 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     };
     const entries = await Promise.all(Object.entries(endpoints).map(async ([key, path]) => {
       try { return [key, asRows(await request<unknown>(path))] as const; }
-      catch { return [key, [] as RowData[]] as const; }
+      catch { return [key, null] as const; }
     }));
-    setData(Object.fromEntries(entries));
+    // A failed endpoint (offline, 5xx) keeps its last known rows rather than showing an empty list as if it were real.
+    setData(current => Object.fromEntries(entries.map(([key, rows]) => [key, rows ?? current[key] ?? []])));
     setLoading(false);
   }, [request, tenantId]);
 
@@ -171,16 +177,32 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     }
   }
 
-  async function syncOfflineQueue() {
-    setSyncing(true); setSyncMessage(''); setError('');
+  const refreshQueueCounts = useCallback(async () => {
+    if (!tenantId) return;
+    try { setQueueCounts(await countCommands(tenantId)); } catch { /* offline storage unavailable */ }
+  }, [tenantId]);
+
+  /** manual=true surfaces results and bypasses retry backoff; automatic runs stay quiet unless something changed. */
+  const syncOfflineQueue = useCallback(async (manual = true) => {
+    if (manual) { setSyncing(true); setSyncMessage(''); setError(''); }
     try {
-      const summary = await synchronizeOfflineAttendance(tenantId, request);
-      setSyncMessage(`Offline sync complete: ${summary.synced} sent, ${summary.conflicts} conflicts, ${summary.rejected} rejected, ${summary.remaining} remaining.`);
-      if (summary.conflicts || summary.rejected || summary.failed) setError('Some offline changes need attention. Review the sync status before relying on these records.');
-      await refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Offline synchronization failed.'); }
-    finally { setSyncing(false); }
-  }
+      const summary = await synchronizeOfflineAttendance(tenantId, request, { ignoreBackoff: manual });
+      if (manual || summary.synced || summary.conflicts || summary.rejected) {
+        setSyncMessage(`Offline sync complete: ${summary.synced} sent, ${summary.conflicts} conflicts, ${summary.rejected} rejected, ${summary.remaining} remaining.`);
+      }
+      if (summary.conflicts || summary.rejected) setError('Some offline changes need attention. Open sync review to resolve them before relying on these records.');
+      if (summary.synced) await refresh();
+    } catch (cause) {
+      if (manual) setError(cause instanceof Error ? cause.message : 'Offline synchronization failed.');
+    } finally {
+      if (manual) setSyncing(false);
+      await refreshQueueCounts();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId, request, refreshQueueCounts]);
+
+  useAutoSync({ enabled: Boolean(tenantId), run: () => syncOfflineQueue(false) });
+  useEffect(() => { void refreshQueueCounts(); }, [refreshQueueCounts]);
 
   const counts = useMemo(() => ({
     workers: (data.workers ?? []).filter(row => row.status === 'active').length,
@@ -239,11 +261,18 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
         }) });
         setNotice('Site created.');
       } else if (dialog === 'attendance') {
-        await request('tenant/attendance', { method: 'POST', body: JSON.stringify({
+        const { siteId, workDate } = forms;
+        if (!siteId) throw new Error('Select a site before capturing attendance.');
+        if (!workDate) throw new Error('Enter the work date.');
+        await queueAttendanceCapture(tenantId, {
           workerId: selectedWorker, projectId: selectedProject,
-          siteId: forms.siteId, workDate: forms.workDate, minutesWorked: Number(forms.minutesWorked), source: 'web',
-        }) });
-        setNotice('Attendance record captured as a draft. Submit it for approval.');
+          siteId, workDate, minutesWorked: Number(forms.minutesWorked),
+        });
+        await refreshQueueCounts();
+        setNotice(typeof navigator !== 'undefined' && navigator.onLine === false
+          ? 'Attendance saved on this device. It will upload automatically when you are back online.'
+          : 'Attendance saved. Uploading now; it will appear as a draft to submit for approval.');
+        void syncOfflineQueue(false);
       } else if (dialog === 'period') {
         await request('payroll/periods', { method: 'POST', body: JSON.stringify({
           code: forms.periodCode, name: forms.periodName, startDate: forms.startDate, endDate: forms.endDate,
@@ -384,7 +413,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           <Typography fontWeight={850} sx={{ fontSize: '.9rem' }}>{membership?.displayName ?? 'Company workspace'}</Typography>
           <Typography variant="caption" color="text.secondary">{membership?.slug ?? 'JengaFlow'} · {membership?.role ?? 'Member'}</Typography>
         </Box>
-        <Button size="small" variant="outlined" startIcon={<CloudSyncRounded />} onClick={() => void syncOfflineQueue()} disabled={syncing || !tenantId} sx={{ whiteSpace: 'nowrap' }}>{syncing ? 'Syncing…' : 'Sync offline'}</Button>
+        <Button size="small" variant="outlined" startIcon={<CloudSyncRounded />} onClick={() => void syncOfflineQueue(true)} disabled={syncing || !tenantId} sx={{ whiteSpace: 'nowrap' }}>{syncing ? 'Syncing…' : queueCounts.pending + queueCounts.failed + queueCounts.syncing ? `Sync (${queueCounts.pending + queueCounts.failed + queueCounts.syncing})` : 'Sync offline'}</Button>
+        {queueCounts.conflict + queueCounts.rejected + queueCounts.failed > 0 && <Button size="small" color="warning" variant="contained" onClick={() => setReviewOpen(true)} sx={{ whiteSpace: 'nowrap' }}>Review ({queueCounts.conflict + queueCounts.rejected + queueCounts.failed})</Button>}
         <TextField select size="small" value={tenantId} onChange={event => { setTenantId(event.target.value); setSection('overview'); }}
           sx={{ minWidth: { xs: 128, sm: 190 }, maxWidth: 220, '& .MuiOutlinedInput-root': { bgcolor: '#F7F8F6', borderRadius: 2 } }}
           aria-label="Company workspace">
@@ -591,6 +621,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       </Box>
     </Box>
 
+    <SyncReviewDialog open={reviewOpen} tenantId={tenantId} onClose={() => setReviewOpen(false)} onChanged={() => { void refreshQueueCounts(); void syncOfflineQueue(false); }} />
     <Dialog open={Boolean(dialog)} onClose={() => setDialog('')} fullWidth maxWidth="sm">
       <Box component="form" onSubmit={submit}>
         <DialogTitle>{dialog === 'worker' ? 'Add worker' : dialog === 'contract' ? 'Add worker contract' : dialog === 'endContract' ? 'End worker contract' : dialog === 'payGrade' ? 'Create pay grade' : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : 'Create payroll period'}</DialogTitle>
