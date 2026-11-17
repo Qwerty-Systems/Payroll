@@ -563,7 +563,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                   <Box><Typography fontWeight={850}>Worker documents</Typography><Typography variant="caption" color="text.secondary">Private tenant-scoped files. Download links expire after three minutes.</Typography></Box>
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                     <TextField select size="small" label="Document type" value={documentType} onChange={e => setDocumentType(e.target.value)} sx={{ minWidth: 170 }}>
-                      {['identity','contract','tax','bank','qualification','medical_clearance','other'].map(x => <MenuItem key={x} value={x}>{x.replaceAll('_',' ')}</MenuItem>)}
+                      {['identity','contract','tax','bank','qualification','other'].map(x => <MenuItem key={x} value={x}>{x.replaceAll('_',' ')}</MenuItem>)}
                     </TextField>
                     <Button component="label" variant="outlined" color="inherit" sx={{ whiteSpace: 'nowrap' }}>Choose file
                       <input hidden type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={e => setDocumentFile(e.target.files?.[0] ?? null)} />
