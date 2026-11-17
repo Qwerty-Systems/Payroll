@@ -144,11 +144,11 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
         {tab==='runs'&&<Stack spacing={2}>
           <Box><Typography fontWeight={800}>Payroll runs</Typography><Typography variant="caption" color="text.secondary">Create a run for an open period. Rejected or draft runs can be recalculated; submitted and finalized runs are protected.</Typography></Box>
           <Grid container spacing={1.5} alignItems="center">
-            <Grid item xs={12} md={4}><TextField select fullWidth size="small" label="Payroll period" value={selectedPeriod} onChange={e=>setSelectedPeriod(e.target.value)}>
+            <Grid size={{xs:12,md:4}}><TextField select fullWidth size="small" label="Payroll period" value={selectedPeriod} onChange={e=>setSelectedPeriod(e.target.value)}>
               {periods.map(p=><MenuItem key={p.id} value={p.id}>{p.code} · {p.name} ({p.status})</MenuItem>)}
             </TextField></Grid>
-            <Grid item xs={12} md={5}><TextField fullWidth size="small" label="Run description (optional)" value={runDescription} onChange={e=>setRunDescription(e.target.value)} /></Grid>
-            <Grid item xs={12} md={3}><Button fullWidth variant="contained" disabled={busy||!selectedPeriod||selectedPeriodRow?.status!=='open'} onClick={()=>void createRun()}>Create payroll run</Button></Grid>
+            <Grid size={{xs:12,md:5}}><TextField fullWidth size="small" label="Run description (optional)" value={runDescription} onChange={e=>setRunDescription(e.target.value)} /></Grid>
+            <Grid size={{xs:12,md:3}}><Button fullWidth variant="contained" disabled={busy||!selectedPeriod||selectedPeriodRow?.status!=='open'} onClick={()=>void createRun()}>Create payroll run</Button></Grid>
           </Grid>
           <TableContainer><Table size="small"><TableHead><TableRow>{['Period','Run #','Description','Status','Employees','Net pay','Created','Actions'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
             <TableBody>{runs.map(r=><TableRow key={r.id} hover selected={selectedRun===r.id}>
@@ -167,7 +167,7 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
               <Button variant="outlined" disabled={busy} onClick={()=>void saveRunDescription()}>Save details</Button>
             </Stack>}
             <Grid container spacing={1} sx={{mt:1,mb:2}}>
-              {[[ 'Employees',totals.workerCount],['Gross earnings',totals.grossEarnings],['Employee deductions',totals.employeeDeductions],['Employer contributions',totals.employerContributions],['Net pay',totals.netPay],['Employer cost',totals.employerCost]].map(([k,v])=><Grid item xs={6} md={2} key={String(k)}><Paper variant="outlined" sx={{p:1.2}}><Typography variant="caption" color="text.secondary">{k}</Typography><Typography fontWeight={800}>{v==null?'—':k==='Employees'?String(v):money(v)}</Typography></Paper></Grid>)}
+              {[[ 'Employees',totals.workerCount],['Gross earnings',totals.grossEarnings],['Employee deductions',totals.employeeDeductions],['Employer contributions',totals.employerContributions],['Net pay',totals.netPay],['Employer cost',totals.employerCost]].map(([k,v])=><Grid size={{xs:6,md:2}} key={String(k)}><Paper variant="outlined" sx={{p:1.2}}><Typography variant="caption" color="text.secondary">{k}</Typography><Typography fontWeight={800}>{v==null?'—':k==='Employees'?String(v):money(v)}</Typography></Paper></Grid>)}
             </Grid>
             {warnings.length>0&&<Alert severity="warning" sx={{mb:2}}><Typography fontWeight={800}>Review warnings</Typography>{warnings.map((w,i)=><Typography key={i} variant="body2">{w}</Typography>)}</Alert>}
             <TableContainer><Table size="small"><TableHead><TableRow>{['Employee','Earnings','Employee deductions','Employer contributions','Net pay'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
