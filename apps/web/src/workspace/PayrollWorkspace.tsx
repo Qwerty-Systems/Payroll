@@ -20,6 +20,10 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
   const [selectedRun,setSelectedRun]=useState('');
   const [runDetail,setRunDetail]=useState<Row|null>(null);
   const [payslips,setPayslips]=useState<Row[]>([]);
+  const [paymentBatches,setPaymentBatches]=useState<Row[]>([]);
+  const [paymentBatch,setPaymentBatch]=useState<Row|null>(null);
+  const [paymentMethod,setPaymentMethod]=useState<'manual'|'bank_transfer'|'mpesa'>('manual');
+  const [providerReferences,setProviderReferences]=useState<Record<string,string>>({});
   const [periodDialog,setPeriodDialog]=useState(false);
   const [periodEditing,setPeriodEditing]=useState('');
   const [periodForm,setPeriodForm]=useState({code:'',name:'',startDate:today().slice(0,8)+'01',endDate:today(),paymentDate:''});
@@ -51,7 +55,7 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
 
   async function openRun(id:string) {
     setSelectedRun(id);setTab('runs');setPayslips([]);
-    try {const detail=await request<Row>('payroll/runs/'+id);setRunDetail(detail);setRunDescription(String(detail.description??''));}
+    try {const detail=await request<Row>('payroll/runs/'+id);setRunDetail(detail);setRunDescription(String(detail.description??''));setPaymentBatch(null);if(detail.status==='finalized'){setPaymentBatches(asRows(await request<unknown>('payroll/runs/'+id+'/payment-batches')));}else{setPaymentBatches([]);}}
     catch(e){setError(e instanceof Error?e.message:'Unable to load payroll run.');}
   }
 
@@ -96,6 +100,30 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
       const result=await request<unknown>('payroll/runs/'+runId+'/payslips');
       setPayslips(asRows(result));setSelectedRun(runId);setTab('payslips');
     },'Payslips loaded.');
+  }
+
+
+  async function openPaymentBatch(id:string) {
+    try {
+      const detail=await request<Row>('payroll/payment-batches/'+id);
+      setPaymentBatch(detail);
+      setProviderReferences({});
+    } catch(e) { setError(e instanceof Error?e.message:'Unable to load payment batch.'); }
+  }
+
+  async function createPaymentBatch() {
+    if(!selectedRun)return;
+    await perform(async()=>{
+      const result=await request<Row>('payroll/runs/'+selectedRun+'/payment-batches',body('POST',{paymentMethod}));
+      setPaymentBatches(asRows(await request<unknown>('payroll/runs/'+selectedRun+'/payment-batches')));
+      if(result.id) await openPaymentBatch(result.id);
+    },'Payment batch created. It must be independently approved before payment confirmations.');
+  }
+
+  async function refreshPaymentBatch(id:string) {
+    const detail=await request<Row>('payroll/payment-batches/'+id);
+    setPaymentBatch(detail);
+    setPaymentBatches(asRows(await request<unknown>('payroll/runs/'+selectedRun+'/payment-batches')));
   }
 
   const selectedPeriodRow=periods.find(p=>p.id===selectedPeriod);
@@ -179,8 +207,38 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
               {runStatus==='calculated'&&<Button variant="contained" disabled={busy} onClick={()=>void perform(async()=>{await request('payroll/runs/'+selectedRun+'/submit',body('POST',{}));setRunDetail(await request<Row>('payroll/runs/'+selectedRun));},'Payroll submitted for independent approval.')}>Submit for approval</Button>}
               {runStatus==='submitted'&&<><Button variant="contained" color="success" disabled={busy} onClick={()=>void perform(async()=>{await request('payroll/runs/'+selectedRun+'/approve',body('POST',{}));setRunDetail(await request<Row>('payroll/runs/'+selectedRun));},'Payroll approved.')}>Approve</Button><Button variant="outlined" color="error" disabled={busy} onClick={()=>setShowReject(true)}>Reject with reason</Button></>}
               {runStatus==='approved'&&<Button variant="contained" color="success" disabled={busy} onClick={()=>void perform(async()=>{await request('payroll/runs/'+selectedRun+'/finalize',body('POST',{}));setRunDetail(await request<Row>('payroll/runs/'+selectedRun));},'Payroll finalized and payslips issued.')}>Finalize payroll</Button>}
-              {runStatus==='finalized'&&<><Button variant="outlined" disabled={busy} onClick={()=>void loadPayslips(selectedRun)}>View issued payslips</Button><Button variant="outlined" disabled={busy} onClick={()=>void perform(()=>request('payroll/runs/'+selectedRun+'/payment-batches',body('POST',{paymentMethod:'manual'})),'Manual payment batch created. Review and approve it in payment operations.')}>Create manual payment batch</Button></>}
+              {runStatus==='finalized'&&<Button variant="outlined" disabled={busy} onClick={()=>void loadPayslips(selectedRun)}>View issued payslips</Button>}
             </Stack>
+
+            {runStatus==='finalized'&&<Box sx={{mt:3}}>
+              <Divider sx={{mb:2}}/>
+              <Typography fontWeight={850}>Payment batches & reconciliation</Typography>
+              <Typography variant="caption" color="text.secondary">Create a payment batch from finalized net pay, approve it independently, then record provider references as each employee payment is confirmed. No funds are transferred by this screen.</Typography>
+              <Stack direction={{xs:'column',sm:'row'}} spacing={1} sx={{mt:1.5,mb:2}}>
+                <TextField select size="small" label="Payment method" value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value as 'manual'|'bank_transfer'|'mpesa')} sx={{minWidth:190}}>
+                  <MenuItem value="manual">Manual confirmation</MenuItem><MenuItem value="bank_transfer">Bank transfer</MenuItem><MenuItem value="mpesa">M-Pesa</MenuItem>
+                </TextField>
+                <Button variant="contained" disabled={busy} onClick={()=>void createPaymentBatch()}>Create payment batch</Button>
+              </Stack>
+              <TableContainer><Table size="small"><TableHead><TableRow>{['Payment batch','Method','Amount','Status','Paid','Actions'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
+                <TableBody>{paymentBatches.map(b=><TableRow key={b.id}><TableCell>{b.id}</TableCell><TableCell>{b.paymentMethod}</TableCell><TableCell>{money(b.totalAmount)}</TableCell><TableCell><Chip size="small" label={b.status}/></TableCell><TableCell>{b.paidCount??0}/{b.itemCount??0}</TableCell><TableCell><Stack direction="row" spacing={.5}><Button size="small" onClick={()=>void openPaymentBatch(b.id)}>Open</Button>{['draft','approved'].includes(String(b.status))&&<Button size="small" color="error" disabled={busy} onClick={()=>void perform(()=>request('payroll/payment-batches/'+b.id+'/cancel',body('POST',{})),'Payment batch cancelled.')}>Cancel</Button>}</Stack></TableCell></TableRow>)}
+                  {!paymentBatches.length&&<TableRow><TableCell colSpan={6} align="center">No payment batches created for this payroll run.</TableCell></TableRow>}</TableBody>
+              </Table></TableContainer>
+              {paymentBatch&&<Paper variant="outlined" sx={{p:2,mt:2,borderRadius:2}}>
+                <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" spacing={1}>
+                  <Box><Typography fontWeight={800}>Payment batch details</Typography><Typography variant="caption" color="text.secondary">{paymentBatch.id} · {paymentBatch.paymentMethod} · {money(paymentBatch.totalAmount)}</Typography></Box>
+                  <Chip size="small" label={paymentBatch.status}/>
+                </Stack>
+                {paymentBatch.status==='draft'&&<Button sx={{mt:1}} variant="contained" disabled={busy} onClick={()=>void perform(async()=>{await request('payroll/payment-batches/'+paymentBatch.id+'/approve',body('POST',{}));await refreshPaymentBatch(paymentBatch.id);},'Payment batch approved.')}>Approve batch</Button>}
+                <TableContainer sx={{mt:1}}><Table size="small"><TableHead><TableRow>{['Employee','Amount','Status','Provider reference','Confirm'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
+                  <TableBody>{asRows(paymentBatch.items).map(item=><TableRow key={item.id}><TableCell>{item.workerName} · {item.workerNumber}</TableCell><TableCell>{money(item.amount)}</TableCell><TableCell><Chip size="small" label={item.status}/></TableCell>
+                    <TableCell>{item.providerReference??(item.status==='paid'?'—':<TextField size="small" value={providerReferences[item.id]??''} onChange={e=>setProviderReferences(v=>({...v,[item.id]:e.target.value}))} placeholder="Bank/M-Pesa reference"/>)}</TableCell>
+                    <TableCell>{item.status!=='paid'&&['approved','partially_paid'].includes(String(paymentBatch.status))&&<Button size="small" disabled={busy||(providerReferences[item.id]??'').trim().length<3} onClick={()=>void perform(async()=>{await request('payroll/payment-batches/'+paymentBatch.id+'/items/'+item.id+'/confirm',body('POST',{providerReference:providerReferences[item.id].trim()}));await refreshPaymentBatch(paymentBatch.id);},'Payment confirmation recorded.')}>Confirm paid</Button>}</TableCell>
+                  </TableRow>)}
+                    {!asRows(paymentBatch.items).length&&<TableRow><TableCell colSpan={5}>No payment items found.</TableCell></TableRow>}
+                  </TableBody></Table></TableContainer>
+              </Paper>}
+            </Box>}
             {runDetail.rejectionReason&&<Alert severity="error" sx={{mt:2}}>Returned for correction: {runDetail.rejectionReason}</Alert>}
             {runStatus==='finalized'&&<Alert severity="info" sx={{mt:2}}>Finalized payroll is read-only. Corrections must be handled through an auditable adjustment or reversal workflow; this screen will not overwrite issued payslips.</Alert>}
           </Paper>}
