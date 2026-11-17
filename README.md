@@ -63,6 +63,7 @@ See [docs/README.md](docs/README.md) for the complete requirements, architecture
 3. Run `pnpm install`.
 4. Configure `DATABASE_URL` and `REDIS_URL` for your existing managed services (the main Compose file does not create databases). For an isolated local site install, use `docker-compose.local.yml`.
 5. Run `pnpm --filter @jengaflow/api migration:run`.
+   Quality gates: `pnpm lint`, `pnpm typecheck`, `pnpm test`.
 6. Run `pnpm --filter @jengaflow/api dev` and `pnpm --filter @jengaflow/web dev` in separate terminals.
 
 API endpoints:

@@ -51,6 +51,8 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
       - name: Type check
         run: pnpm typecheck
       - name: Compile API for migrations

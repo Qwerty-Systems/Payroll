@@ -26,6 +26,7 @@ import TenantAdministration from './TenantAdministration';
 import CloudSyncRounded from '@mui/icons-material/CloudSyncRounded';
 import { queueAttendanceCapture, synchronizeOfflineAttendance } from '../offline/offline-api';
 import { countCommands } from '../offline/offline-db';
+import { cacheReferenceData, loadCachedReferenceData, REFERENCE_ENTITIES, type ReferenceRows } from '../offline/reference-data';
 import { useAutoSync } from '../offline/use-auto-sync';
 import SyncReviewDialog from './SyncReviewDialog';
 
@@ -126,8 +127,25 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     }));
     // A failed endpoint (offline, 5xx) keeps its last known rows rather than showing an empty list as if it were real.
     setData(current => Object.fromEntries(entries.map(([key, rows]) => [key, rows ?? current[key] ?? []])));
+    // Bootstrap the offline cache so attendance capture keeps working without a connection.
+    const fetched = Object.fromEntries(entries.filter(([key, rows]) => rows && (REFERENCE_ENTITIES as readonly string[]).includes(key))) as Partial<ReferenceRows>;
+    try { await cacheReferenceData(tenantId, fetched); } catch { /* offline storage unavailable: online use is unaffected */ }
     setLoading(false);
   }, [request, tenantId]);
+
+  // Seed lists from the on-device cache first so the capture form is usable immediately, even with no connection.
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    void loadCachedReferenceData(tenantId).then(({ rows }) => {
+      if (cancelled) return;
+      setData(current => ({
+        ...current,
+        ...Object.fromEntries(REFERENCE_ENTITIES.filter(key => rows[key].length && !(current[key]?.length)).map(key => [key, rows[key]])),
+      }));
+    }).catch(() => { /* cache unavailable */ });
+    return () => { cancelled = true; };
+  }, [tenantId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 

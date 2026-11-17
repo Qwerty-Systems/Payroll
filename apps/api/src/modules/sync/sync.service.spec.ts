@@ -144,4 +144,46 @@ describe('SyncService', () => {
       .rejects.toBeInstanceOf(NotFoundException);
     expect(query).toHaveBeenCalledTimes(1);
   });
+
+  describe('duplicate attendance review', () => {
+    const device = [{ id: deviceId }];
+    function queryFor(duplicateRows: unknown[]) {
+      return jest.fn(async (sql: string) => {
+        if (sql.includes('FROM tenant_devices')) return device;
+        if (sql.includes('FROM sync_commands')) return [];
+        if (sql.includes('FROM workers w JOIN sites')) return [{ id: attendancePayload.workerId }];
+        if (sql.includes('FROM attendance_records WHERE')) return duplicateRows;
+        if (sql.includes('INSERT INTO sync_conflicts')) return [{ id: 'conflict-1' }];
+        if (sql.includes('INSERT INTO attendance_records')) return [{ id: 'attendance-new' }];
+        return [];
+      });
+    }
+    const run = (query: jest.Mock) => createService(query).service.processBatch(tenantId, userId, {
+      commands: [{ commandId, deviceId, entityType: 'attendance', operation: 'create', payload: attendancePayload }],
+    } as never);
+
+    it('records a conflict instead of inserting when an overlapping record exists', async () => {
+      const query = queryFor([{ id: 'attendance-existing', siteId: attendancePayload.siteId }]);
+      const { outcomes } = await run(query);
+      expect(outcomes[0]).toMatchObject({ status: 'conflict', conflictId: 'conflict-1', result: { existingAttendanceId: 'attendance-existing' } });
+      const sqls = query.mock.calls.map(c => c[0] as string);
+      expect(sqls.some(sql => sql.includes('INSERT INTO attendance_records'))).toBe(false);
+      expect(sqls.some(sql => sql.includes("'DUPLICATE_ATTENDANCE'"))).toBe(true);
+      expect(sqls.some(sql => sql.includes("'conflict'") && sql.includes('INSERT INTO sync_commands'))).toBe(true);
+    });
+
+    it('accepts the record when there is no overlapping attendance', async () => {
+      const query = queryFor([]);
+      const { outcomes } = await run(query);
+      expect(outcomes[0]).toMatchObject({ status: 'accepted' });
+      expect(query.mock.calls.some(c => (c[0] as string).includes('INSERT INTO attendance_records'))).toBe(true);
+    });
+
+    it('never treats rejected attendance as a duplicate', async () => {
+      const query = queryFor([]);
+      await run(query);
+      const dupSql = query.mock.calls.map(c => c[0] as string).find(sql => sql.includes('FROM attendance_records WHERE'));
+      expect(dupSql).toContain("status<>'rejected'");
+    });
+  });
 });

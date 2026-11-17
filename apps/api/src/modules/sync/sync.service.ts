@@ -106,6 +106,27 @@ export class SyncService {
         return { commandId: command.commandId, status: 'rejected', result };
       }
 
+      // Duplicate-punch review: a retried capture on another device (new command ID, same shift) must not silently
+      // double a worker's pay. Overlapping clock windows conflict on any site (a worker cannot be in two places at
+      // once); records without both clock times conflict only for the same site and day, so a split day still works.
+      const duplicates = await m.query(
+        "SELECT id,site_id AS \"siteId\",clock_in AS \"clockIn\",clock_out AS \"clockOut\",minutes_worked AS \"minutesWorked\",status FROM attendance_records WHERE tenant_id=$1 AND worker_id=$2 AND work_date=$3 AND status<>'rejected' AND ((site_id=$6 AND (clock_in IS NULL OR clock_out IS NULL OR $4::timestamptz IS NULL OR $5::timestamptz IS NULL)) OR (clock_in IS NOT NULL AND clock_out IS NOT NULL AND $4::timestamptz IS NOT NULL AND $5::timestamptz IS NOT NULL AND clock_in<$5::timestamptz AND clock_out>$4::timestamptz)) ORDER BY created_at LIMIT 1",
+        [tenantId, attendance.workerId, attendance.workDate, attendance.clockIn ?? null, attendance.clockOut ?? null, attendance.siteId],
+      );
+      if (duplicates.length) {
+        const message = 'An attendance record already exists for this worker that overlaps this entry. Review it before keeping both.';
+        const result = { message, existingAttendanceId: duplicates[0].id };
+        await m.query(
+          "INSERT INTO sync_commands(tenant_id,command_id,device_id,actor_user_id,entity_type,operation,payload_hash,payload,state,result,processed_at) VALUES($1,$2,$3,$4,'attendance','create',$5,$6::jsonb,'conflict',$7::jsonb,now())",
+          [tenantId, command.commandId, command.deviceId, actorId, payloadHash, JSON.stringify(command.payload), JSON.stringify(result)],
+        );
+        const conflict = await m.query(
+          "INSERT INTO sync_conflicts(tenant_id,command_id,conflict_type,client_payload,server_payload) VALUES($1,$2,'DUPLICATE_ATTENDANCE',$3::jsonb,$4::jsonb) RETURNING id",
+          [tenantId, command.commandId, JSON.stringify(command.payload), JSON.stringify(duplicates[0])],
+        );
+        return { commandId: command.commandId, status: 'conflict', conflictId: conflict[0].id, message, result };
+      }
+
       const records = await m.query(
         "INSERT INTO attendance_records(tenant_id,worker_id,project_id,site_id,work_date,clock_in,clock_out,minutes_worked,source,client_command_id,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'offline_sync',$9,$10) RETURNING id,worker_id AS \"workerId\",project_id AS \"projectId\",site_id AS \"siteId\",work_date AS \"workDate\",clock_in AS \"clockIn\",clock_out AS \"clockOut\",minutes_worked AS \"minutesWorked\",status,created_at AS \"createdAt\"",
         [tenantId, attendance.workerId, attendance.projectId, attendance.siteId, attendance.workDate, attendance.clockIn ?? null, attendance.clockOut ?? null, attendance.minutesWorked ?? null, command.commandId, actorId],
