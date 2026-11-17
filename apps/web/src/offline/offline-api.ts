@@ -1,4 +1,4 @@
-import { getOfflineMetadata, setOfflineMetadata, type SyncCommand } from './offline-db';
+import { enqueueOfflineCommand, getOfflineMetadata, setOfflineMetadata, type SyncCommand } from './offline-db';
 import { synchronizeTenantOutbox, type SyncSummary } from './offline-sync';
 
 type ApiRequest = <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -65,4 +65,22 @@ export async function synchronizeOfflineAttendance(
     }
     return { status: 'synced' };
   });
+}
+
+export async function queueOfflineAttendance(tenantId:string,payload:Record<string,unknown>):Promise<SyncCommand>{
+  if(!tenantId)throw new Error('Select a company workspace before queuing attendance.');
+  return enqueueOfflineCommand({tenantId,entity:'attendance',operation:'create',recordId:globalThis.crypto.randomUUID(),payload});
+}
+
+export async function downloadOfflineReferenceData(tenantId:string,request:ApiRequest){
+  if(!tenantId)throw new Error('Select a company workspace before downloading reference data.');
+  if(typeof navigator!=='undefined'&&!navigator.onLine)throw new Error('Connect to the internet before downloading the latest reference data.');
+  const snapshot=await request<Record<string,unknown>>('tenant/sync/reference-data');
+  const cached={...snapshot,downloadedAt:new Date().toISOString()};
+  await setOfflineMetadata(`reference-data:${tenantId}`,cached);
+  return cached;
+}
+
+export async function getCachedOfflineReferenceData<T=Record<string,unknown>>(tenantId:string):Promise<T|undefined>{
+  return getOfflineMetadata<T>(`reference-data:${tenantId}`);
 }
