@@ -13,6 +13,7 @@ import BusinessRounded from '@mui/icons-material/BusinessRounded';
 import EventAvailableRounded from '@mui/icons-material/EventAvailableRounded';
 import PaymentsRounded from '@mui/icons-material/PaymentsRounded';
 import SettingsRounded from '@mui/icons-material/SettingsRounded';
+import TenantAdministration from './TenantAdministration';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
@@ -88,6 +89,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       branches: 'tenant/organization/branches',
       departments: 'tenant/organization/departments',
       costCentres: 'tenant/organization/cost-centres',
+      assignments: 'tenant/organization/worker-assignments',
       members: 'tenant/users',
     };
     const entries = await Promise.all(Object.entries(endpoints).map(async ([key, path]) => {
@@ -261,7 +263,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           </Stack>
         </Box>
         <Divider />
-        {section === 'payroll' ? <Box sx={{ p: 2.5 }}>
+        {section === 'organization' || section === 'people' ? <Box sx={{ p: 2.5 }}><TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /></Box> : section === 'payroll' ? <Box sx={{ p: 2.5 }}>
           <Table size="small"><TableHead><TableRow>{['Code','Period','Start','End','Status','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
             {(data.periods ?? []).map(row => <TableRow key={String(row.id)}><TableCell>{label(row.code)}</TableCell><TableCell>{label(row.name)}</TableCell><TableCell>{label(row.startDate)}</TableCell><TableCell>{label(row.endDate)}</TableCell><TableCell><Chip size="small" label={label(row.status)} /></TableCell><TableCell><Button size="small" onClick={() => void createRun(String(row.id))} disabled={busy}>Create run</Button></TableCell></TableRow>)}
             {!data.periods?.length && <TableRow><TableCell colSpan={6}>No payroll periods have been created.</TableCell></TableRow>}
