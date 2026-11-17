@@ -3,7 +3,7 @@ import { IsIn, IsString, MinLength } from 'class-validator';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
-import { CreateAttendanceDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeStatusDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto } from './operations.dto';
+import { CreateAttendanceDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeDto, UpdatePayGradeStatusDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto } from './operations.dto';
 import { OperationsService } from './operations.service';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
@@ -31,7 +31,9 @@ export class OperationsController {
 
   @Get('pay-grades') @TenantPermissions('workers.read') payGrades(@Req() req:TenantRequest) { return this.operations.listPayGrades(req.tenant.id); }
   @Post('pay-grades') @TenantPermissions('workers.manage') createPayGrade(@Req() req:TenantRequest,@Body() dto:CreatePayGradeDto) { return this.operations.createPayGrade(req.tenant.id,req.tenant.userId,dto); }
+  @Patch('pay-grades/:id') @TenantPermissions('workers.manage') editPayGrade(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdatePayGradeDto) { return this.operations.updatePayGrade(req.tenant.id,req.tenant.userId,id,dto); }
   @Patch('pay-grades/:id/status') @TenantPermissions('workers.manage') updatePayGrade(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdatePayGradeStatusDto) { return this.operations.setPayGradeStatus(req.tenant.id,id,dto.status); }
+  @Delete('workers/:id/permanent') @TenantPermissions('workers.manage') permanentlyDeleteEmployee(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.permanentlyDeleteEmployee(req.tenant.id,req.tenant.userId,id); }
 
   @Get('workers') @TenantPermissions('workers.read') workers(@Req() req:TenantRequest) { return this.operations.listWorkers(req.tenant.id); }
   @Get('workers/:id') @TenantPermissions('workers.read') getWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.getWorker(req.tenant.id,id); }
