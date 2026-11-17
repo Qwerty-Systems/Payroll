@@ -37,7 +37,7 @@ export async function synchronizeTenantOutbox(
 
     try {
       const result = await send(syncing);
-      if (result.status === 'rejected') {\n        await updateCommand({ ...syncing, state: 'failed', lastError: result.message });\n        summary.rejected += 1;\n      } else if (result.status === 'conflict') {
+      if (result.status === 'rejected') {\n        await updateCommand({ ...syncing, state: 'rejected', lastError: result.message });\n        summary.rejected += 1;\n      } else if (result.status === 'conflict') {
         await updateCommand({ ...syncing, state: 'conflict', lastError: result.message });
         summary.conflicts += 1;
       } else {
