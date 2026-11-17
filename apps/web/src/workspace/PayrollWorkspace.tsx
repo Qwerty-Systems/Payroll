@@ -128,7 +128,19 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
     },'Remittance schedule and ledger preview loaded.');
   }
 
-  async function openPayslipPrint(id:string) {\n    const html=await request<string>('payroll/payslips/'+id+'/print');\n    const win=window.open('','_blank');\n    if(!win)throw new Error('Allow pop-ups to open the printable payslip.');\n    win.document.write(html);win.document.close();\n  }\n\n  async function loadPayslips(runId:string) {
+  async function openPayslipPrint(id:string) {
+    const win=window.open('','_blank');
+    if(!win)throw new Error('Allow pop-ups to open the printable payslip.');
+    try {
+      const html=await request<string>('payroll/payslips/'+id+'/print');
+      win.document.write(html);win.document.close();
+    } catch(error) {
+      win.close();
+      throw error;
+    }
+  }
+
+  async function loadPayslips(runId:string) {
     await perform(async()=>{
       const result=await request<unknown>('payroll/runs/'+runId+'/payslips');
       setPayslips(asRows(result));setSelectedRun(runId);setTab('payslips');
