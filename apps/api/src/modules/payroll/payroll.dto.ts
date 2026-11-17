@@ -22,3 +22,15 @@ export class CreateWorkerPayComponentDto {
 }
 
 export class UpdateWorkerPayComponentStatusDto { @IsIn(['active','inactive']) status!: 'active'|'inactive'; }
+
+export class ReviewComplianceAssignmentDto {
+  @IsIn(['approve','reject']) action!: 'approve'|'reject';
+  @IsString() @Length(5,1000) reason!: string;
+}
+export class ReviewStatutoryFilingDto {
+  @IsIn(['approve','reject']) action!: 'approve'|'reject';
+  @IsString() @Length(5,1000) reason!: string;
+}
+export class SubmitStatutoryFilingDto {
+  @IsString() @Length(3,160) externalReference!: string;
+}
