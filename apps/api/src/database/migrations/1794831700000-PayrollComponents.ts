@@ -9,6 +9,12 @@ export class PayrollComponents1794831700000 implements MigrationInterface {
         ADD COLUMN reviewed_at timestamptz,
         ADD COLUMN review_notes varchar(1000);
       CREATE INDEX tenant_statutory_review_idx ON tenant_statutory_assignments(tenant_id,review_status,effective_from);
+      CREATE TABLE platform_compliance_reviewers(
+        user_id uuid PRIMARY KEY REFERENCES platform_users(id) ON DELETE RESTRICT,
+        active boolean NOT NULL DEFAULT true,
+        provisioned_by uuid REFERENCES platform_users(id) ON DELETE SET NULL,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
       CREATE TABLE statutory_filing_records(
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL,payroll_run_id uuid NOT NULL,
         filing_type varchar(16) NOT NULL CHECK(filing_type IN ('PAYE','SHIF','NSSF','AHL','NITA')),
@@ -47,5 +53,5 @@ export class PayrollComponents1794831700000 implements MigrationInterface {
         WITH CHECK(tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid);
     `);
   }
-  async down(q:QueryRunner):Promise<void>{await q.query('DROP TABLE IF EXISTS worker_pay_components CASCADE; DROP TABLE IF EXISTS statutory_filing_records CASCADE; DROP INDEX IF EXISTS tenant_statutory_review_idx; ALTER TABLE tenant_statutory_assignments DROP COLUMN IF EXISTS review_notes, DROP COLUMN IF EXISTS reviewed_at, DROP COLUMN IF EXISTS reviewed_by, DROP COLUMN IF EXISTS review_status;');}
+  async down(q:QueryRunner):Promise<void>{await q.query('DROP TABLE IF EXISTS worker_pay_components CASCADE; DROP TABLE IF EXISTS statutory_filing_records CASCADE; DROP TABLE IF EXISTS platform_compliance_reviewers CASCADE; DROP INDEX IF EXISTS tenant_statutory_review_idx; ALTER TABLE tenant_statutory_assignments DROP COLUMN IF EXISTS review_notes, DROP COLUMN IF EXISTS reviewed_at, DROP COLUMN IF EXISTS reviewed_by, DROP COLUMN IF EXISTS review_status;');}
 }
