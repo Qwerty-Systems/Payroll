@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
 import { calculateKenyaMonthlyPayroll, type StatutoryRule } from './kenya-payroll-calculator';
 import { CreatePayrollPeriodDto } from './payroll.dto';
+import { calculateContractEarnings } from './contract-earnings';
 
 const ENGINE_VERSION = 'jengaflow-ke-0.1.0';
 const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -50,7 +51,7 @@ export class PayrollService {
       if (!rulesetRows.length) throw new ConflictException('The payroll run statutory ruleset is missing.');
       const rawRules = await m.query('SELECT code,calculation_method,configuration FROM statutory_rules WHERE rule_set_id=$1 AND effective_from <= $2::date AND (effective_to IS NULL OR effective_to >= $3::date)',[run.ruleset_id,run.end_date,run.start_date]);
       const rules = rawRules.map((r: any) => ({ code:r.code, calculation_method:r.calculation_method, configuration:r.configuration })) as StatutoryRule[];
-      const workers = await m.query("SELECT w.id AS worker_id,w.worker_number,w.first_name,w.middle_name,w.last_name,w.email,c.id AS contract_id,c.engagement_type,c.pay_basis,c.rate_amount::numeric AS rate_amount,c.currency,c.effective_from,c.effective_to,(SELECT count(DISTINCT a.work_date)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN $2::date AND $3::date) AS approved_days,(SELECT COALESCE(sum(a.minutes_worked),0)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN $2::date AND $3::date) AS approved_minutes,(SELECT count(*)::int FROM worker_contracts c2 WHERE c2.tenant_id=w.tenant_id AND c2.worker_id=w.id AND c2.effective_from <= $3::date AND (c2.effective_to IS NULL OR c2.effective_to >= $2::date)) AS overlapping_contracts FROM workers w JOIN worker_contracts c ON c.tenant_id=w.tenant_id AND c.worker_id=w.id AND c.effective_from <= $3::date AND (c.effective_to IS NULL OR c.effective_to >= $2::date) WHERE w.tenant_id=$1 AND w.status='active' ORDER BY w.worker_number",[tenantId,run.start_date,run.end_date]);
+      const workers = await m.query("SELECT w.id AS worker_id,w.worker_number,w.first_name,w.middle_name,w.last_name,w.email,c.id AS contract_id,c.engagement_type,c.pay_basis,c.rate_amount::numeric AS rate_amount,c.currency,c.effective_from,c.effective_to,c.terms,(SELECT count(DISTINCT a.work_date)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS approved_days,(SELECT COALESCE(sum(a.minutes_worked),0)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS approved_minutes,(SELECT COALESCE(sum(o.quantity),0)::numeric FROM worker_output_entries o WHERE o.tenant_id=w.tenant_id AND o.worker_id=w.id AND o.status='approved' AND o.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date)) AND o.unit_code = ANY(ARRAY(SELECT jsonb_array_elements_text(COALESCE(c.terms->'unitCodes','[]'::jsonb))))) AS approved_units,(SELECT count(*)::int FROM worker_contracts c2 WHERE c2.tenant_id=w.tenant_id AND c2.worker_id=w.id AND c2.effective_from <= $3::date AND (c2.effective_to IS NULL OR c2.effective_to >= $2::date)) AS overlapping_contracts FROM workers w JOIN worker_contracts c ON c.tenant_id=w.tenant_id AND c.worker_id=w.id AND c.effective_from <= $3::date AND (c.effective_to IS NULL OR c.effective_to >= $2::date) WHERE w.tenant_id=$1 AND w.status='active' ORDER BY w.worker_number",[tenantId,run.start_date,run.end_date]);
       if (!workers.length) throw new ConflictException('No active workers with contracts overlap this payroll period.');
       const allowanceRows = await m.query('SELECT count(*)::int AS count FROM worker_allowance_assignments WHERE tenant_id=$1 AND status=\'active\' AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $2::date)',[tenantId,run.start_date,run.end_date]);
       const deductionRows = await m.query('SELECT count(*)::int AS count FROM worker_deduction_assignments WHERE tenant_id=$1 AND status=\'active\' AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $2::date)',[tenantId,run.start_date,run.end_date]);
@@ -61,18 +62,37 @@ export class PayrollService {
       const itemSnapshots: any[] = [];
       for (const worker of workers) {
         if (Number(worker.overlapping_contracts) !== 1) throw new ConflictException('Worker '+worker.worker_number+' has overlapping contracts. Resolve contract dates before calculating payroll.');
-        if (!['permanent','fixed_term','casual','piece_rate'].includes(worker.engagement_type)) throw new ConflictException('Worker '+worker.worker_number+' has an unsupported engagement classification.');
-        let earnings: number;
+        if (!['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'].includes(worker.engagement_type)) throw new ConflictException('Worker '+worker.worker_number+' has an unsupported engagement classification.');
         const rate = Number(worker.rate_amount);
-        if (worker.pay_basis === 'monthly') {
-          const days = Math.round((new Date(run.end_date).getTime()-new Date(run.start_date).getTime())/86400000)+1;
-          const daysInMonth = new Date(new Date(run.start_date).getUTCFullYear(),new Date(run.start_date).getUTCMonth()+1,0).getDate();
-          earnings = round(rate * days / daysInMonth);
-        } else if (worker.pay_basis === 'daily') earnings = round(rate * Number(worker.approved_days));
-        else if (worker.pay_basis === 'hourly') earnings = round(rate * Number(worker.approved_minutes) / 60);
-        else throw new ConflictException('Worker '+worker.worker_number+' uses '+worker.pay_basis+' pay. This pay basis requires a configured and tested earning-unit source before calculation.');
-        const statutory = calculateKenyaMonthlyPayroll(earnings,rules);
-        const snapshot = { worker:{id:worker.worker_id,workerNumber:worker.worker_number,firstName:worker.first_name,middleName:worker.middle_name,lastName:worker.last_name,email:worker.email},contract:{id:worker.contract_id,engagementType:worker.engagement_type,payBasis:worker.pay_basis,rate,currency:worker.currency},period:{startDate:run.start_date,endDate:run.end_date},attendance:{approvedDays:Number(worker.approved_days),approvedMinutes:Number(worker.approved_minutes)},statutory,netPay:statutory.netBeforeOtherDeductions,engineVersion:ENGINE_VERSION };
+        const earningsResult = calculateContractEarnings({
+          payBasis: worker.pay_basis,
+          rate,
+          periodStart: String(run.start_date),
+          periodEnd: String(run.end_date),
+          contractStart: String(worker.effective_from),
+          contractEnd: worker.effective_to ? String(worker.effective_to) : null,
+          approvedDays: Number(worker.approved_days),
+          approvedMinutes: Number(worker.approved_minutes),
+          approvedUnits: Number(worker.approved_units),
+        });
+        const earnings = earningsResult.amount;
+        const contractorNeedsReview = ['subcontractor','independent_contractor'].includes(worker.engagement_type);
+        // Do not apply employee PAYE/SHIF/NSSF deductions to a service contractor by default.
+        // Their withholding/VAT treatment is a separate reviewed workflow; payroll finalization remains blocked.
+        const statutory = contractorNeedsReview
+          ? {
+              gross: earnings, taxableIncome: 0, paye: 0, shif: 0, nssf: 0, housingLevy: 0,
+              employeeStatutoryDeductions: 0, employerNssf: 0, employerHousingLevy: 0, nita: 0,
+              employerContributions: 0, netBeforeOtherDeductions: earnings,
+              warnings: ['CONTRACTOR_TAX_TREATMENT_REQUIRES_REVIEW'], lines: [],
+            }
+          : calculateKenyaMonthlyPayroll(earnings,rules);
+        const classificationWarnings = contractorNeedsReview
+          ? ['WORKER_CLASSIFICATION_REQUIRES_STATUTORY_REVIEW']
+          : [];
+        warnings.push(...earningsResult.warnings.map(w => worker.worker_number+':'+w));
+        warnings.push(...classificationWarnings.map(w => worker.worker_number+':'+w));
+        const snapshot = { worker:{id:worker.worker_id,workerNumber:worker.worker_number,firstName:worker.first_name,middleName:worker.middle_name,lastName:worker.last_name,email:worker.email},contract:{id:worker.contract_id,engagementType:worker.engagement_type,payBasis:worker.pay_basis,rate,currency:worker.currency},period:{startDate:run.start_date,endDate:run.end_date},attendance:{approvedDays:Number(worker.approved_days),approvedMinutes:Number(worker.approved_minutes)},earnings:{quantity:earningsResult.quantity,unit:earningsResult.unit,rate,amount:earnings},classificationWarnings,statutory,netPay:statutory.netBeforeOtherDeductions,engineVersion:ENGINE_VERSION };
         itemSnapshots.push({workerId:worker.worker_id,earnings,employeeDeductions:statutory.employeeStatutoryDeductions,employerContributions:statutory.employerContributions,netPay:statutory.netBeforeOtherDeductions,snapshot});
         warnings.push(...statutory.warnings.map(w => worker.worker_number+':'+w));
       }
@@ -106,7 +126,7 @@ export class PayrollService {
         if(run.status!=='approved') throw new ConflictException('Only an approved payroll run can be finalized.');
         if(!run.compliance_approved_at) throw new ConflictException('The statutory ruleset has not received platform compliance approval. Payroll finalization is blocked.');
         const warnings=Array.isArray(run.warnings)?run.warnings:JSON.parse(run.warnings ?? '[]');
-        const blocking=warnings.filter((w:string)=>w==='STATUTORY_RULESET_REQUIRES_PLATFORM_COMPLIANCE_APPROVAL'||w==='ALLOWANCE_ASSIGNMENTS_NOT_INCLUDED_IN_THIS_ENGINE_VERSION'||w==='NON_STATUTORY_DEDUCTION_ASSIGNMENTS_NOT_INCLUDED_IN_THIS_ENGINE_VERSION'||w.endsWith(':NET_PAY_NEGATIVE'));
+        const blocking=warnings.filter((w:string)=>w==='STATUTORY_RULESET_REQUIRES_PLATFORM_COMPLIANCE_APPROVAL'||w==='ALLOWANCE_ASSIGNMENTS_NOT_INCLUDED_IN_THIS_ENGINE_VERSION'||w==='NON_STATUTORY_DEDUCTION_ASSIGNMENTS_NOT_INCLUDED_IN_THIS_ENGINE_VERSION'||w.endsWith(':NET_PAY_NEGATIVE')||w.endsWith(':WORKER_CLASSIFICATION_REQUIRES_STATUTORY_REVIEW')||w.endsWith(':NO_APPROVED_EARNING_UNITS')||w.endsWith(':CONTRACT_NOT_ACTIVE_IN_PAY_PERIOD'));
         if(blocking.length) throw new ConflictException({message:'Payroll has unresolved blocking warnings.',warnings:blocking});
         if(run.approved_by===actorId) throw new BadRequestException('Separation of duties: the payroll approver cannot finalize the same run.');
         const items=await m.query('SELECT i.id,i.worker_id,i.calculation_snapshot,w.worker_number FROM payroll_run_items i JOIN workers w ON w.tenant_id=i.tenant_id AND w.id=i.worker_id WHERE i.tenant_id=$1 AND i.payroll_run_id=$2',[tenantId,runId]);

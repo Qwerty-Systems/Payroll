@@ -3,7 +3,7 @@ import { IsIn, IsString, MinLength } from 'class-validator';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
-import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto } from './operations.dto';
+import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeStatusDto } from './operations.dto';
 import { OperationsService } from './operations.service';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
@@ -23,6 +23,10 @@ export class OperationsController {
   @Get('sites') @TenantPermissions('projects.read') sites(@Req() req:TenantRequest,@Query('projectId') projectId?:string) { return this.operations.listSites(req.tenant.id,projectId); }
   @Post('sites') @TenantPermissions('projects.manage') createSite(@Req() req:TenantRequest,@Body() dto:CreateSiteDto) { return this.operations.createSite(req.tenant.id,dto); }
 
+  @Get('pay-grades') @TenantPermissions('workers.read') payGrades(@Req() req:TenantRequest) { return this.operations.listPayGrades(req.tenant.id); }
+  @Post('pay-grades') @TenantPermissions('workers.manage') createPayGrade(@Req() req:TenantRequest,@Body() dto:CreatePayGradeDto) { return this.operations.createPayGrade(req.tenant.id,req.tenant.userId,dto); }
+  @Patch('pay-grades/:id/status') @TenantPermissions('workers.manage') updatePayGrade(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdatePayGradeStatusDto) { return this.operations.setPayGradeStatus(req.tenant.id,id,dto.status); }
+
   @Get('workers') @TenantPermissions('workers.read') workers(@Req() req:TenantRequest) { return this.operations.listWorkers(req.tenant.id); }
   @Post('workers') @TenantPermissions('workers.manage') createWorker(@Req() req:TenantRequest,@Body() dto:CreateWorkerDto) { return this.operations.createWorker(req.tenant.id,dto); }
   @Patch('workers/:id/status') @TenantPermissions('workers.manage') updateWorker(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:StatusDto) { return this.operations.setWorkerStatus(req.tenant.id,id,dto.status); }
@@ -30,6 +34,12 @@ export class OperationsController {
   @Get('workers/:workerId/contracts') @TenantPermissions('workers.read') workerContracts(@Req() req:TenantRequest,@Param('workerId',ParseUUIDPipe) workerId:string) { return this.operations.listWorkerContracts(req.tenant.id,workerId); }
   @Post('workers/:workerId/contracts') @TenantPermissions('workers.manage') createWorkerContract(@Req() req:TenantRequest,@Param('workerId',ParseUUIDPipe) workerId:string,@Body() dto:CreateWorkerContractDto) { return this.operations.createWorkerContract(req.tenant.id,req.tenant.userId,workerId,dto); }
   @Patch('workers/:workerId/contracts/:contractId/end') @TenantPermissions('workers.manage') endWorkerContract(@Req() req:TenantRequest,@Param('workerId',ParseUUIDPipe) workerId:string,@Param('contractId',ParseUUIDPipe) contractId:string,@Body() dto:EndWorkerContractDto) { return this.operations.endWorkerContract(req.tenant.id,req.tenant.userId,workerId,contractId,dto.effectiveTo); }
+
+  @Get('worker-outputs') @TenantPermissions('attendance.read') workerOutputs(@Req() req:TenantRequest,@Query('workerId') workerId?:string) { return this.operations.listWorkerOutputs(req.tenant.id,workerId); }
+  @Post('worker-outputs') @TenantPermissions('attendance.capture') createWorkerOutput(@Req() req:TenantRequest,@Body() dto:CreateWorkerOutputDto) { return this.operations.createWorkerOutput(req.tenant.id,req.tenant.userId,dto); }
+  @Post('worker-outputs/:id/submit') @TenantPermissions('attendance.capture') submitWorkerOutput(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.transitionWorkerOutput(req.tenant.id,req.tenant.userId,id,'submit'); }
+  @Post('worker-outputs/:id/approve') @TenantPermissions('attendance.approve') approveWorkerOutput(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.operations.transitionWorkerOutput(req.tenant.id,req.tenant.userId,id,'approve'); }
+  @Post('worker-outputs/:id/reject') @TenantPermissions('attendance.approve') rejectWorkerOutput(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:RejectWorkerOutputDto) { return this.operations.transitionWorkerOutput(req.tenant.id,req.tenant.userId,id,'reject',dto.reason); }
 
   @Get('attendance') @TenantPermissions('attendance.read') attendance(@Req() req:TenantRequest,@Query('workDate') workDate?:string) { return this.operations.listAttendance(req.tenant.id,workDate); }
   @Post('attendance') @TenantPermissions('attendance.capture') createAttendance(@Req() req:TenantRequest,@Body() dto:CreateAttendanceDto) { return this.operations.createAttendance(req.tenant.id,req.tenant.userId,dto); }

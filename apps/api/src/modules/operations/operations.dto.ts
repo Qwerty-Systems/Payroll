@@ -33,8 +33,20 @@ export class CreateAttendanceDto {
   @IsOptional() @IsIn(['web','mobile','offline_sync','import']) source?: string;
 }
 
+export class CreatePayGradeDto {
+  @IsString() @Length(1,40) code!: string;
+  @IsString() @Length(2,120) name!: string;
+  @IsOptional() @IsString() @Length(1,2000) description?: string;
+  @IsOptional() @IsString() @Length(3,3) currency?: string;
+  @IsIn(['hourly','daily','weekly','monthly','per_unit']) payBasis!: string;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) minimumRate?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) midpointRate?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) maximumRate?: number;
+}
+export class UpdatePayGradeStatusDto { @IsIn(['active','inactive']) status!: string; }
+
 export class CreateWorkerContractDto {
-  @IsIn(['permanent','fixed_term','casual','piece_rate','subcontractor'])
+  @IsIn(['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'])
   engagementType!: string;
 
   @IsIn(['hourly','daily','weekly','monthly','per_unit'])
@@ -52,9 +64,22 @@ export class CreateWorkerContractDto {
   @IsOptional() @IsDateString()
   effectiveTo?: string;
 
+  @IsOptional() @IsUUID() payGradeId?: string;
+
   @IsOptional() @IsObject()
   terms?: Record<string, unknown>;
 }
+
+export class CreateWorkerOutputDto {
+  @IsUUID() workerId!: string;
+  @IsDateString() workDate!: string;
+  @IsString() @Length(1,40) unitCode!: string;
+  @IsNumber({ maxDecimalPlaces: 4 }) @Min(0.0001) @Max(1000000000) quantity!: number;
+  @IsOptional() @IsString() @Length(1,240) description?: string;
+  @IsOptional() @IsUUID() projectId?: string;
+  @IsOptional() @IsUUID() siteId?: string;
+}
+export class RejectWorkerOutputDto { @IsString() @Length(3,500) reason!: string; }
 
 export class EndWorkerContractDto {
   @IsDateString()

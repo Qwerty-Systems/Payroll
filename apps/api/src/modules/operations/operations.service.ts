@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
-import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto } from './operations.dto';
+import { CreateAttendanceDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, CreateWorkerOutputDto, CreatePayGradeDto } from './operations.dto';
 
 @Injectable()
 export class OperationsService {
@@ -22,7 +22,38 @@ export class OperationsService {
     return this.tenantDb.run(tenantId, async m => {
       const worker = await m.query('SELECT id FROM workers WHERE tenant_id=$1 AND id=$2', [tenantId, workerId]);
       if (!worker.length) throw new NotFoundException('Worker not found.');
-      return m.query('SELECT id,engagement_type AS "engagementType",pay_basis AS "payBasis",rate_amount AS "rateAmount",currency,effective_from AS "effectiveFrom",effective_to AS "effectiveTo",terms,created_at AS "createdAt" FROM worker_contracts WHERE tenant_id=$1 AND worker_id=$2 ORDER BY effective_from DESC,created_at DESC', [tenantId, workerId]);
+      return m.query('SELECT id,engagement_type AS "engagementType",pay_basis AS "payBasis",rate_amount AS "rateAmount",currency,pay_grade_id AS "payGradeId",effective_from AS "effectiveFrom",effective_to AS "effectiveTo",terms,created_at AS "createdAt" FROM worker_contracts WHERE tenant_id=$1 AND worker_id=$2 ORDER BY effective_from DESC,created_at DESC', [tenantId, workerId]);
+    });
+  }
+
+  listPayGrades(tenantId: string) {
+    return this.tenantDb.run(tenantId, m => m.query(
+      'SELECT id,code,name,description,currency,pay_basis AS "payBasis",minimum_rate AS "minimumRate",midpoint_rate AS "midpointRate",maximum_rate AS "maximumRate",status,created_at AS "createdAt" FROM worker_pay_grades WHERE tenant_id=$1 ORDER BY code',
+      [tenantId],
+    ));
+  }
+
+  createPayGrade(tenantId: string, actorId: string, dto: CreatePayGradeDto) {
+    const currency=(dto.currency ?? 'KES').toUpperCase();
+    if(!/^[A-Z]{3}$/.test(currency)) throw new BadRequestException('Currency must be a three-letter ISO code.');
+    if(dto.minimumRate != null && dto.midpointRate != null && dto.minimumRate > dto.midpointRate) throw new BadRequestException('Minimum rate cannot exceed midpoint rate.');
+    if(dto.midpointRate != null && dto.maximumRate != null && dto.midpointRate > dto.maximumRate) throw new BadRequestException('Midpoint rate cannot exceed maximum rate.');
+    if(dto.minimumRate != null && dto.maximumRate != null && dto.minimumRate > dto.maximumRate) throw new BadRequestException('Minimum rate cannot exceed maximum rate.');
+    return this.tenantDb.run(tenantId, async m => {
+      const rows=await m.query(
+        'INSERT INTO worker_pay_grades(tenant_id,code,name,description,currency,pay_basis,minimum_rate,midpoint_rate,maximum_rate,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,code,name,description,currency,pay_basis AS "payBasis",minimum_rate AS "minimumRate",midpoint_rate AS "midpointRate",maximum_rate AS "maximumRate",status',
+        [tenantId,dto.code.trim().toUpperCase(),dto.name.trim(),dto.description?.trim() ?? null,currency,dto.payBasis,dto.minimumRate ?? null,dto.midpointRate ?? null,dto.maximumRate ?? null,actorId],
+      );
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'worker.pay_grade.created','worker_pay_grade',$3,$4::jsonb)",[tenantId,actorId,rows[0].id,JSON.stringify({code:rows[0].code,payBasis:dto.payBasis})]);
+      return rows[0];
+    });
+  }
+
+  setPayGradeStatus(tenantId: string, id: string, status: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows=await m.query('UPDATE worker_pay_grades SET status=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,code,name,status',[tenantId,id,status]);
+      if(!rows.length) throw new NotFoundException('Pay grade not found.');
+      return rows[0];
     });
   }
 
@@ -43,9 +74,18 @@ export class OperationsService {
         [tenantId, workerId, dto.effectiveFrom, dto.effectiveTo ?? null],
       );
       if (overlaps.length) throw new ConflictException('This contract overlaps an existing contract. End the previous contract before adding a new effective-dated contract.');
+      if (dto.payGradeId) {
+        const grades=await m.query('SELECT id,pay_basis,minimum_rate,maximum_rate,status FROM worker_pay_grades WHERE tenant_id=$1 AND id=$2',[tenantId,dto.payGradeId]);
+        if(!grades.length) throw new NotFoundException('Pay grade not found.');
+        const grade=grades[0];
+        if(grade.status!=='active') throw new ConflictException('Inactive pay grades cannot be assigned to new contracts.');
+        if(grade.pay_basis!==dto.payBasis) throw new BadRequestException('Contract pay basis must match the selected pay grade.');
+        if(grade.minimum_rate!=null && dto.rateAmount < Number(grade.minimum_rate)) throw new BadRequestException('Contract rate is below the pay grade minimum.');
+        if(grade.maximum_rate!=null && dto.rateAmount > Number(grade.maximum_rate)) throw new BadRequestException('Contract rate exceeds the pay grade maximum.');
+      }
       const rows = await m.query(
-        'INSERT INTO worker_contracts(tenant_id,worker_id,engagement_type,pay_basis,rate_amount,currency,effective_from,effective_to,terms) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb) RETURNING id,worker_id AS "workerId",engagement_type AS "engagementType",pay_basis AS "payBasis",rate_amount AS "rateAmount",currency,effective_from AS "effectiveFrom",effective_to AS "effectiveTo",terms,created_at AS "createdAt"',
-        [tenantId,workerId,dto.engagementType,dto.payBasis,dto.rateAmount,currency,dto.effectiveFrom,dto.effectiveTo ?? null,JSON.stringify(dto.terms ?? {})],
+        'INSERT INTO worker_contracts(tenant_id,worker_id,engagement_type,pay_basis,rate_amount,currency,pay_grade_id,effective_from,effective_to,terms) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb) RETURNING id,worker_id AS "workerId",engagement_type AS "engagementType",pay_basis AS "payBasis",rate_amount AS "rateAmount",currency,pay_grade_id AS "payGradeId",effective_from AS "effectiveFrom",effective_to AS "effectiveTo",terms,created_at AS "createdAt"',
+        [tenantId,workerId,dto.engagementType,dto.payBasis,dto.rateAmount,currency,dto.payGradeId ?? null,dto.effectiveFrom,dto.effectiveTo ?? null,JSON.stringify(dto.terms ?? {})],
       );
       await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'worker.contract.created','worker_contract',$3,$4::jsonb)", [tenantId,actorId,rows[0].id,JSON.stringify({workerId,effectiveFrom:dto.effectiveFrom,effectiveTo:dto.effectiveTo ?? null,payBasis:dto.payBasis,engagementType:dto.engagementType})]);
       return rows[0];
@@ -69,6 +109,58 @@ export class OperationsService {
       const rows = await m.query('UPDATE worker_contracts SET effective_to=$4 WHERE tenant_id=$1 AND worker_id=$2 AND id=$3 RETURNING id,effective_to AS "effectiveTo"', [tenantId,workerId,contractId,effectiveTo]);
       await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'worker.contract.ended','worker_contract',$3,$4::jsonb)", [tenantId,actorId,contractId,JSON.stringify({workerId,effectiveTo})]);
       return rows[0];
+    });
+  }
+
+
+  listWorkerOutputs(tenantId: string, workerId?: string) {
+    return this.tenantDb.run(tenantId, m => m.query(
+      'SELECT id,worker_id AS "workerId",work_date AS "workDate",unit_code AS "unitCode",quantity,description,project_id AS "projectId",site_id AS "siteId",status,rejection_reason AS "rejectionReason",created_at AS "createdAt" FROM worker_output_entries WHERE tenant_id=$1 AND ($2::uuid IS NULL OR worker_id=$2) ORDER BY work_date DESC,created_at DESC LIMIT 1000',
+      [tenantId,workerId ?? null],
+    ));
+  }
+
+  createWorkerOutput(tenantId: string, actorId: string, dto: CreateWorkerOutputDto) {
+    return this.tenantDb.run(tenantId, async m => {
+      const workers = await m.query("SELECT id,status FROM workers WHERE tenant_id=$1 AND id=$2", [tenantId,dto.workerId]);
+      if (!workers.length) throw new NotFoundException('Worker not found.');
+      if (workers[0].status !== 'active') throw new ConflictException('Only active workers can submit output for payment.');
+      const contracts = await m.query(
+        "SELECT id,engagement_type,pay_basis,terms FROM worker_contracts WHERE tenant_id=$1 AND worker_id=$2 AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $3::date)",
+        [tenantId,dto.workerId,dto.workDate],
+      );
+      if (contracts.length !== 1) throw new ConflictException('Exactly one active contract must cover the output date.');
+      if (contracts[0].pay_basis !== 'per_unit') throw new BadRequestException('Approved output entries are only valid for per-unit contracts.');
+      const configuredUnits = (contracts[0].terms?.unitCodes ?? []) as unknown;
+      if (!Array.isArray(configuredUnits) || !configuredUnits.includes(dto.unitCode)) {
+        throw new BadRequestException('The unit code must be configured in the worker contract terms before output can be recorded.');
+      }
+      const rows = await m.query(
+        'INSERT INTO worker_output_entries(tenant_id,worker_id,work_date,unit_code,quantity,description,project_id,site_id,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,worker_id AS "workerId",work_date AS "workDate",unit_code AS "unitCode",quantity,description,project_id AS "projectId",site_id AS "siteId",status',
+        [tenantId,dto.workerId,dto.workDate,dto.unitCode,dto.quantity,dto.description?.trim() ?? null,dto.projectId ?? null,dto.siteId ?? null,actorId],
+      );
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'worker.output.created','worker_output',$3,$4::jsonb)",[tenantId,actorId,rows[0].id,JSON.stringify({workerId:dto.workerId,workDate:dto.workDate,unitCode:dto.unitCode,quantity:dto.quantity})]);
+      return rows[0];
+    });
+  }
+
+  transitionWorkerOutput(tenantId: string, actorId: string, id: string, action: 'submit'|'approve'|'reject', reason?: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT id,worker_id,created_by,status FROM worker_output_entries WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);
+      if (!rows.length) throw new NotFoundException('Worker output entry not found.');
+      const current = rows[0];
+      const allowed = action === 'submit' ? ['draft','rejected'] : ['submitted'];
+      if (!allowed.includes(current.status)) throw new ConflictException('Worker output entry is not in a state that permits this transition.');
+      if (action === 'approve' && current.created_by === actorId) throw new BadRequestException('Separation of duties: the person who recorded output cannot approve it.');
+      if (action === 'reject' && (!reason || reason.trim().length < 3)) throw new BadRequestException('A rejection reason of at least three characters is required.');
+      const target = action === 'submit' ? 'submitted' : action === 'approve' ? 'approved' : 'rejected';
+      const update = action === 'submit'
+        ? await m.query("UPDATE worker_output_entries SET status=$3,submitted_by=$4,rejection_reason=NULL,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status",[tenantId,id,target,actorId])
+        : action === 'approve'
+          ? await m.query("UPDATE worker_output_entries SET status=$3,approved_by=$4,approved_at=now(),updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status",[tenantId,id,target,actorId])
+          : await m.query("UPDATE worker_output_entries SET status=$3,rejection_reason=$4,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status",[tenantId,id,target,reason!.trim()]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,$3,'worker_output',$4,$5::jsonb)",[tenantId,actorId,'worker.output.'+action,id,JSON.stringify({from:current.status,to:target,reason:action==='reject'?reason!.trim():undefined})]);
+      return update[0];
     });
   }
 
