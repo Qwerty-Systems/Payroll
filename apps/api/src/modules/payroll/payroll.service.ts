@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { createHash } from 'crypto';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
 import { calculateKenyaMonthlyPayroll, type StatutoryRule } from './kenya-payroll-calculator';
-import { CreatePayrollPeriodDto } from './payroll.dto';
+import { CreatePayrollPeriodDto, CreateWorkerPayComponentDto } from './payroll.dto';
 import { calculateContractEarnings } from './contract-earnings';
 
 const ENGINE_VERSION = 'jengaflow-ke-0.1.0';
@@ -151,7 +151,7 @@ export class PayrollService {
         if(run.status!=='approved') throw new ConflictException('Only an approved payroll run can be finalized.');
         if(!run.compliance_approved_at) throw new ConflictException('The statutory ruleset has not received platform compliance approval. Payroll finalization is blocked.');
         const warnings=Array.isArray(run.warnings)?run.warnings:JSON.parse(run.warnings ?? '[]');
-        const blocking=warnings.filter((w:string)=>w==='STATUTORY_RULESET_REQUIRES_PLATFORM_COMPLIANCE_APPROVAL'||w==='ALLOWANCE_ASSIGNMENTS_NOT_INCLUDED_IN_THIS_ENGINE_VERSION'||w==='NON_STATUTORY_DEDUCTION_ASSIGNMENTS_NOT_INCLUDED_IN_THIS_ENGINE_VERSION'||w.endsWith(':NET_PAY_NEGATIVE')||w.endsWith(':WORKER_CLASSIFICATION_REQUIRES_STATUTORY_REVIEW')||w.endsWith(':NO_APPROVED_EARNING_UNITS')||w.endsWith(':CONTRACT_NOT_ACTIVE_IN_PAY_PERIOD'));
+        const blocking=warnings.filter((w:string)=>w==='STATUTORY_RULESET_REQUIRES_PLATFORM_COMPLIANCE_APPROVAL'||w.endsWith(':NET_PAY_NEGATIVE')||w.endsWith(':WORKER_CLASSIFICATION_REQUIRES_STATUTORY_REVIEW')||w.endsWith(':NO_APPROVED_EARNING_UNITS')||w.endsWith(':CONTRACT_NOT_ACTIVE_IN_PAY_PERIOD'));
         if(blocking.length) throw new ConflictException({message:'Payroll has unresolved blocking warnings.',warnings:blocking});
         if(run.approved_by===actorId) throw new BadRequestException('Separation of duties: the payroll approver cannot finalize the same run.');
         const items=await m.query('SELECT i.id,i.worker_id,i.calculation_snapshot,w.worker_number FROM payroll_run_items i JOIN workers w ON w.tenant_id=i.tenant_id AND w.id=i.worker_id WHERE i.tenant_id=$1 AND i.payroll_run_id=$2',[tenantId,runId]);
@@ -238,5 +238,24 @@ export class PayrollService {
       return {...updated[0],batchStatus};
     });
   }
+
+
+  listWorkerPayComponents(tenantId:string,workerId:string){
+    return this.tenantDb.run(tenantId,async m=>{const worker=await m.query('SELECT id FROM workers WHERE tenant_id=$1 AND id=$2',[tenantId,workerId]);if(!worker.length)throw new NotFoundException('Worker not found.');return m.query('SELECT id,code,name,component_type AS "componentType",calculation_method AS "calculationMethod",amount,taxable,effective_from AS "effectiveFrom",effective_to AS "effectiveTo",status FROM worker_pay_components WHERE tenant_id=$1 AND worker_id=$2 ORDER BY effective_from DESC,code',[tenantId,workerId]);});
+  }
+  createWorkerPayComponent(tenantId:string,actorId:string,workerId:string,dto:CreateWorkerPayComponentDto){
+    if(dto.effectiveTo&&dto.effectiveTo<dto.effectiveFrom)throw new BadRequestException('Component end date must not precede its start date.');
+    if(dto.componentType!=='allowance'&&dto.taxable)throw new BadRequestException('Only allowance components can be marked taxable.');
+    return this.tenantDb.run(tenantId,async m=>{
+      const workers=await m.query('SELECT id,status FROM workers WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,workerId]);if(!workers.length)throw new NotFoundException('Worker not found.');
+      const overlap=await m.query("SELECT id FROM worker_pay_components WHERE tenant_id=$1 AND worker_id=$2 AND code=$3 AND status='active' AND effective_from<=COALESCE($5::date,'infinity'::date) AND COALESCE(effective_to,'infinity'::date)>=$4::date LIMIT 1",[tenantId,workerId,dto.code.trim().toUpperCase(),dto.effectiveFrom,dto.effectiveTo??null]);if(overlap.length)throw new ConflictException('An active component with this code already overlaps the requested dates.');
+      const rows=await m.query('INSERT INTO worker_pay_components(tenant_id,worker_id,code,name,component_type,calculation_method,amount,taxable,effective_from,effective_to,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,worker_id AS "workerId",code,name,component_type AS "componentType",calculation_method AS "calculationMethod",amount,taxable,effective_from AS "effectiveFrom",effective_to AS "effectiveTo",status',[tenantId,workerId,dto.code.trim().toUpperCase(),dto.name.trim(),dto.componentType,dto.calculationMethod,dto.amount,dto.componentType==='allowance'&&dto.taxable===true,dto.effectiveFrom,dto.effectiveTo??null,actorId]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.component.created','worker_pay_component',$3,$4::jsonb)",[tenantId,actorId,rows[0].id,JSON.stringify({workerId,code:rows[0].code,type:dto.componentType,calculationMethod:dto.calculationMethod})]);return rows[0];
+    });
+  }
+  setWorkerPayComponentStatus(tenantId:string,actorId:string,id:string,status:'active'|'inactive'){
+    return this.tenantDb.run(tenantId,async m=>{const rows=await m.query('UPDATE worker_pay_components SET status=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,worker_id AS "workerId",code,status',[tenantId,id,status]);if(!rows.length)throw new NotFoundException('Pay component not found.');await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.component.status_changed','worker_pay_component',$3,$4::jsonb)",[tenantId,actorId,id,JSON.stringify({status})]);return rows[0];});
+  }
+
 
 }
