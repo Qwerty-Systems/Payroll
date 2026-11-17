@@ -82,3 +82,11 @@ Worker documents are stored in private object storage with tenant-scoped metadat
 - Taxable allowances are included in the statutory calculation base; non-taxable allowances are included in gross earnings but excluded from that base.
 - Approved component lines, statutory breakdowns, deductions, employer benefits and net pay are preserved in each immutable payroll calculation snapshot and therefore in finalized payslips.
 - Negative net pay and contractor classification conditions remain blocking warnings. Component values are period amounts; the current model does not yet implement component-specific frequency calendars or automatic tax treatment for non-allowance benefits.
+
+
+## Statutory compliance review and filing preparation (in review)
+- Tenant statutory ruleset assignments now require an independent tenant compliance review before a payroll run can be created for the effective period.
+- A separate platform compliance reviewer registry gates approval of published global statutory ruleset versions. Approval is immutable at the ruleset-version level and records a rationale in platform audit history.
+- Finalized payroll snapshots can produce tenant filing schedules for PAYE, SHIF, NSSF, AHL and NITA, including employee/employer totals where applicable.
+- Filing records move through draft, reviewed, submitted, accepted or rejected states. Marking a filing submitted requires an independent review and an external reference; this API does not transmit returns to KRA, SHA or NSSF.
+- Platform compliance reviewers must be provisioned through the controlled database administration process in `platform_compliance_reviewers`; there is intentionally no self-service endpoint for granting platform reviewer access.
