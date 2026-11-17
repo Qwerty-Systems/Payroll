@@ -20,3 +20,5 @@ export class CreateWorkerPayComponentDto {
   @IsDateString() effectiveFrom!: string;
   @IsOptional() @IsDateString() effectiveTo?: string;
 }
+
+export class UpdateWorkerPayComponentStatusDto { @IsIn(['active','inactive']) status!: 'active'|'inactive'; }
