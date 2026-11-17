@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsEmail, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 
 export class CreateProjectDto {
   @IsString() @Length(1, 40) projectCode!: string;
@@ -54,6 +54,31 @@ export class CreatePayGradeDto {
   @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) maximumRate?: number;
 }
 export class UpdatePayGradeStatusDto { @IsIn(['active','inactive']) status!: string; }
+export class UpdateAllowanceTypeDto {
+  @IsOptional() @IsString() @Length(2,140) name?: string;
+  @IsOptional() @IsIn(['fixed_amount','per_day','per_hour','percentage','quantity_times_rate']) calculationMethod?: string;
+  @IsOptional() @IsObject() configuration?: Record<string, unknown>;
+  @IsOptional() @IsString() @Length(2,40) taxTreatment?: string;
+  @IsOptional() @IsBoolean() isEnabled?: boolean;
+  @IsOptional() @IsBoolean() requiresApproval?: boolean;
+}
+export class UpdateDeductionTypeDto {
+  @IsOptional() @IsString() @Length(2,140) name?: string;
+  @IsOptional() @IsIn(['fixed_amount','percentage','balance_recovery']) calculationMethod?: string;
+  @IsOptional() @IsObject() configuration?: Record<string, unknown>;
+  @IsOptional() @IsString() @Length(2,40) taxableTreatment?: string;
+  @IsOptional() @IsBoolean() isEnabled?: boolean;
+  @IsOptional() @IsBoolean() requiresApproval?: boolean;
+}
+export class UpdatePayGradeDto {
+  @IsOptional() @IsString() @Length(2,120) name?: string;
+  @IsOptional() @IsString() @Length(1,2000) description?: string | null;
+  @IsOptional() @IsString() @Length(3,3) currency?: string;
+  @IsOptional() @IsIn(['hourly','daily','weekly','monthly','per_unit']) payBasis?: string;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) minimumRate?: number | null;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) midpointRate?: number | null;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 4 }) @Min(0) @Max(1000000000) maximumRate?: number | null;
+}
 
 export class CreateWorkerContractDto {
   @IsIn(['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'])
