@@ -54,8 +54,6 @@ export class SyncService {
       );
       if (!devices.length) throw new ForbiddenException('This device is not registered to your account in the selected workspace.');
 
-      // Serialize requests using the same command ID. This closes the race between
-      // checking the idempotency record and inserting the attendance mutation.
       await m.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [tenantId + ':' + command.commandId]);
       await m.query('UPDATE tenant_devices SET last_seen_at=now() WHERE tenant_id=$1 AND id=$2', [tenantId, command.deviceId]);
 
@@ -158,12 +156,16 @@ export class SyncService {
     return this.tenantDb.run(tenantId, async (m) => {
       const rows = await m.query(
         "UPDATE sync_conflicts SET state='discarded',resolution=$3,resolved_by=$4,resolved_at=now() WHERE tenant_id=$1 AND id=$2 AND state='open' RETURNING id,command_id AS \"commandId\",state,resolution",
-        [tenantId, id, resolution, actorId],
+        [tenantId, id, resolution.trim(), actorId],
       );
       if (!rows.length) throw new NotFoundException('Open sync conflict not found.');
       await m.query(
+        "UPDATE sync_commands SET state='rejected',result=jsonb_set(result,'{resolution}',to_jsonb($3::text),true),processed_at=now() WHERE tenant_id=$1 AND command_id=$2",
+        [tenantId, rows[0].commandId, resolution.trim()],
+      );
+      await m.query(
         "INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'sync.conflict.discarded','sync_conflict',$3,$4::jsonb)",
-        [tenantId, actorId, id, JSON.stringify({ resolution })],
+        [tenantId, actorId, id, JSON.stringify({ resolution: resolution.trim(), commandId: rows[0].commandId })],
       );
       return rows[0];
     });
