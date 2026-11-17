@@ -608,7 +608,51 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                   {!data.periods?.length && <TableRow><TableCell colSpan={6} sx={{ py: 4, textAlign: 'center' }}>No payroll periods yet. Create one to prepare a calculation preview.</TableCell></TableRow>}
                 </TableBody></Table></TableContainer>
                 {selectedRun && <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ mt: 2 }}><Typography variant="body2">Selected run: {selectedRun}</Typography><Button variant="outlined" size="small" onClick={() => void calculateRun()} disabled={busy}>Calculate preview</Button></Stack>}
-                {(data.run ?? []).map(run => <Alert key={String(run.id)} severity="warning" sx={{ mt: 2 }}>Run status: {label(run.status)} · Totals and warnings: {JSON.stringify(run.totals ?? {})} {JSON.stringify(run.warnings ?? [])}</Alert>)}
+                {(data.run ?? []).map(run => {
+                  const totals = (run.totals ?? {}) as Record<string, unknown>;
+                  const items = asRows(run.items);
+                  const warnings = Array.isArray(run.warnings) ? run.warnings.map(String) : [];
+                  return <Box key={String(run.id)} sx={{ mt: 2.5 }}>
+                    <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1} sx={{ mb: 1.5 }}>
+                      <Box><Typography fontWeight={850}>Payroll calculation preview</Typography><Typography variant="caption" color="text.secondary">Run {label(run.runNumber)} · {label(run.status)} · Engine {label(run.engineVersion)}</Typography></Box>
+                      <Chip size="small" color={warnings.length ? 'warning' : 'success'} label={warnings.length ? warnings.length + ' review warning(s)' : 'No calculation warnings'} />
+                    </Stack>
+                    <Grid container spacing={1.2} sx={{ mb: 2 }}>
+                      {[
+                        ['Employees', totals.workerCount], ['Gross earnings', totals.grossEarnings], ['Employee deductions', totals.employeeDeductions],
+                        ['Employer contributions', totals.employerContributions], ['Net pay', totals.netPay], ['Total employer cost', totals.employerCost],
+                      ].map(([title, value]) => <Grid size={{ xs: 6, md: 4, xl: 2 }} key={String(title)}>
+                        <Paper variant="outlined" sx={{ p: 1.5, borderColor: '#E6EBE5', borderRadius: 2 }}>
+                          <Typography variant="caption" color="text.secondary">{title}</Typography>
+                          <Typography fontWeight={850} sx={{ mt: .4 }}>{value == null ? '—' : title === 'Employees' ? label(value) : 'KES ' + Number(value).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Typography>
+                        </Paper>
+                      </Grid>)}
+                    </Grid>
+                    {warnings.length > 0 && <Alert severity="warning" sx={{ mb: 1.5 }}><Typography fontWeight={800} sx={{ mb: .5 }}>Items requiring review</Typography>{warnings.map((warning, index) => <Typography key={index} variant="body2">{warning}</Typography>)}</Alert>}
+                    <TableContainer component={Paper} variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 2 }}>
+                      <Table size="small"><TableHead><TableRow>{['Employee','Basic + allowances','Statutory deductions','Other deductions','Net pay'].map(title => <TableCell key={title}>{title}</TableCell>)}</TableRow></TableHead>
+                        <TableBody>
+                          {items.map(item => {
+                            const snapshot = (item.snapshot ?? {}) as Record<string, any>;
+                            const person = snapshot.worker ?? {};
+                            const earnings = snapshot.earnings ?? {};
+                            const statutory = snapshot.statutory ?? {};
+                            const deductions = snapshot.otherDeductions ?? {};
+                            return <TableRow key={String(item.id)}>
+                              <TableCell><Typography fontWeight={750}>{[person.firstName,person.middleName,person.lastName].filter(Boolean).join(' ') || label(person.workerNumber)}</Typography><Typography variant="caption" color="text.secondary">{label(person.workerNumber)}</Typography></TableCell>
+                              <TableCell>KES {Number(earnings.grossPay ?? item.earnings ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</TableCell>
+                              <TableCell>KES {Number(statutory.employeeStatutoryDeductions ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</TableCell>
+                              <TableCell>KES {Number(deductions.total ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</TableCell>
+                              <TableCell><Typography fontWeight={850}>KES {Number(item.netPay ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2})}</Typography></TableCell>
+                            </TableRow>;
+                          })}
+                          {!items.length && <TableRow><TableCell colSpan={5} sx={{ py: 3, textAlign: 'center' }}>No employee calculation lines were returned for this run.</TableCell></TableRow>}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>This is a preview only. It does not issue payslips, finalize payroll or initiate payments.</Typography>
+                  </Box>;
+                })}
               </Box> : <TableContainer sx={{ overflowX: 'auto' }}><Table size="medium"><TableHead><TableRow>
                 {(section === 'workers' ? ['Employee no.','Name','Phone','Email','Status','Actions'] :
                   section === 'projects' ? ['Code','Project','Client','Status','Select'] :
