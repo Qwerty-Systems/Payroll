@@ -227,6 +227,14 @@ export class OperationsService {
   }
 
 
+  listAllowanceTypes(tenantId: string) {
+    return this.tenantDb.run(tenantId, m => m.query('SELECT id,code,name,calculation_method AS "calculationMethod",configuration,tax_treatment AS "taxTreatment",is_enabled AS "isEnabled",requires_approval AS "requiresApproval",effective_from::text AS "effectiveFrom",effective_to::text AS "effectiveTo" FROM tenant_allowance_types WHERE tenant_id=$1 ORDER BY code,effective_from DESC', [tenantId]));
+  }
+
+  listDeductionTypes(tenantId: string) {
+    return this.tenantDb.run(tenantId, m => m.query('SELECT id,code,name,category,calculation_method AS "calculationMethod",configuration,taxable_treatment AS "taxableTreatment",is_system AS "isSystem",is_enabled AS "isEnabled",requires_approval AS "requiresApproval",effective_from::text AS "effectiveFrom",effective_to::text AS "effectiveTo" FROM tenant_deduction_types WHERE tenant_id=$1 ORDER BY code,effective_from DESC', [tenantId]));
+  }
+
   listPayComponents(tenantId: string) {
     return this.tenantDb.run(tenantId, async m => {
       const allowances = await m.query('SELECT id,code,name,calculation_method AS "calculationMethod",configuration,tax_treatment AS "taxTreatment",is_enabled AS "isEnabled",requires_approval AS "requiresApproval",effective_from::text AS "effectiveFrom",effective_to::text AS "effectiveTo" FROM tenant_allowance_types WHERE tenant_id=$1 ORDER BY code,effective_from DESC', [tenantId]);
