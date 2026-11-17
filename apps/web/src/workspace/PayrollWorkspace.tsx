@@ -127,6 +127,44 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
     setPaymentBatches(asRows(await request<unknown>('payroll/runs/'+selectedRun+'/payment-batches')));
   }
 
+
+  function downloadCsv(filename:string, records:unknown[][]) {
+    const csv=records.map(record=>record.map(value=>'"'+String(value??'').replace(/"/g,'""')+'"').join(',')).join('\\r\\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const url=URL.createObjectURL(blob);
+    const anchor=document.createElement('a');
+    anchor.href=url;anchor.download=filename;anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportPayrollRegister() {
+    const records:unknown[][]=[['Employee number','Employee','Basic earnings','Allowances','Gross pay','Employee statutory deductions','Other deductions','Net pay']];
+    for(const item of items) {
+      const snapshot=item.snapshot??{},worker=snapshot.worker??{},earnings=snapshot.earnings??{};
+      const statutory=snapshot.statutory??{};
+      records.push([worker.workerNumber,[worker.firstName,worker.middleName,worker.lastName].filter(Boolean).join(' '),
+        earnings.amount,snapshot.allowances?.total,earnings.grossPay,statutory.employeeStatutoryDeductions,
+        snapshot.otherDeductions?.total,snapshot.netPay]);
+    }
+    downloadCsv('jengaflow-payroll-register-'+selectedRun+'.csv',records);
+  }
+
+  function exportStatutorySummary() {
+    const grouped=new Map<string,{code:string;side:string;amount:number}>();
+    for(const item of items) {
+      const lines=item.snapshot?.statutory?.lines;
+      if(!Array.isArray(lines))continue;
+      for(const line of lines) {
+        const key=String(line.code)+'|'+String(line.side);
+        const current=grouped.get(key)??{code:String(line.code),side:String(line.side),amount:0};
+        current.amount+=Number(line.amount??0);grouped.set(key,current);
+      }
+    }
+    const records:unknown[][]=[['Statutory code','Contribution side','Total amount']];
+    for(const row of grouped.values())records.push([row.code,row.side,Math.round((row.amount+Number.EPSILON)*100)/100]);
+    downloadCsv('jengaflow-statutory-summary-'+selectedRun+'.csv',records);
+  }
+
   const selectedPeriodRow=periods.find(p=>p.id===selectedPeriod);
   const totals=(runDetail?.totals??{}) as Record<string,unknown>;
   const items=asRows(runDetail?.items);
@@ -198,6 +236,10 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
               {[[ 'Employees',totals.workerCount],['Gross earnings',totals.grossEarnings],['Employee deductions',totals.employeeDeductions],['Employer contributions',totals.employerContributions],['Net pay',totals.netPay],['Employer cost',totals.employerCost]].map(([k,v])=><Grid size={{xs:6,md:2}} key={String(k)}><Paper variant="outlined" sx={{p:1.2}}><Typography variant="caption" color="text.secondary">{String(k)}</Typography><Typography fontWeight={800}>{v==null?'—':k==='Employees'?String(v):money(v)}</Typography></Paper></Grid>)}
             </Grid>
             {warnings.length>0&&<Alert severity="warning" sx={{mb:2}}><Typography fontWeight={800}>Review warnings</Typography>{warnings.map((w,i)=><Typography key={i} variant="body2">{w}</Typography>)}</Alert>}
+            <Stack direction="row" flexWrap="wrap" gap={1} sx={{mb:1.5}}>
+              <Button size="small" variant="outlined" disabled={!items.length} onClick={exportPayrollRegister}>Export payroll register CSV</Button>
+              <Button size="small" variant="outlined" disabled={!items.length} onClick={exportStatutorySummary}>Export statutory summary CSV</Button>
+            </Stack>
             <TableContainer><Table size="small"><TableHead><TableRow>{['Employee','Earnings','Employee deductions','Employer contributions','Net pay'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
               <TableBody>{items.map(i=>{const s=i.snapshot??{};const w=s.worker??{};return <TableRow key={i.id}><TableCell>{[w.firstName,w.lastName].filter(Boolean).join(' ')||w.workerNumber||i.workerId}</TableCell><TableCell>{money(i.earnings)}</TableCell><TableCell>{money(i.employeeDeductions)}</TableCell><TableCell>{money(i.employerContributions)}</TableCell><TableCell><b>{money(i.netPay)}</b></TableCell></TableRow>})}
               {!items.length&&<TableRow><TableCell colSpan={5} align="center">Calculate this run to populate employee payroll lines.</TableCell></TableRow>}</TableBody>
