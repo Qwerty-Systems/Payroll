@@ -30,10 +30,18 @@ export function calculateContractEarnings(input:PayBasisInput):PayBasisResult {
   const activeStart=contractStart>start?contractStart:start;
   const activeEnd=contractEnd<end?contractEnd:end;
   const activeDays=activeEnd<activeStart?0:daysBetween(activeStart,activeEnd);
-  const daysInMonth=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+1,0)).getUTCDate();
   let quantity=0,unit='',amount=0;
   switch(input.payBasis){
-    case 'monthly': quantity=activeDays/daysInMonth;unit='month';amount=money(input.rate*quantity);break;
+    case 'monthly': {
+      unit='month';
+      if(activeDays===0) quantity=0;
+      else if(activeStart.getTime()!==start.getTime()||activeEnd.getTime()!==end.getTime()) {
+        // V1 deliberately does not guess a joiner/leaver proration convention.
+        // A blocking warning prevents this zero-value preview from being finalized.
+        quantity=0;
+      } else { quantity=1; amount=money(input.rate); }
+      break;
+    }
     case 'weekly': quantity=activeDays/7;unit='week';amount=money(input.rate*quantity);break;
     case 'daily': quantity=input.approvedDays??0;unit='approved_day';amount=money(input.rate*quantity);break;
     case 'hourly': quantity=(input.approvedMinutes??0)/60;unit='approved_hour';amount=money(input.rate*quantity);break;
@@ -43,6 +51,7 @@ export function calculateContractEarnings(input:PayBasisInput):PayBasisResult {
   if(!Number.isFinite(quantity)||quantity<0) throw new Error('Approved earning quantity must be finite and non-negative.');
   const warnings:string[]=[];
   if(activeDays===0) warnings.push('CONTRACT_NOT_ACTIVE_IN_PAY_PERIOD');
+  if(input.payBasis==='monthly'&&activeDays>0&&(activeStart.getTime()!==start.getTime()||activeEnd.getTime()!==end.getTime())) warnings.push('MONTHLY_CONTRACT_PARTIAL_PERIOD_REQUIRES_REVIEW');
   if(['daily','hourly','per_unit'].includes(input.payBasis)&&quantity===0) warnings.push('NO_APPROVED_EARNING_UNITS');
   return {amount,quantity,unit,warnings};
 }
