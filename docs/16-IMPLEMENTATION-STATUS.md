@@ -59,3 +59,9 @@ These additions do not make the application production-ready by themselves. Tena
 
 ## Worker documents
 Worker documents are stored in private object storage with tenant-scoped metadata. Uploads are limited to 10 MB and PDF/JPEG/PNG/WebP, with server-side signature checks. Download URLs are issued only after a tenant-scoped metadata lookup and expire after three minutes. The worker detail screen supports document type selection, upload and download.
+
+
+## Attendance correction workflow (in review)
+- Approved attendance records can receive tenant-scoped correction requests with a reason and proposed clock-in, clock-out and/or minutes-worked values.
+- A single pending correction is allowed per attendance record. The requester cannot approve their own correction; approval/rejection requires a review reason and is audited.
+- The correction request table enforces tenant RLS and a composite tenant/attendance foreign key. This does not yet replace the remaining shift, leave, overtime and timesheet workflows.
