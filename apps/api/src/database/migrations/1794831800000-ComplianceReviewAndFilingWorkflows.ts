@@ -128,7 +128,9 @@ export class ComplianceReviewAndFilingWorkflows1794831800000 implements Migratio
       RETURNS trigger LANGUAGE plpgsql AS $audit$
       BEGIN
         IF OLD.action LIKE 'compliance.%'
-          OR OLD.entity_type IN ('statutory_rule_review','statutory_rule_change','statutory_filing') THEN
+          OR OLD.entity_type IN ('statutory_rule_review','statutory_rule_change','statutory_filing')
+          OR (TG_OP='UPDATE' AND (NEW.action LIKE 'compliance.%'
+            OR NEW.entity_type IN ('statutory_rule_review','statutory_rule_change','statutory_filing'))) THEN
           RAISE EXCEPTION 'Compliance audit records are immutable.';
         END IF;
         IF TG_OP='DELETE' THEN RETURN OLD; END IF;
