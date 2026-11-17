@@ -81,7 +81,10 @@ export default function AuthenticatedApp() {
   if (!isAuthenticated) return <LoadingScreen message="Redirecting to secure sign-in…" />;
 
   const identity = apiState.status === 'ready' ? apiState.identity : undefined;
-  // A workspace membership is authoritative evidence that onboarding is complete,\n  // even if an older API response omits or misreports the provisioned flag.\n  const hasWorkspace = Boolean(identity?.provisioned || (identity?.memberships?.length ?? 0) > 0);\n  if (hasWorkspace) {
+  // A workspace membership is authoritative evidence that onboarding is complete,
+  // even if an older API response omits or misreports the provisioned flag.
+  const hasWorkspace = Boolean(identity?.provisioned || (identity?.memberships?.length ?? 0) > 0);
+  if (hasWorkspace) {
     return <TenantWorkspace
       memberships={identity.memberships ?? []}
       userName={user?.name}
