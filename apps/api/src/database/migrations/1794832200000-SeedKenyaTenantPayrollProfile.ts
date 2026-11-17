@@ -23,7 +23,7 @@ export class SeedKenyaTenantPayrollProfile1794832200000 implements MigrationInte
           CHECK (standard_working_days_per_week > 0 AND standard_working_days_per_week <= 7),
         ADD COLUMN IF NOT EXISTS allow_partial_month_proration boolean NOT NULL DEFAULT false,
         ADD COLUMN IF NOT EXISTS statutory_settings jsonb NOT NULL DEFAULT
-          '{"PAYE":{"enabled":true,"personalRelief":"eligible_resident_employees_only"},"NSSF":{"enabled":true,"employeeContribution":true,"employerContribution":true},"SHIF":{"enabled":true,"employeeContribution":true,"employerContribution":false},"AHL":{"enabled":true,"employeeRate":0.015,"employerRate":0.015},"NITA":{"enabled":true,"employerOnly":true},"insuranceRelief":{"enabled":false,"requiresEmployeeEvidence":true},"HELB":{"enabled":false,"requiresEmployeeNotice":true}}'::jsonb,
+          '{"PAYE":{"enabled":true,"personalRelief":"eligible_resident_employees_only"},"NSSF":{"enabled":true,"employeeContribution":true,"employerContribution":true},"SHIF":{"enabled":true,"employeeContribution":true,"employerContribution":false},"AHL":{"enabled":true,"employeeRate":0.015,"employerRate":0.015},"NITA":{"enabled":true,"employerOnly":true},"insuranceRelief":{"enabled":false,"requiresEmployeeEvidence":true},"HELB":{"enabled":false,"requiresEmployeeNotice":true},"mortgageInterestRelief":{"enabled":false,"requiresLenderStatement":true},"postRetirementMedicalRelief":{"enabled":false,"requiresSchemeEvidence":true}}'::jsonb,
         ADD COLUMN IF NOT EXISTS setup_completed_at timestamptz;
 
       UPDATE tenant_payroll_settings
@@ -60,7 +60,6 @@ export class SeedKenyaTenantPayrollProfile1794832200000 implements MigrationInte
         ('HELB_REPAYMENT','HELB / student loan recovery','other','fixed_amount','{"requiresAuthorityNotice":true,"employeePayrollDeduction":true}'),
         ('EMPLOYEE_PENSION','Employee registered pension contribution','voluntary','fixed_amount','{"requiresSchemeEvidence":true,"taxTreatment":"subject_to_statutory_cap"}'),
         ('POST_RETIREMENT_MEDICAL','Post-retirement medical fund contribution','voluntary','fixed_amount','{"requiresSchemeEvidence":true,"taxTreatment":"subject_to_statutory_cap"}'),
-        ('MORTGAGE_INTEREST','Owner-occupied residential mortgage interest relief','voluntary','fixed_amount','{"requiresLenderStatement":true,"taxTreatment":"taxable_income_deduction_subject_to_cap"}'),
         ('COURT_ORDER','Court-ordered deduction','other','fixed_amount','{"requiresCourtOrder":true,"legalLimitReviewRequired":true}'),
         ('GARNISHEE_ORDER','Garnishee order','other','fixed_amount','{"requiresCourtOrder":true,"legalLimitReviewRequired":true}'),
         ('STAFF_ADVANCE_RECOVERY','Salary advance recovery','recovery','balance_recovery','{"requiresSignedAcknowledgement":true}'),
