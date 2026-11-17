@@ -143,13 +143,16 @@ export class ComplianceService {
       const r=rows[0];
       if(dto.calculationMethod && dto.calculationMethod!==r.calculation_method) throw new BadRequestException('Changing the calculation method requires a reviewed payroll-engine implementation.');
       if(dto.category && dto.category!==r.category) throw new BadRequestException('A rule change cannot change the statutory category.');
+      const effectiveFrom=dto.effectiveFrom??String(r.effective_from).slice(0,10);
+      const effectiveTo=dto.effectiveTo===undefined?(r.effective_to?String(r.effective_to).slice(0,10):null):dto.effectiveTo;
+      if(effectiveTo && effectiveTo<effectiveFrom) throw new BadRequestException('The effective end date cannot precede the start date.');
       const result=await m.query(`
         UPDATE tenant_statutory_rule_changes SET label=$3,category=$4,calculation_method=$5,configuration=$6::jsonb,
           effective_from=$7,effective_to=$8,source_title=$9,source_url=$10,verified_on=$11,reason=$12,status='draft',
           submission_notes=NULL,review_notes=NULL,submitted_by=NULL,submitted_at=NULL,reviewed_by=NULL,reviewed_at=NULL,updated_at=now()
         WHERE tenant_id=$1 AND id=$2 RETURNING id,status
       `,[tenantId,id,dto.label??r.label,dto.category??r.category,dto.calculationMethod??r.calculation_method,
-        JSON.stringify(dto.configuration??r.configuration),dto.effectiveFrom??r.effective_from,dto.effectiveTo===undefined?r.effective_to:dto.effectiveTo,
+        JSON.stringify(dto.configuration??r.configuration),effectiveFrom,effectiveTo,
         dto.sourceTitle??r.source_title,dto.sourceUrl??r.source_url,dto.verifiedOn??r.verified_on,dto.reason??r.reason]);
       await this.audit(m,tenantId,actorId,'compliance.rule_change.updated','statutory_rule_change',id,{});
       return result[0];
