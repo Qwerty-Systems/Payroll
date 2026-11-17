@@ -64,7 +64,6 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [busy, setBusy] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
-  const [selectedRun, setSelectedRun] = useState('');
   const [selectedContract, setSelectedContract] = useState('');
   const [selectedPayGrade, setSelectedPayGrade] = useState('');
   const [selectedComponentId, setSelectedComponentId] = useState('');
