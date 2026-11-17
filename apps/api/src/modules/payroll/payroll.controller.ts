@@ -32,10 +32,6 @@ export class PayrollController {
   @Patch('components/:id/status') @TenantPermissions('payroll.calculate') setWorkerComponentStatus(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateWorkerPayComponentStatusDto){return this.payroll.setWorkerPayComponentStatus(req.tenant.id,req.tenant.userId,id,dto.status);}
 
 
-  @Get('workers/:workerId/components') @TenantPermissions('payroll.read') listWorkerComponents(@Req() req:TenantRequest,@Param('workerId',ParseUUIDPipe) workerId:string){return this.payroll.listWorkerPayComponents(req.tenant.id,workerId);}
-  @Post('workers/:workerId/components') @TenantPermissions('payroll.calculate') createWorkerComponent(@Req() req:TenantRequest,@Param('workerId',ParseUUIDPipe) workerId:string,@Body() dto:CreateWorkerPayComponentDto){return this.payroll.createWorkerPayComponent(req.tenant.id,req.tenant.userId,workerId,dto);}
-  @Patch('components/:id/status') @TenantPermissions('payroll.calculate') setWorkerComponentStatus(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateWorkerPayComponentStatusDto){return this.payroll.setWorkerPayComponentStatus(req.tenant.id,req.tenant.userId,id,dto.status);}
-
 
   @Get('compliance/assignments') @TenantPermissions('payroll.read') listComplianceAssignments(@Req() req:TenantRequest){return this.payroll.listComplianceAssignments(req.tenant.id);}
   @Post('compliance/assignments/:id/review') @TenantPermissions('payroll.approve') reviewComplianceAssignment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:ReviewComplianceAssignmentDto){return this.payroll.reviewComplianceAssignment(req.tenant.id,req.tenant.userId,id,dto.action,dto.reason);}
