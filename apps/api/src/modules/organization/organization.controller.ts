@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsDateString } from 'class-validator';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
-import { CreateBranchDto, CreateCostCentreDto, CreateDepartmentDto, CreateWorkerAssignmentDto, UpdateBranchDto, UpdateCostCentreDto, UpdateDepartmentDto } from './organization.dto';
+import { CreateBranchDto, CreateCostCentreDto, CreateDepartmentDto, CreateWorkerAssignmentDto, UpdateBranchDto, UpdateCostCentreDto, UpdateDepartmentDto, UpdateWorkerAssignmentDto } from './organization.dto';
 import { OrganizationService } from './organization.service';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
@@ -32,5 +32,7 @@ export class OrganizationController {
   @Delete('cost-centres/:id') @TenantPermissions('company.manage') archiveCostCentre(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string){return this.organization.archiveCostCentre(req.tenant.id,req.tenant.userId,id);}
   @Get('worker-assignments') @TenantPermissions('workers.read') assignments(@Req() req: TenantRequest,@Query('workerId') workerId?: string) { return this.organization.listWorkerAssignments(req.tenant.id,workerId); }
   @Post('worker-assignments') @TenantPermissions('workers.manage') createAssignment(@Req() req: TenantRequest,@Body() dto: CreateWorkerAssignmentDto) { return this.organization.createWorkerAssignment(req.tenant.id,req.tenant.userId,dto); }
+  @Get('worker-assignments/:id') @TenantPermissions('workers.read') getAssignment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string){return this.organization.getWorkerAssignment(req.tenant.id,id);}
+  @Patch('worker-assignments/:id') @TenantPermissions('workers.manage') updateAssignment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateWorkerAssignmentDto){return this.organization.updateWorkerAssignment(req.tenant.id,req.tenant.userId,id,dto);}
   @Patch('worker-assignments/:id/end') @TenantPermissions('workers.manage') endAssignment(@Req() req: TenantRequest,@Param('id',ParseUUIDPipe) id: string,@Body() dto: EndAssignmentDto) { return this.organization.endWorkerAssignment(req.tenant.id,id,dto.effectiveTo); }
 }
