@@ -62,16 +62,16 @@ describe('AuthenticatedApp', () => {
 
     render(<AuthenticatedApp />);
 
-    await waitFor(() => expect(screen.getByText(/api authentication succeeded/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', { name: /welcome back, payroll/i })).toBeInTheDocument());
     expect(fetch).toHaveBeenCalledWith(
       'https://api.example.test/api/v1/auth/me',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer test-access-token' }),
       }),
     );
-    expect(screen.getByText('Example Company')).toBeInTheDocument();
-    expect(screen.getByText(/owner workspace/i)).toBeInTheDocument();
-    expect(screen.getByText('trial')).toBeInTheDocument();
+    expect(screen.getAllByText('Example Company').length).toBeGreaterThan(0);
+    expect(screen.getByText('People & workers')).toBeInTheDocument();
+    expect(screen.getByText('Overview')).toBeInTheDocument();
   });
 
   it('generates a workspace slug from the display name and preserves a manual edit', async () => {
