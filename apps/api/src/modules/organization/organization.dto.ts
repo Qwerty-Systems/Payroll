@@ -23,6 +23,7 @@ export class UpdateCostCentreDto {
 }
 
 export class UpdateWorkerAssignmentDto {
+  @IsOptional() @IsUUID() workerId?: string;
   @IsOptional() @IsUUID() branchId?: string | null;
   @IsOptional() @IsUUID() departmentId?: string | null;
   @IsOptional() @IsUUID() costCentreId?: string | null;
