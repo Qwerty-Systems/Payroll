@@ -39,7 +39,7 @@ export class WorkerDocumentsService {
   async upload(tenantId: string, actorId: string, workerId: string, documentType: string, file: UploadFile) {
     if (!DOCUMENT_TYPES.has(documentType)) throw new BadRequestException('Select a valid worker document type.');
     this.validateFile(file);
-    const name = file.originalname.split(/[\\/]/).pop()?.replace(/[\\x00-\\x1f\\x7f]/g,'').trim().slice(0,180);
+    const name = file.originalname.split(/[\\/]/).pop()?.replace(/[\x00-\x1f\x7f]/g,'').trim().slice(0,180);
     if (!name) throw new BadRequestException('The uploaded file must have a valid filename.');
     const worker = await this.tenantDb.run(tenantId, async m => {
       const rows = await m.query('SELECT id FROM workers WHERE tenant_id=$1 AND id=$2', [tenantId,workerId]);
