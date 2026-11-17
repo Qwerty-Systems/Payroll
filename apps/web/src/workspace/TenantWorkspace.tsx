@@ -210,11 +210,13 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           rateAmount: Number(forms.rateAmount), currency: 'KES', effectiveFrom: forms.effectiveFrom,
           terms: forms.payBasis === 'per_unit' ? { unitCodes: (forms.unitCodes ?? '').split(',').map(x => x.trim()).filter(Boolean) } : {},
         }) });
+        setContracts(asRows(await request<unknown>(`tenant/workers/${selectedWorker}/contracts`)));
         setNotice('Contract added to the worker history.');
       } else if (dialog === 'endContract') {
         await request(`tenant/workers/${selectedWorker}/contracts/${selectedContract}/end`, {
           method: 'PATCH', body: JSON.stringify({ effectiveTo: forms.contractEndDate }),
         });
+        setContracts(asRows(await request<unknown>(`tenant/workers/${selectedWorker}/contracts`)));
         setNotice('Worker contract end date recorded.');
       } else if (dialog === 'payGrade') {
         await request('tenant/pay-grades', { method: 'POST', body: JSON.stringify({
