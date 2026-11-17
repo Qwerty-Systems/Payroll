@@ -183,11 +183,11 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof body.message === 'string' ? body.message : 'Document upload failed.');
       setDocumentFile(null);
-      setNotice('Worker document uploaded securely.');
+      setNotice('Employee document uploaded securely.');
       const docs = await request<unknown>(`tenant/workers/${selectedWorker}/documents`);
       setWorkerDocuments(asRows(docs));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Worker document upload failed.');
+      setError(cause instanceof Error ? cause.message : 'Employee document upload failed.');
     } finally { setUploadingDocument(false); }
   }
 
@@ -257,7 +257,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           terms: forms.payBasis === 'per_unit' ? { unitCodes: (forms.unitCodes ?? '').split(',').map(x => x.trim()).filter(Boolean) } : {},
         }) });
         setContracts(asRows(await request<unknown>(`tenant/workers/${selectedWorker}/contracts`)));
-        setNotice('Contract added to the worker history.');
+        setNotice('Contract added to the employee history.');
       } else if (dialog === 'endContract') {
         await request(`tenant/workers/${selectedWorker}/contracts/${selectedContract}/end`, {
           method: 'PATCH', body: JSON.stringify({ effectiveTo: forms.contractEndDate }),
@@ -340,9 +340,9 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     setBusy(true); setError(''); setNotice('');
     try {
       await request(`tenant/workers/${workerId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
-      setNotice(`Worker status updated to ${status.replaceAll('_',' ')}.`);
+      setNotice(`Employee status updated to ${status.replaceAll('_',' ')}.`);
       await refresh();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Worker status could not be updated.'); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Employee status could not be updated.'); }
     finally { setBusy(false); }
   }
 
@@ -420,7 +420,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const pageDescription: Record<Section, string> = {
     overview: 'A clear picture of your workforce and operations.',
     workers: 'Manage employee records, contracts and employment history.',
-    'pay-grades': 'Define reusable pay bands and assign them to worker contracts.',
+    'pay-grades': 'Define reusable pay bands and assign them to employee contracts.',
     projects: 'Organize projects, clients and work sites.',
     attendance: 'Capture work activity and review submitted records.',
     payroll: 'Manage pay periods and review payroll calculation previews.',
@@ -608,7 +608,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
             <Stack direction="row" spacing={1}>
               <Tooltip title="Refresh records"><span><Button variant="outlined" color="inherit" startIcon={<RefreshRounded />} onClick={() => void refresh()} disabled={loading} sx={{ borderColor: '#DCE4DC' }}>Refresh</Button></span></Tooltip>
               {section === 'workers' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('worker')}>Add employee</Button>}
-              {section === 'pay-grades' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('payGrade')}>Create pay grade</Button>}
+              {section === 'pay-grades' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => { setSelectedPayGrade(''); setDialog('payGrade'); }}>Create pay grade</Button>}
               {section === 'projects' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('project')}>Add project</Button>}
               {section === 'attendance' && <Button variant="contained" startIcon={<AddRounded />} disabled={!selectedWorker || !selectedProject} onClick={() => setDialog('attendance')}>Capture</Button>}
               {section === 'payroll' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('period')}>New period</Button>}
@@ -665,7 +665,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                         ['Employer contributions', totals.employerContributions], ['Net pay', totals.netPay], ['Total employer cost', totals.employerCost],
                       ].map(([title, value]) => <Grid size={{ xs: 6, md: 4, xl: 2 }} key={String(title)}>
                         <Paper variant="outlined" sx={{ p: 1.5, borderColor: '#E6EBE5', borderRadius: 2 }}>
-                          <Typography variant="caption" color="text.secondary">{title}</Typography>
+                          <Typography variant="caption" color="text.secondary">{String(title)}</Typography>
                           <Typography fontWeight={850} sx={{ mt: .4 }}>{value == null ? '—' : title === 'Employees' ? label(value) : 'KES ' + Number(value).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Typography>
                         </Paper>
                       </Grid>)}
@@ -698,7 +698,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               </Box> : <TableContainer sx={{ overflowX: 'auto' }}><Table size="medium"><TableHead><TableRow>
                 {(section === 'workers' ? ['Employee no.','Name','Phone','Email','Status','Actions'] :
                   section === 'projects' ? ['Code','Project','Client','Status','Select'] :
-                  ['Date','Worker ID','Project ID','Minutes','Status','Actions']).map(x => <TableCell key={x} sx={{ bgcolor: '#F8FAF8', color: '#66756A', fontWeight: 800, fontSize: '.72rem', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>{x}</TableCell>)}
+                  ['Date','Employee ID','Project ID','Minutes','Status','Actions']).map(x => <TableCell key={x} sx={{ bgcolor: '#F8FAF8', color: '#66756A', fontWeight: 800, fontSize: '.72rem', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>{x}</TableCell>)}
               </TableRow></TableHead><TableBody>
                 {filteredRows.map(row => <TableRow key={String(row.id ?? JSON.stringify(row))} hover>
                   {section === 'workers' && <><TableCell>{label(row.workerNumber)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.firstName)} {label(row.lastName)}</Typography></TableCell><TableCell>{label(row.phone)}</TableCell><TableCell>{label(row.email)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Stack direction="row" spacing={.5}><Button size="small" variant={selectedWorker === row.id ? 'contained' : 'text'} onClick={() => setSelectedWorker(String(row.id))}>{selectedWorker === row.id ? 'Selected' : 'View'}</Button><Button size="small" color="error" disabled={busy} onClick={() => void permanentlyDeleteEmployee(String(row.id))}>Delete</Button></Stack></TableCell></>}
@@ -754,9 +754,9 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     </Box>
 
     <SyncReviewDialog open={reviewOpen} tenantId={tenantId} onClose={() => setReviewOpen(false)} onChanged={() => { void refreshQueueCounts(); void syncOfflineQueue(false); }} />
-    <Dialog open={Boolean(dialog)} onClose={() => setDialog('')} fullWidth maxWidth="sm">
+    <Dialog open={Boolean(dialog)} onClose={() => { setDialog(''); setSelectedPayGrade(''); setSelectedComponentId(''); }} fullWidth maxWidth="sm">
       <Box component="form" onSubmit={submit}>
-        <DialogTitle>{dialog === 'worker' ? 'Add worker' : dialog === 'contract' ? 'Add worker contract' : dialog === 'endContract' ? 'End worker contract' : dialog === 'payGrade' ? (selectedPayGrade ? 'Edit pay grade' : 'Create pay grade') : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : dialog === 'payComponent' ? 'Configure pay component' : 'Create payroll period'}</DialogTitle>
+        <DialogTitle>{dialog === 'worker' ? 'Add employee' : dialog === 'contract' ? 'Add employee contract' : dialog === 'endContract' ? 'End employee contract' : dialog === 'payGrade' ? (selectedPayGrade ? 'Edit pay grade' : 'Create pay grade') : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : dialog === 'payComponent' ? 'Configure pay component' : 'Create payroll period'}</DialogTitle>
         <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
           {dialog === 'endContract' && <><Alert severity="warning">Ending a contract is effective-dated and cannot be extended. Create a new contract version if the worker is rehired.</Alert><TextField label="Effective to" type="date" required InputLabelProps={{ shrink: true }} value={forms.contractEndDate} onChange={e => setField('contractEndDate', e.target.value)} /></>}
           {dialog === 'worker' && <><TextField label="Employee number" required value={forms.workerNumber} onChange={e => setField('workerNumber', e.target.value)} /><TextField label="First name" required value={forms.firstName} onChange={e => setField('firstName', e.target.value)} /><TextField label="Last name" required value={forms.lastName} onChange={e => setField('lastName', e.target.value)} /><TextField label="Phone" value={forms.phone} onChange={e => setField('phone', e.target.value)} /><TextField label="Email" type="email" value={forms.email} onChange={e => setField('email', e.target.value)} /></>}
@@ -780,7 +780,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           </>}
           {dialog === 'period' && <><TextField label="Period code" required value={forms.periodCode} onChange={e => setField('periodCode', e.target.value)} /><TextField label="Period name" required value={forms.periodName} onChange={e => setField('periodName', e.target.value)} /><TextField label="Start date" type="date" required InputLabelProps={{ shrink: true }} value={forms.startDate} onChange={e => setField('startDate', e.target.value)} /><TextField label="End date" type="date" required InputLabelProps={{ shrink: true }} value={forms.endDate} onChange={e => setField('endDate', e.target.value)} /></>}
         </Stack></DialogContent>
-        <DialogActions sx={{ p: 2.5 }}><Button onClick={() => setDialog('')}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button></DialogActions>
+        <DialogActions sx={{ p: 2.5 }}><Button onClick={() => { setDialog(''); setSelectedPayGrade(''); setSelectedComponentId(''); }}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button></DialogActions>
       </Box>
     </Dialog>
   </Box>;
