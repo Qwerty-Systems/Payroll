@@ -24,7 +24,7 @@ import AssignmentTurnedInRounded from '@mui/icons-material/AssignmentTurnedInRou
 import AccountBalanceWalletRounded from '@mui/icons-material/AccountBalanceWalletRounded';
 import TenantAdministration from './TenantAdministration';
 import CloudSyncRounded from '@mui/icons-material/CloudSyncRounded';
-import { downloadOfflineReferenceData, queueOfflineAttendance, synchronizeOfflineAttendance } from '../offline/offline-api';
+import { downloadOfflineReferenceData, getCachedOfflineReferenceData, queueOfflineAttendance, synchronizeOfflineAttendance } from '../offline/offline-api';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
@@ -125,7 +125,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     };
     const entries = await Promise.all(Object.entries(endpoints).map(async ([key, path]) => {
       try { return [key, asRows(await request<unknown>(path))] as const; }
-      catch { return [key, [] as RowData[]] as const; }
+      catch { const cached = await getCachedOfflineReferenceData<Record<string, unknown[]>>(tenantId); return [key, asRows(cached?.[key])] as const; }
     }));
     setData(Object.fromEntries(entries));
     setLoading(false);
