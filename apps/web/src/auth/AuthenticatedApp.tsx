@@ -81,6 +81,20 @@ export default function AuthenticatedApp() {
   if (!isAuthenticated) return <LoadingScreen message="Redirecting to secure sign-in…" />;
 
   const identity = apiState.status === 'ready' ? apiState.identity : undefined;
+  if (identity?.provisioned) {
+    return <TenantWorkspace
+      memberships={identity.memberships ?? []}
+      userName={user?.name}
+      userPicture={user?.picture}
+      apiBaseUrl={auth0Config.apiBaseUrl}
+      getToken={async () => {
+        const token = await getAccessTokenSilently({ authorizationParams: { audience: auth0Config.audience, scope: 'openid profile email' } });
+        if (!token) throw new Error('The identity provider did not return an API access token.');
+        return token;
+      }}
+      onSignOut={() => void logout({ logoutParams: { returnTo: window.location.origin } })}
+    />;
+  }
   return <Box sx={{ minHeight: '100vh', bgcolor: '#F7F5EF', color: '#17372B' }}>
     <Box sx={{ bgcolor: '#17372B', color: 'white', py: 2 }}><Container maxWidth="lg"><Stack direction="row" alignItems="center" justifyContent="space-between"><Stack direction="row" alignItems="center" spacing={1.5}><Avatar sx={{ bgcolor: '#D6A84F', color: '#17372B' }}><ConstructionRounded /></Avatar><Box><Typography fontWeight={900}>JengaFlow</Typography><Typography variant="caption" sx={{ color: 'rgba(255,255,255,.65)' }}>QWERTY SYSTEMS WORKSPACE</Typography></Box></Stack><Button color="inherit" startIcon={<LogoutRounded />} onClick={() => void logout({ logoutParams: { returnTo: window.location.origin } })}>Sign out</Button></Stack></Container></Box>
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 7 } }}>
@@ -107,14 +121,7 @@ export default function AuthenticatedApp() {
           <Button type="submit" variant="contained" disabled={submitting || !company.legalName.trim() || !company.displayName.trim() || company.slug.length < 3} sx={{ py: 1.4, bgcolor: '#17372B', '&:hover': { bgcolor: '#2F6B4F' } }}>{submitting ? 'Creating workspace…' : 'Create company workspace'}</Button>
         </Stack>
       </Paper>}
-      {identity?.provisioned && <TenantWorkspace
-        memberships={identity.memberships ?? []}
-        userName={user?.name}
-        userPicture={user?.picture}
-        apiBaseUrl={auth0Config.apiBaseUrl}
-        getToken={async () => { const token = await getAccessTokenSilently({ authorizationParams: { audience: auth0Config.audience, scope: 'openid profile email' } }); if (!token) throw new Error('The identity provider did not return an API access token.'); return token; }}
-        onSignOut={() => void logout({ logoutParams: { returnTo: window.location.origin } })}
-      />}
+
     </Container>
   </Box>;
 }
