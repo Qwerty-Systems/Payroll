@@ -86,4 +86,30 @@ describe('SyncService', () => {
 
     expect(result.outcomes[0]).toMatchObject({ commandId, status: 'rejected' });
   });
+
+  it('discards a conflict, closes its command and writes an audit event atomically', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ id: 'conflict-1', commandId, state: 'discarded', resolution: 'Reviewed duplicate capture' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const { service } = createService(query);
+
+    await expect(service.resolveConflict(tenantId, userId, 'conflict-1', 'Reviewed duplicate capture'))
+      .resolves.toMatchObject({ id: 'conflict-1', state: 'discarded' });
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[0][0]).toContain("state='discarded'");
+    expect(query.mock.calls[1][0]).toContain("state='rejected'");
+    expect(query.mock.calls[1][1]).toEqual([tenantId, commandId, 'Reviewed duplicate capture']);
+    expect(query.mock.calls[2][0]).toContain('sync.conflict.discarded');
+  });
+
+  it('returns not found when a conflict was already resolved', async () => {
+    const query = jest.fn().mockResolvedValueOnce([]);
+    const { service } = createService(query);
+
+    await expect(service.resolveConflict(tenantId, userId, 'missing-conflict', 'Reviewed duplicate capture'))
+      .rejects.toBeInstanceOf(NotFoundException);
+    expect(query).toHaveBeenCalledTimes(1);
+  });
 });
