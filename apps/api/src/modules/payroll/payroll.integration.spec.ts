@@ -107,8 +107,10 @@ suite('Payroll flow against PostgreSQL (RLS enforced)', () => {
     await assignDeduction('SACCO_CONTRIBUTION', 2000, null);
     await assignDeduction('STAFF_LOAN_RECOVERY', 5000, 12000);
 
-    const novRun = await newRun('2026-11', '2026-11-01', '2026-11-30');
-    const calc: any = await service.calculateRun(tenantId, creator, novRun);
+    // November 2026 crosses the 2026-11-16 NITA and PAYE-allowable-deduction
+    // rule effective dates. Keep this end-to-end loan test on a full month after both.
+    const decRun = await newRun('2026-12', '2026-12-01', '2026-12-31');
+    const calc: any = await service.calculateRun(tenantId, creator, decRun);
     const statutory = calculateKenyaMonthlyPayroll(110000, rules); // 100k basic + 10k taxable allowance
     const expectedNet = Math.round((115000 - statutory.employeeStatutoryDeductions - 7000) * 100) / 100;
 
@@ -116,24 +118,24 @@ suite('Payroll flow against PostgreSQL (RLS enforced)', () => {
     expect(calc.warnings.filter((w: string) => /REQUIRES_REVIEW|NOT_AVAILABLE|NET_PAY|NOT_INCLUDED/.test(w))).toEqual([]);
     expect((await loan()).bal).toBe(12000); // calculation must not touch balances
 
-    await finalize(novRun);
+    await finalize(janRun);
     expect(await loan()).toEqual({ bal: 7000, status: 'active' });
-    const payslips: any[] = await service.listPayslips(tenantId, novRun);
+    const payslips: any[] = await service.listPayslips(tenantId, decRun);
     expect(payslips).toHaveLength(1);
     expect(payslips[0].snapshot.otherDeductions.total).toBe(7000);
 
     // Final instalment is capped at what remains, then the assignment completes.
     await q("UPDATE worker_deduction_assignments SET outstanding_balance=3000 WHERE tenant_id=$1 AND amount=5000", [tenantId]);
-    const decRun = await newRun('2026-12', '2026-12-01', '2026-12-31');
-    const dec: any = await service.calculateRun(tenantId, creator, decRun);
-    expect(dec.totals.employeeDeductions).toBeCloseTo(calculateKenyaMonthlyPayroll(110000, rules).employeeStatutoryDeductions + 2000 + 3000, 2);
+    const janRun = await newRun('2027-01', '2027-01-01', '2027-01-31');
+    const jan: any = await service.calculateRun(tenantId, creator, janRun);
+    expect(jan.totals.employeeDeductions).toBeCloseTo(calculateKenyaMonthlyPayroll(110000, rules).employeeStatutoryDeductions + 2000 + 3000, 2);
     await finalize(decRun);
     expect(await loan()).toEqual({ bal: 0, status: 'completed' });
   });
 
   it('blocks finalization when an hours-based allowance has no approved-hours source', async () => {
     await assignAllowance('OVERTIME', 300);
-    const runId = await newRun('2027-01', '2027-01-01', '2027-01-31');
+    const runId = await newRun('2027-02', '2027-02-01', '2027-02-28');
     const calc: any = await service.calculateRun(tenantId, creator, runId);
     expect(calc.warnings).toContain('W001:OVERTIME:ALLOWANCE_HOURS_SOURCE_NOT_AVAILABLE');
     await service.transitionRun(tenantId, creator, runId, 'submit');
