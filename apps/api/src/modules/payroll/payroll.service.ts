@@ -119,7 +119,6 @@ export class PayrollService {
         deductionsByWorker.set(r.worker_id, list);
       }
       const warnings: string[] = [];
-      if (!rulesetRows[0].compliance_approved_at) warnings.push('STATUTORY_RULESET_REQUIRES_PLATFORM_COMPLIANCE_APPROVAL');
       const itemSnapshots: any[] = [];
       for (const worker of workers) {
         if (Number(worker.overlapping_contracts) !== 1) throw new ConflictException('Worker '+worker.worker_number+' has overlapping contracts. Resolve contract dates before calculating payroll.');
