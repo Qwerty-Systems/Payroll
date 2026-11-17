@@ -20,6 +20,7 @@ const roles = ['admin','hr_manager','payroll_manager','supervisor','worker','acc
 export default function TenantAdministration({ section, role, data, request, refresh }: Props) {
   const [invitations, setInvitations] = useState<RowData[]>([]);
   const [dialog, setDialog] = useState('');
+  const [editingId, setEditingId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -44,15 +45,18 @@ export default function TenantAdministration({ section, role, data, request, ref
         const result = await request<RowData>('tenant/users/invitations', {method:'POST',body:JSON.stringify({email:fields.email,role:fields.role})});
         setIssuedToken(String(result.inviteToken ?? ''));
         setNotice('Invitation created. Share the token securely with the invited person; email delivery is not configured.');
-      } else if (dialog === 'branch') {
-        await request('tenant/organization/branches',{method:'POST',body:JSON.stringify({code:fields.code,name:fields.name,address:fields.address || undefined})});
-        setNotice('Branch created.');
-      } else if (dialog === 'department') {
-        await request('tenant/organization/departments',{method:'POST',body:JSON.stringify({code:fields.code,name:fields.name,branchId:fields.branchId || undefined})});
-        setNotice('Department created.');
-      } else if (dialog === 'costCentre') {
-        await request('tenant/organization/cost-centres',{method:'POST',body:JSON.stringify({code:fields.code,name:fields.name})});
-        setNotice('Cost centre created.');
+      } else if (dialog === 'branch' || dialog === 'editBranch') {
+        const editing = dialog === 'editBranch';
+        await request(editing ? `tenant/organization/branches/${editingId}` : 'tenant/organization/branches',{method:editing?'PATCH':'POST',body:JSON.stringify({code:fields.code,name:fields.name,address:fields.address || null,status:fields.status || 'active'})});
+        setNotice(editing ? 'Branch updated.' : 'Branch created.');
+      } else if (dialog === 'department' || dialog === 'editDepartment') {
+        const editing = dialog === 'editDepartment';
+        await request(editing ? `tenant/organization/departments/${editingId}` : 'tenant/organization/departments',{method:editing?'PATCH':'POST',body:JSON.stringify({code:fields.code,name:fields.name,branchId:fields.branchId || null,status:fields.status || 'active'})});
+        setNotice(editing ? 'Department updated.' : 'Department created.');
+      } else if (dialog === 'costCentre' || dialog === 'editCostCentre') {
+        const editing = dialog === 'editCostCentre';
+        await request(editing ? `tenant/organization/cost-centres/${editingId}` : 'tenant/organization/cost-centres',{method:editing?'PATCH':'POST',body:JSON.stringify({code:fields.code,name:fields.name,status:fields.status || 'active'})});
+        setNotice(editing ? 'Cost centre updated.' : 'Cost centre created.');
       } else if (dialog === 'assignment') {
         await request('tenant/organization/worker-assignments',{method:'POST',body:JSON.stringify({
           workerId:fields.workerId,branchId:fields.branchId || undefined,
@@ -68,6 +72,23 @@ export default function TenantAdministration({ section, role, data, request, ref
     finally { setBusy(false); }
   }
 
+
+  function openEdit(kind:'Branch'|'Department'|'CostCentre', row:RowData) {
+    setEditingId(String(row.id ?? ''));
+    set('code',String(row.code ?? ''));
+    set('name',String(row.name ?? ''));
+    set('address',String(row.address ?? ''));
+    set('branchId',String(row.branchId ?? ''));
+    set('status',String(row.status ?? 'active'));
+    setDialog('edit'+kind);
+  }
+  async function archiveStructure(kind:'branches'|'departments'|'cost-centres', id:string) {
+    if (!window.confirm('Archive this record? It will remain in historical records and cannot be selected for new assignments.')) return;
+    setBusy(true); setError(''); setNotice('');
+    try { await request(`tenant/organization/${kind}/${id}`,{method:'DELETE'}); setNotice('Record archived.'); await refresh(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Record could not be archived.'); }
+    finally { setBusy(false); }
+  }
   async function updateRole(id:string, nextRole:string) {
     setBusy(true); setError(''); setNotice('');
     try {
@@ -141,11 +162,11 @@ export default function TenantAdministration({ section, role, data, request, ref
           </Stack>
         </Stack>
         <Typography fontWeight={800} sx={{mt:2}}>Branches</Typography>
-        <Table size="small"><TableHead><TableRow>{['Code','Name','Address','Status'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>{branches.map(row=><TableRow key={String(row.id)}><TableCell>{value(row.code)}</TableCell><TableCell>{value(row.name)}</TableCell><TableCell>{value(row.address)}</TableCell><TableCell>{value(row.status)}</TableCell></TableRow>)}{!branches.length&&<TableRow><TableCell colSpan={4}>No branches configured.</TableCell></TableRow>}</TableBody></Table>
+        <Table size="small"><TableHead><TableRow>{['Code','Name','Address','Status','Actions'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>{branches.map(row=><TableRow key={String(row.id)}><TableCell>{value(row.code)}</TableCell><TableCell>{value(row.name)}</TableCell><TableCell>{value(row.address)}</TableCell><TableCell>{value(row.status)}</TableCell><TableCell><Button size="small" disabled={!canManage||busy} onClick={()=>openEdit('Branch',row)}>Edit</Button><Button size="small" color="error" disabled={!canManage||busy||row.status!=='active'} onClick={()=>void archiveStructure('branches',String(row.id))}>Archive</Button></TableCell></TableRow>)}{!branches.length&&<TableRow><TableCell colSpan={5}>No branches configured.</TableCell></TableRow>}</TableBody></Table>
         <Typography fontWeight={800} sx={{mt:2}}>Departments</Typography>
-        <Table size="small"><TableHead><TableRow>{['Code','Name','Branch','Status'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>{departments.map(row=><TableRow key={String(row.id)}><TableCell>{value(row.code)}</TableCell><TableCell>{value(row.name)}</TableCell><TableCell>{value(row.branchId)}</TableCell><TableCell>{value(row.status)}</TableCell></TableRow>)}{!departments.length&&<TableRow><TableCell colSpan={4}>No departments configured.</TableCell></TableRow>}</TableBody></Table>
+        <Table size="small"><TableHead><TableRow>{['Code','Name','Branch','Status','Actions'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>{departments.map(row=><TableRow key={String(row.id)}><TableCell>{value(row.code)}</TableCell><TableCell>{value(row.name)}</TableCell><TableCell>{value(row.branchId)}</TableCell><TableCell>{value(row.status)}</TableCell><TableCell><Button size="small" disabled={!canManage||busy} onClick={()=>openEdit('Department',row)}>Edit</Button><Button size="small" color="error" disabled={!canManage||busy||row.status!=='active'} onClick={()=>void archiveStructure('departments',String(row.id))}>Archive</Button></TableCell></TableRow>)}{!departments.length&&<TableRow><TableCell colSpan={5}>No departments configured.</TableCell></TableRow>}</TableBody></Table>
         <Typography fontWeight={800} sx={{mt:2}}>Cost centres</Typography>
-        <Table size="small"><TableHead><TableRow>{['Code','Name','Status'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>{costCentres.map(row=><TableRow key={String(row.id)}><TableCell>{value(row.code)}</TableCell><TableCell>{value(row.name)}</TableCell><TableCell>{value(row.status)}</TableCell></TableRow>)}{!costCentres.length&&<TableRow><TableCell colSpan={3}>No cost centres configured.</TableCell></TableRow>}</TableBody></Table>
+        <Table size="small"><TableHead><TableRow>{['Code','Name','Status','Actions'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>{costCentres.map(row=><TableRow key={String(row.id)}><TableCell>{value(row.code)}</TableCell><TableCell>{value(row.name)}</TableCell><TableCell>{value(row.status)}</TableCell><TableCell><Button size="small" disabled={!canManage||busy} onClick={()=>openEdit('CostCentre',row)}>Edit</Button><Button size="small" color="error" disabled={!canManage||busy||row.status!=='active'} onClick={()=>void archiveStructure('cost-centres',String(row.id))}>Archive</Button></TableCell></TableRow>)}{!costCentres.length&&<TableRow><TableCell colSpan={4}>No cost centres configured.</TableCell></TableRow>}</TableBody></Table>
       </Paper>
       <Paper variant="outlined" sx={{p:2,borderColor:'#E3E0D6'}}>
         <Typography variant="h6" fontWeight={900}>Worker assignments</Typography>
@@ -156,7 +177,7 @@ export default function TenantAdministration({ section, role, data, request, ref
       <DialogTitle>{dialog==='invite'?'Invite team member':dialog==='branch'?'Add branch':dialog==='department'?'Add department':dialog==='costCentre'?'Add cost centre':'Create worker assignment'}</DialogTitle>
       <DialogContent><Stack spacing={2} sx={{pt:1}}>
         {dialog==='invite'&&<><TextField label="Email address" type="email" required value={fields.email} onChange={e=>set('email',e.target.value)}/><TextField select label="Workspace role" value={fields.role} onChange={e=>set('role',e.target.value)}>{assignableRoles.map(item=><MenuItem key={item} value={item}>{item}</MenuItem>)}</TextField><Alert severity="info">The API returns a one-time invitation token. No email is sent by this workflow yet.</Alert></>}
-        {['branch','department','costCentre'].includes(dialog)&&<><TextField label="Code" required value={fields.code} onChange={e=>set('code',e.target.value)}/><TextField label="Name" required value={fields.name} onChange={e=>set('name',e.target.value)}/>{dialog==='branch'&&<TextField label="Address" value={fields.address} onChange={e=>set('address',e.target.value)}/ >}{dialog==='department'&&<TextField select label="Branch (optional)" value={fields.branchId} onChange={e=>set('branchId',e.target.value)}><MenuItem value="">No branch</MenuItem>{branches.map(row=><MenuItem key={String(row.id)} value={String(row.id)}>{value(row.name)}</MenuItem>)}</TextField>}</>}
+        {['branch','department','costCentre','editBranch','editDepartment','editCostCentre'].includes(dialog)&&<><TextField label="Code" required value={fields.code} onChange={e=>set('code',e.target.value)}/><TextField label="Name" required value={fields.name} onChange={e=>set('name',e.target.value)}/>{(dialog==='branch'||dialog==='editBranch')&&<TextField label="Address" value={fields.address} onChange={e=>set('address',e.target.value)}/ >}{(dialog==='department'||dialog==='editDepartment')&&<TextField select label="Branch (optional)" value={fields.branchId} onChange={e=>set('branchId',e.target.value)}><MenuItem value="">No branch</MenuItem>{branches.filter(row=>row.status==='active').map(row=><MenuItem key={String(row.id)} value={String(row.id)}>{value(row.name)}</MenuItem>)}</TextField>}{dialog.startsWith('edit')&&<TextField select label="Status" value={fields.status} onChange={e=>set('status',e.target.value)}><MenuItem value="active">Active</MenuItem><MenuItem value="inactive">Inactive</MenuItem></TextField>}</>}
         {dialog==='assignment'&&<><TextField select label="Worker" required value={fields.workerId} onChange={e=>set('workerId',e.target.value)}>{(data.workers??[]).map(row=><MenuItem key={String(row.id)} value={String(row.id)}>{value(row.workerNumber)} · {value(row.firstName)} {value(row.lastName)}</MenuItem>)}</TextField><TextField select label="Branch" value={fields.branchId} onChange={e=>set('branchId',e.target.value)}><MenuItem value="">None</MenuItem>{branches.map(row=><MenuItem key={String(row.id)} value={String(row.id)}>{value(row.name)}</MenuItem>)}</TextField><TextField select label="Department" value={fields.departmentId} onChange={e=>set('departmentId',e.target.value)}><MenuItem value="">None</MenuItem>{departments.map(row=><MenuItem key={String(row.id)} value={String(row.id)}>{value(row.name)}</MenuItem>)}</TextField><TextField select label="Cost centre" value={fields.costCentreId} onChange={e=>set('costCentreId',e.target.value)}><MenuItem value="">None</MenuItem>{costCentres.map(row=><MenuItem key={String(row.id)} value={String(row.id)}>{value(row.name)}</MenuItem>)}</TextField><TextField select label="Project" value={fields.projectId} onChange={e=>set('projectId',e.target.value)}><MenuItem value="">None</MenuItem>{(data.projects??[]).map(row=><MenuItem key={String(row.id)} value={String(row.id)}>{value(row.name)}</MenuItem>)}</TextField><TextField select label="Site" value={fields.siteId} onChange={e=>set('siteId',e.target.value)}><MenuItem value="">None</MenuItem>{(data.sites??[]).filter(row=>!fields.projectId||row.projectId===fields.projectId).map(row=><MenuItem key={String(row.id)} value={String(row.id)}>{value(row.name)}</MenuItem>)}</TextField><TextField label="Effective from" type="date" required InputLabelProps={{shrink:true}} value={fields.effectiveFrom} onChange={e=>set('effectiveFrom',e.target.value)}/><TextField label="Effective to (optional)" type="date" InputLabelProps={{shrink:true}} value={fields.effectiveTo} onChange={e=>set('effectiveTo',e.target.value)}/></>}
       </Stack></DialogContent>
       <DialogActions sx={{p:2.5}}><Button onClick={()=>setDialog('')}>Cancel</Button><Button type="submit" variant="contained" disabled={busy}>{busy?'Saving…':'Save'}</Button></DialogActions>

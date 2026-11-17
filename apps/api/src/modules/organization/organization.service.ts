@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
-import { CreateBranchDto, CreateCostCentreDto, CreateDepartmentDto, CreateWorkerAssignmentDto } from './organization.dto';
+import { CreateBranchDto, CreateCostCentreDto, CreateDepartmentDto, CreateWorkerAssignmentDto, UpdateBranchDto, UpdateCostCentreDto, UpdateDepartmentDto } from './organization.dto';
 
 @Injectable()
 export class OrganizationService {
@@ -27,4 +27,46 @@ export class OrganizationService {
       return rows[0];
     });
   }
+
+  getBranch(tenantId:string,id:string) { return this.tenantDb.run(tenantId,async m=>{ const rows=await m.query('SELECT id,code,name,address,status,created_at AS "createdAt",updated_at AS "updatedAt" FROM tenant_branches WHERE tenant_id=$1 AND id=$2',[tenantId,id]); if(!rows.length) throw new NotFoundException('Branch not found.'); return rows[0]; }); }
+  updateBranch(tenantId:string,actorId:string,id:string,dto:UpdateBranchDto) { return this.tenantDb.run(tenantId,async m=>{
+    const current=await m.query('SELECT code,name,address,status FROM tenant_branches WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]); if(!current.length) throw new NotFoundException('Branch not found.');
+    const before=current[0]; const code=dto.code===undefined?before.code:dto.code.trim(); const name=dto.name===undefined?before.name:dto.name.trim(); const address=dto.address===undefined?before.address:dto.address; const status=dto.status??before.status;
+    if(!['active','inactive'].includes(status)) throw new BadRequestException('Branch status must be active or inactive.');
+    const rows=await m.query('UPDATE tenant_branches SET code=$3,name=$4,address=$5,status=$6,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,code,name,address,status,updated_at AS "updatedAt"',[tenantId,id,code,name,address,status]);
+    await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'organization.branch.updated','tenant_branch',$3,$4::jsonb)",[tenantId,actorId,id,JSON.stringify({before,after:rows[0]})]); return rows[0];
+  }); }
+  archiveBranch(tenantId:string,actorId:string,id:string) { return this.tenantDb.run(tenantId,async m=>{
+    const used=await m.query("SELECT 1 FROM tenant_departments WHERE tenant_id=$1 AND branch_id=$2 AND status='active' UNION ALL SELECT 1 FROM worker_assignments WHERE tenant_id=$1 AND branch_id=$2 AND status='active' LIMIT 1",[tenantId,id]);
+    if(used.length) throw new BadRequestException('Move or end active department and worker assignments before archiving this branch.');
+    const rows=await m.query("UPDATE tenant_branches SET status='inactive',updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status",[tenantId,id]); if(!rows.length) throw new NotFoundException('Branch not found.');
+    await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'organization.branch.archived','tenant_branch',$3)",[tenantId,actorId,id]); return rows[0];
+  }); }
+  getDepartment(tenantId:string,id:string) { return this.tenantDb.run(tenantId,async m=>{const rows=await m.query('SELECT id,branch_id AS "branchId",code,name,status,created_at AS "createdAt",updated_at AS "updatedAt" FROM tenant_departments WHERE tenant_id=$1 AND id=$2',[tenantId,id]); if(!rows.length) throw new NotFoundException('Department not found.'); return rows[0];}); }
+  updateDepartment(tenantId:string,actorId:string,id:string,dto:UpdateDepartmentDto) { return this.tenantDb.run(tenantId,async m=>{
+    const current=await m.query('SELECT branch_id AS "branchId",code,name,status FROM tenant_departments WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]); if(!current.length) throw new NotFoundException('Department not found.');
+    const before=current[0]; const code=dto.code===undefined?before.code:dto.code.trim(); const name=dto.name===undefined?before.name:dto.name.trim(); const branchId=dto.branchId===undefined?before.branchId:dto.branchId; const status=dto.status??before.status;
+    if(!['active','inactive'].includes(status)) throw new BadRequestException('Department status must be active or inactive.');
+    if(branchId){const branch=await m.query("SELECT id FROM tenant_branches WHERE tenant_id=$1 AND id=$2 AND status='active'",[tenantId,branchId]);if(!branch.length)throw new BadRequestException('The selected branch is not active in this workspace.');}
+    const rows=await m.query('UPDATE tenant_departments SET code=$3,name=$4,branch_id=$5,status=$6,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,branch_id AS "branchId",code,name,status,updated_at AS "updatedAt"',[tenantId,id,code,name,branchId,status]);
+    await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'organization.department.updated','tenant_department',$3,$4::jsonb)",[tenantId,actorId,id,JSON.stringify({before,after:rows[0]})]); return rows[0];
+  }); }
+  archiveDepartment(tenantId:string,actorId:string,id:string) { return this.tenantDb.run(tenantId,async m=>{
+    const used=await m.query("SELECT 1 FROM worker_assignments WHERE tenant_id=$1 AND department_id=$2 AND status='active' LIMIT 1",[tenantId,id]); if(used.length) throw new BadRequestException('End or reassign active workers before archiving this department.');
+    const rows=await m.query("UPDATE tenant_departments SET status='inactive',updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status",[tenantId,id]); if(!rows.length) throw new NotFoundException('Department not found.');
+    await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'organization.department.archived','tenant_department',$3)",[tenantId,actorId,id]); return rows[0];
+  }); }
+  getCostCentre(tenantId:string,id:string) { return this.tenantDb.run(tenantId,async m=>{const rows=await m.query('SELECT id,code,name,status,created_at AS "createdAt",updated_at AS "updatedAt" FROM tenant_cost_centres WHERE tenant_id=$1 AND id=$2',[tenantId,id]); if(!rows.length) throw new NotFoundException('Cost centre not found.'); return rows[0];}); }
+  updateCostCentre(tenantId:string,actorId:string,id:string,dto:UpdateCostCentreDto) { return this.tenantDb.run(tenantId,async m=>{
+    const current=await m.query('SELECT code,name,status FROM tenant_cost_centres WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]); if(!current.length) throw new NotFoundException('Cost centre not found.');
+    const before=current[0]; const code=dto.code===undefined?before.code:dto.code.trim(); const name=dto.name===undefined?before.name:dto.name.trim(); const status=dto.status??before.status;
+    if(!['active','inactive'].includes(status)) throw new BadRequestException('Cost centre status must be active or inactive.');
+    const rows=await m.query('UPDATE tenant_cost_centres SET code=$3,name=$4,status=$5,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,code,name,status,updated_at AS "updatedAt"',[tenantId,id,code,name,status]);
+    await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'organization.cost_centre.updated','tenant_cost_centre',$3,$4::jsonb)",[tenantId,actorId,id,JSON.stringify({before,after:rows[0]})]); return rows[0];
+  }); }
+  archiveCostCentre(tenantId:string,actorId:string,id:string) { return this.tenantDb.run(tenantId,async m=>{
+    const used=await m.query("SELECT 1 FROM worker_assignments WHERE tenant_id=$1 AND cost_centre_id=$2 AND status='active' LIMIT 1",[tenantId,id]); if(used.length) throw new BadRequestException('End or reassign active workers before archiving this cost centre.');
+    const rows=await m.query("UPDATE tenant_cost_centres SET status='inactive',updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status",[tenantId,id]); if(!rows.length) throw new NotFoundException('Cost centre not found.');
+    await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id) VALUES($1,$2,'organization.cost_centre.archived','tenant_cost_centre',$3)",[tenantId,actorId,id]); return rows[0];
+  }); }
 }
