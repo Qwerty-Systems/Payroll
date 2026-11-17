@@ -50,3 +50,6 @@ A finalized run and its payslips are immutable. Fixes create adjustment runs lin
 
 ## 5.8 Testing
 Use table-driven tests for each rule version, boundary tests at thresholds, date-boundary tests, leap-year/pay-period tests, property tests for arithmetic invariants and golden fixtures reviewed by payroll specialists. A statutory configuration cannot be promoted to production without signed-off test fixtures.
+
+## 5.9 Allowances and non-statutory deductions
+Implemented in `apps/api/src/modules/payroll/adjustments.ts` as pure functions. See docs/16-IMPLEMENTATION-STATUS.md for supported methods, tax treatment and blocking rules.
