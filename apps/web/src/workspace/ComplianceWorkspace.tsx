@@ -41,7 +41,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
   });
   const set=(key:string,value:string)=>setFields(v=>({...v,[key]:value}));
   const canManage=['owner','admin','hr_manager','payroll_manager'].includes(role);
-  const canReview=['owner','admin'].includes(role);
+  const canReview=['owner','admin','payroll_manager','accountant'].includes(role);
 
   const reload=useCallback(async()=>{
     setError('');
