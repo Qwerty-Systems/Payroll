@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { EntityManager } from 'typeorm';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
 import { calculateKenyaMonthlyPayroll, type StatutoryRule } from './kenya-payroll-calculator';
-import { CreatePayrollPeriodDto } from './payroll.dto';
+import { CreatePayrollPeriodDto, UpdatePayrollPeriodDto, UpdatePayrollRunDto } from './payroll.dto';
 import { calculateContractEarnings } from './contract-earnings';
 import { blockingWarnings, calculateAllowances, calculateOtherDeductions, type AllowanceAssignmentInput, type DeductionAssignmentInput } from './adjustments';
 
@@ -46,6 +46,115 @@ export class PayrollService {
 
   listPeriods(tenantId: string) { return this.tenantDb.run(tenantId, m => m.query('SELECT id,code,name,start_date AS "startDate",end_date AS "endDate",payment_date AS "paymentDate",status FROM payroll_periods WHERE tenant_id=$1 ORDER BY start_date DESC',[tenantId])); }
 
+
+  async getPeriod(tenantId: string, periodId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query(`
+        SELECT id,code,name,start_date::text AS "startDate",end_date::text AS "endDate",
+          payment_date::text AS "paymentDate",status,created_at AS "createdAt",updated_at AS "updatedAt"
+        FROM payroll_periods WHERE tenant_id=$1 AND id=$2
+      `,[tenantId,periodId]);
+      if (!rows.length) throw new NotFoundException('Payroll period not found.');
+      return rows[0];
+    });
+  }
+
+  async updatePeriod(tenantId: string, actorId: string, periodId: string, dto: UpdatePayrollPeriodDto) {
+    return this.tenantDb.run(tenantId, async m => {
+      const current = await m.query('SELECT * FROM payroll_periods WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,periodId]);
+      if (!current.length) throw new NotFoundException('Payroll period not found.');
+      if (current[0].status !== 'open') throw new ConflictException('Only open payroll periods can be edited.');
+      const runCount = await m.query('SELECT count(*)::int AS count FROM payroll_runs WHERE tenant_id=$1 AND period_id=$2',[tenantId,periodId]);
+      if (Number(runCount[0].count) > 0) throw new ConflictException('A payroll period cannot be edited after a payroll run has been created. Delete eligible draft runs first.');
+      const before = current[0];
+      const code = dto.code?.trim() ?? before.code;
+      const name = dto.name?.trim() ?? before.name;
+      const startDate = dto.startDate ?? String(before.start_date).slice(0,10);
+      const endDate = dto.endDate ?? String(before.end_date).slice(0,10);
+      const paymentDate = dto.paymentDate === undefined ? before.payment_date : dto.paymentDate;
+      if (endDate < startDate) throw new BadRequestException('Payroll period end date must not precede its start date.');
+      const start = new Date(startDate+'T00:00:00Z'), end = new Date(endDate+'T00:00:00Z');
+      if (start.getUTCFullYear() !== end.getUTCFullYear() || start.getUTCMonth() !== end.getUTCMonth()) {
+        throw new BadRequestException('A payroll period must remain within one calendar month.');
+      }
+      const duplicate = await m.query('SELECT id FROM payroll_periods WHERE tenant_id=$1 AND code=$2 AND id<>$3',[tenantId,code,periodId]);
+      if (duplicate.length) throw new ConflictException('A payroll period with this code already exists.');
+      const overlap = await m.query("SELECT id FROM payroll_periods WHERE tenant_id=$1 AND id<>$4 AND status <> 'closed' AND daterange(start_date,end_date,'[]') && daterange($2::date,$3::date,'[]') LIMIT 1",[tenantId,startDate,endDate,periodId]);
+      if (overlap.length) throw new ConflictException('This payroll period overlaps another open or locked period.');
+      const updated = await m.query(`
+        UPDATE payroll_periods SET code=$3,name=$4,start_date=$5,end_date=$6,payment_date=$7,updated_at=now()
+        WHERE tenant_id=$1 AND id=$2
+        RETURNING id,code,name,start_date::text AS "startDate",end_date::text AS "endDate",
+          payment_date::text AS "paymentDate",status,updated_at AS "updatedAt"
+      `,[tenantId,periodId,code,name,startDate,endDate,paymentDate]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.period.updated','payroll_period',$3,$4::jsonb)",[tenantId,actorId,periodId,JSON.stringify({before,after:updated[0]})]);
+      return updated[0];
+    });
+  }
+
+  async deletePeriod(tenantId: string, actorId: string, periodId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT * FROM payroll_periods WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,periodId]);
+      if (!rows.length) throw new NotFoundException('Payroll period not found.');
+      if (rows[0].status !== 'open') throw new ConflictException('Only open payroll periods can be deleted.');
+      const runs = await m.query('SELECT count(*)::int AS count FROM payroll_runs WHERE tenant_id=$1 AND period_id=$2',[tenantId,periodId]);
+      if (Number(runs[0].count) > 0) throw new ConflictException('This payroll period has payroll runs. Delete eligible draft runs before deleting the period.');
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.period.deleted','payroll_period',$3,$4::jsonb)",[tenantId,actorId,periodId,JSON.stringify({code:rows[0].code,name:rows[0].name})]);
+      await m.query('DELETE FROM payroll_periods WHERE tenant_id=$1 AND id=$2',[tenantId,periodId]);
+      return {id:periodId,deleted:true};
+    });
+  }
+
+  async transitionPeriod(tenantId: string, actorId: string, periodId: string, status: 'open'|'locked'|'closed') {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT id,status FROM payroll_periods WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,periodId]);
+      if (!rows.length) throw new NotFoundException('Payroll period not found.');
+      const current = rows[0].status;
+      if (current === status) return {id:periodId,status};
+      if (current === 'closed') throw new ConflictException('A closed payroll period cannot be reopened or changed.');
+      if (status === 'locked' && current !== 'open') throw new ConflictException('Only an open payroll period can be locked.');
+      if (status === 'closed') {
+        if (current !== 'locked') throw new ConflictException('Lock the payroll period before closing it.');
+        const incomplete = await m.query("SELECT count(*)::int AS count FROM payroll_runs WHERE tenant_id=$1 AND period_id=$2 AND status<>'finalized'",[tenantId,periodId]);
+        if (Number(incomplete[0].count) > 0) throw new ConflictException('All payroll runs must be finalized before the period can be closed.');
+      }
+      if (status === 'open' && current === 'locked') {
+        const finalized = await m.query("SELECT count(*)::int AS count FROM payroll_runs WHERE tenant_id=$1 AND period_id=$2 AND status='finalized'",[tenantId,periodId]);
+        if (Number(finalized[0].count) > 0) throw new ConflictException('A period with finalized payroll cannot be reopened.');
+      }
+      const updated = await m.query('UPDATE payroll_periods SET status=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status',[tenantId,periodId,status]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.period.status_changed','payroll_period',$3,$4::jsonb)",[tenantId,actorId,periodId,JSON.stringify({from:current,to:status})]);
+      return updated[0];
+    });
+  }
+
+  async updateRun(tenantId: string, actorId: string, runId: string, dto: UpdatePayrollRunDto) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT id,status,description FROM payroll_runs WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,runId]);
+      if (!rows.length) throw new NotFoundException('Payroll run not found.');
+      if (!['draft','rejected','calculated'].includes(rows[0].status)) throw new ConflictException('Only draft, rejected or calculated payroll runs can be edited.');
+      if (dto.description === undefined) throw new BadRequestException('Provide at least one editable payroll run field.');
+      const updated = await m.query('UPDATE payroll_runs SET description=$3,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,description,status,updated_at AS "updatedAt"',[tenantId,runId,dto.description?.trim() || null]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.run.updated','payroll_run',$3,$4::jsonb)",[tenantId,actorId,runId,JSON.stringify({before:rows[0],after:updated[0]})]);
+      return updated[0];
+    });
+  }
+
+  async deleteRun(tenantId: string, actorId: string, runId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT id,status,period_id,run_number FROM payroll_runs WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,runId]);
+      if (!rows.length) throw new NotFoundException('Payroll run not found.');
+      if (!['draft','rejected','calculated'].includes(rows[0].status)) throw new ConflictException('Only draft, rejected or calculated payroll runs can be deleted. Submitted, approved and finalized runs must be retained.');
+      const payments = await m.query('SELECT count(*)::int AS count FROM payroll_payment_batches WHERE tenant_id=$1 AND payroll_run_id=$2',[tenantId,runId]);
+      const slips = await m.query('SELECT count(*)::int AS count FROM payslips WHERE tenant_id=$1 AND payroll_run_id=$2',[tenantId,runId]);
+      if (Number(payments[0].count) || Number(slips[0].count)) throw new ConflictException('A payroll run with payment batches or issued payslips cannot be deleted.');
+      await m.query('DELETE FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2',[tenantId,runId]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.run.deleted','payroll_run',$3,$4::jsonb)",[tenantId,actorId,runId,JSON.stringify({periodId:rows[0].period_id,runNumber:rows[0].run_number,status:rows[0].status})]);
+      await m.query('DELETE FROM payroll_runs WHERE tenant_id=$1 AND id=$2',[tenantId,runId]);
+      return {id:runId,deleted:true};
+    });
+  }
+
   listRuns(tenantId: string, periodId?: string) {
     return this.tenantDb.run(tenantId, m => m.query(`
       SELECT r.id,r.period_id AS "periodId",p.code AS "periodCode",r.run_number AS "runNumber",
@@ -70,7 +179,7 @@ export class PayrollService {
     });
   }
 
-  createRun(tenantId: string, actorId: string, periodId: string) {
+  createRun(tenantId: string, actorId: string, periodId: string, description?: string) {
     return this.tenantDb.run(tenantId, async m => {
       const periods = await m.query("SELECT id,code,status,start_date,end_date FROM payroll_periods WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[tenantId,periodId]);
       if (!periods.length) throw new NotFoundException('Payroll period not found.');
@@ -86,7 +195,7 @@ export class PayrollService {
       if (!assignments.length) throw new ConflictException('No published Kenya statutory ruleset is assigned for this payroll period.');
       await this.assertApprovedRulesSnapshot(m,tenantId,assignments[0].rule_set_id,periods[0].start_date,periods[0].end_date);
       const next = await m.query('SELECT COALESCE(MAX(run_number),0)+1 AS run_number FROM payroll_runs WHERE tenant_id=$1 AND period_id=$2',[tenantId,periodId]);
-      const rows = await m.query("INSERT INTO payroll_runs (tenant_id,period_id,run_number,status,engine_version,ruleset_id,created_by) VALUES ($1,$2,$3,'draft',$4,$5,$6) RETURNING id,period_id AS \"periodId\",run_number AS \"runNumber\",status,engine_version AS \"engineVersion\",ruleset_id AS \"rulesetId\",created_at AS \"createdAt\"",[tenantId,periodId,next[0].run_number,ENGINE_VERSION,assignments[0].rule_set_id,actorId]);
+      const rows = await m.query("INSERT INTO payroll_runs (tenant_id,period_id,run_number,status,engine_version,ruleset_id,created_by) VALUES ($1,$2,$3,'draft',$4,$5,$6) RETURNING id,period_id AS \"periodId\",run_number AS \"runNumber\",status,engine_version AS \"engineVersion\",ruleset_id AS \"rulesetId\",created_at AS \"createdAt\"",[tenantId,periodId,next[0].run_number,ENGINE_VERSION,assignments[0].rule_set_id,actorId,description?.trim() || null]);
       await m.query("INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,'payroll.run.created','payroll_run',$3,$4::jsonb)",[tenantId,actorId,rows[0].id,JSON.stringify({periodId,runNumber:next[0].run_number})]);
       return rows[0];
     });
@@ -201,7 +310,7 @@ export class PayrollService {
     });
   }
 
-  async transitionRun(tenantId: string, actorId: string, runId: string, action: 'submit'|'approve'|'finalize') {
+  async transitionRun(tenantId: string, actorId: string, runId: string, action: 'submit'|'approve'|'reject'|'finalize', reason?: string) {
     return this.tenantDb.run(tenantId,async m=>{
       const rows=await m.query(`SELECT r.*,p.code AS period_code,p.start_date::text AS period_start_date,p.end_date::text AS period_end_date,
         EXISTS(SELECT 1 FROM tenant_statutory_rule_reviews cr WHERE cr.tenant_id=r.tenant_id AND cr.rule_set_id=r.ruleset_id
@@ -217,6 +326,11 @@ export class PayrollService {
         if(run.status!=='submitted') throw new ConflictException('Only a submitted payroll run can be approved.');
         if(run.created_by===actorId || run.submitted_by===actorId) throw new BadRequestException('Separation of duties: the payroll creator or submitter cannot approve this run.');
         await m.query("UPDATE payroll_runs SET status='approved',approved_by=$3,approved_at=now() WHERE tenant_id=$1 AND id=$2",[tenantId,runId,actorId]);
+      } else if(action==='reject') {
+        if(run.status!=='submitted') throw new ConflictException('Only a submitted payroll run can be rejected.');
+        if(run.created_by===actorId || run.submitted_by===actorId) throw new BadRequestException('Separation of duties: the payroll creator or submitter cannot reject this run.');
+        if(!reason?.trim()) throw new BadRequestException('A reason is required when rejecting payroll.');
+        await m.query("UPDATE payroll_runs SET status='rejected',rejected_by=$3,rejected_at=now(),rejection_reason=$4,updated_at=now() WHERE tenant_id=$1 AND id=$2",[tenantId,runId,actorId,reason.trim()]);
       } else {
         if(run.status!=='approved') throw new ConflictException('Only an approved payroll run can be finalized.');
         if(!run.tenant_compliance_approved) throw new ConflictException('The statutory ruleset has not been reviewed and approved for this company and payroll period. Payroll finalization is blocked.');
@@ -237,8 +351,8 @@ export class PayrollService {
         }
         await m.query("UPDATE payroll_runs SET status='finalized',finalized_by=$3,finalized_at=now() WHERE tenant_id=$1 AND id=$2",[tenantId,runId,actorId]);
       }
-      const newStatus=action==='submit'?'submitted':action==='approve'?'approved':'finalized';
-      await m.query('INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,\'payroll_run\',$4,$5::jsonb)',[tenantId,actorId,'payroll.run.'+action,runId,JSON.stringify({from:run.status,to:newStatus})]);
+      const newStatus=action==='submit'?'submitted':action==='approve'?'approved':action==='reject'?'rejected':'finalized';
+      await m.query('INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,\'payroll_run\',$4,$5::jsonb)',[tenantId,actorId,'payroll.run.'+action,runId,JSON.stringify({from:run.status,to:newStatus,...(action==='reject'?{reason:reason?.trim()}: {})})]);
       return {id:runId,status:newStatus};
     });
   }
