@@ -7,6 +7,7 @@ import VerifiedUserRounded from '@mui/icons-material/VerifiedUserRounded';
 import ApiRounded from '@mui/icons-material/ApiRounded';
 import { auth0Config } from '../config';
 import { slugifyWorkspaceName } from './workspace-slug';
+import TenantWorkspace from '../workspace/TenantWorkspace';
 
 type Membership = { tenantId: string; slug: string; displayName: string; legalName: string; tenantStatus: string; membershipId: string; role: string };
 type ApiIdentity = { auth0Subject?: string; email?: string | null; emailVerified?: boolean; name?: string | null; picture?: string | null; provisioned?: boolean; memberships?: Membership[]; identity?: { email?: string; name?: string } };
@@ -106,11 +107,14 @@ export default function AuthenticatedApp() {
           <Button type="submit" variant="contained" disabled={submitting || !company.legalName.trim() || !company.displayName.trim() || company.slug.length < 3} sx={{ py: 1.4, bgcolor: '#17372B', '&:hover': { bgcolor: '#2F6B4F' } }}>{submitting ? 'Creating workspace…' : 'Create company workspace'}</Button>
         </Stack>
       </Paper>}
-      {identity?.provisioned && <Paper variant="outlined" sx={{ mt: 3, p: 3, borderRadius: 3, borderColor: '#E3E0D6' }}>
-        <Typography variant="h5" fontWeight={900}>Your company workspaces</Typography>
-        <Stack spacing={1.5} sx={{ mt: 2 }}>{(identity.memberships ?? []).map(m => <Box key={m.membershipId} sx={{ p: 2, borderRadius: 2, bgcolor: 'white', border: '1px solid #E3E0D6' }}><Typography fontWeight={800}>{m.displayName}</Typography><Typography variant="body2" color="text.secondary">{m.slug} · {m.role} · {m.tenantStatus}</Typography></Box>)}</Stack>
-        <Alert severity="info" sx={{ mt: 2 }}>Workspace onboarding is connected. Workforce, attendance and payroll screens are being delivered in subsequent implementation stages.</Alert>
-      </Paper>}
+      {identity?.provisioned && <TenantWorkspace
+        memberships={identity.memberships ?? []}
+        userName={user?.name}
+        userPicture={user?.picture}
+        apiBaseUrl={auth0Config.apiBaseUrl}
+        getToken={async () => { const token = await getAccessTokenSilently({ authorizationParams: { audience: auth0Config.audience, scope: 'openid profile email' } }); if (!token) throw new Error('The identity provider did not return an API access token.'); return token; }}
+        onSignOut={() => void logout({ logoutParams: { returnTo: window.location.origin } })}
+      />}
     </Container>
   </Box>;
 }
