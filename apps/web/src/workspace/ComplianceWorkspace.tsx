@@ -20,6 +20,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
   const [rulesets,setRulesets]=useState<Row[]>([]);
   const [selectedRuleset,setSelectedRuleset]=useState('');
   const [rules,setRules]=useState<Row[]>([]);
+  const [overrides,setOverrides]=useState<Row[]>([]);
   const [changes,setChanges]=useState<Row[]>([]);
   const [filings,setFilings]=useState<Row[]>([]);
   const [audit,setAudit]=useState<Row[]>([]);
@@ -57,7 +58,7 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
   useEffect(()=>{
     if(!selectedRuleset){setRules([]);return;}
     let live=true;
-    request<Row>('compliance/rulesets/'+selectedRuleset).then(v=>{if(live)setRules(rows(v.rules));})
+    request<Row>('compliance/rulesets/'+selectedRuleset).then(v=>{if(live){setRules(rows(v.rules));setOverrides(rows(v.tenantOverrides));}})
       .catch(e=>{if(live)setError(e instanceof Error?e.message:'Statutory rules could not be loaded.');});
     return ()=>{live=false;};
   },[request,selectedRuleset]);
@@ -159,6 +160,14 @@ export default function ComplianceWorkspace({role,periods,request}:Props) {
         {rules.map((r,i)=><TableRow key={String(r.code)+i}><TableCell><Typography fontWeight={800}>{show(r.code)}</Typography><Typography variant="caption" color="text.secondary">{show(r.label)}</Typography></TableCell><TableCell>{show(r.category)}</TableCell><TableCell>{show(r.calculationMethod)}</TableCell><TableCell>{show(r.effectiveFrom)}</TableCell><TableCell>{r.sourceUrl?<a href={String(r.sourceUrl)} target="_blank" rel="noreferrer">{show(r.sourceTitle)}</a>:'—'}<Typography variant="caption" display="block" color="text.secondary">Verified {show(r.verifiedOn)}</Typography></TableCell></TableRow>)}
         {!rules.length&&<TableRow><TableCell colSpan={5}>Select a statutory ruleset to inspect its rules.</TableCell></TableRow>}
       </TableBody></Table></TableContainer>
+      {overrides.length>0&&<>
+        <Divider sx={{my:2}}/>
+        <Typography fontWeight={850}>Approved company-specific rule overrides</Typography>
+        <Typography variant="body2" color="text.secondary">These approved changes take precedence over the baseline when their effective dates cover a payroll period.</Typography>
+        <TableContainer sx={{mt:1}}><Table size="small"><TableHead><TableRow>{['Rule','Effective from','Effective to','Reason','Source'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
+          {overrides.map(o=><TableRow key={o.id}><TableCell>{show(o.ruleCode)} · {show(o.label)}</TableCell><TableCell>{show(o.effectiveFrom)}</TableCell><TableCell>{show(o.effectiveTo)}</TableCell><TableCell>{show(o.reason)}</TableCell><TableCell>{o.sourceUrl?<a href={String(o.sourceUrl)} target="_blank" rel="noreferrer">{show(o.sourceTitle)}</a>:'—'}</TableCell></TableRow>)}
+        </TableBody></Table></TableContainer>
+      </>}
       {selected?.reviewStatus==='submitted'&&canReview&&<Stack direction="row" spacing={1} sx={{mt:2}}>
         <Button color="success" variant="contained" onClick={()=>{set('decision','approve');openDialog('reviewDecision','rule-review:'+String(selected.reviewId));}}>Approve review</Button>
         <Button color="error" variant="outlined" onClick={()=>{set('decision','reject');openDialog('reviewDecision','rule-review:'+String(selected.reviewId));}}>Reject review</Button>
