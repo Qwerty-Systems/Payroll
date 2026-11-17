@@ -65,6 +65,56 @@ export class IdentityService {
         await manager.query("SELECT set_config('app.tenant_id', $1, true)", [tenant.id]);
         await manager.query('INSERT INTO tenant_payroll_settings (tenant_id, currency, timezone) VALUES ($1, $2, $3) ON CONFLICT (tenant_id) DO NOTHING', [tenant.id, currency, dto.timezone ?? 'Africa/Nairobi']);
         await manager.query("INSERT INTO tenant_statutory_assignments (tenant_id, rule_set_id, effective_from) SELECT $1, id, CURRENT_DATE FROM statutory_rule_sets WHERE country_code = 'KE' AND status = 'published' ORDER BY published_at DESC NULLS LAST LIMIT 1 ON CONFLICT (tenant_id, rule_set_id, effective_from) DO NOTHING", [tenant.id]);
+
+        // Seed an editable Kenya payroll catalogue for every new workspace.
+        // These are tenant-owned templates, not statutory rules; owners can
+        // rename, disable, and configure them without changing historical runs.
+        const deductionSeeds = [
+          ['STAFF_ADVANCE_RECOVERY','Salary advance recovery','recovery','balance_recovery'],
+          ['STAFF_LOAN_RECOVERY','Staff loan recovery','recovery','balance_recovery'],
+          ['SACCO_CONTRIBUTION','SACCO contribution','voluntary','fixed_amount'],
+          ['UNION_DUES','Union dues','voluntary','fixed_amount'],
+          ['VOLUNTARY_PENSION','Voluntary pension contribution','voluntary','percentage'],
+          ['VOLUNTARY_INSURANCE','Voluntary insurance','voluntary','fixed_amount'],
+          ['COURT_ORDER','Court-ordered deduction','other','fixed_amount'],
+          ['GARNISHEE_ORDER','Garnishee order','other','fixed_amount'],
+          ['SALARY_SACRIFICE','Approved salary sacrifice','voluntary','fixed_amount'],
+          ['OTHER_DEDUCTION','Other approved deduction','other','fixed_amount'],
+        ];
+        for (const [code, name, category, method] of deductionSeeds) {
+          await manager.query(
+            `INSERT INTO tenant_deduction_types(tenant_id,code,name,category,calculation_method,configuration,taxable_treatment,is_system,is_enabled,requires_approval,effective_from)
+             VALUES ($1,$2,$3,$4,$5,'{}'::jsonb,'review_required',true,true,true,CURRENT_DATE)
+             ON CONFLICT(tenant_id,code,effective_from) DO NOTHING`,
+            [tenant.id, code, name, category, method],
+          );
+        }
+
+        const allowanceSeeds = [
+          ['TRANSPORT','Transport allowance','fixed_amount'],
+          ['COMMUTER','Commuter allowance','fixed_amount'],
+          ['HOUSING','Housing allowance','fixed_amount'],
+          ['MEALS','Meals allowance','per_day'],
+          ['SITE_ALLOWANCE','Site allowance','per_day'],
+          ['OVERTIME','Overtime','per_hour'],
+          ['NIGHT_SHIFT','Night shift allowance','per_hour'],
+          ['TRAVEL_PER_DIEM','Travel per diem','per_day'],
+          ['HARDSHIP','Hardship allowance','fixed_amount'],
+          ['RESPONSIBILITY','Responsibility allowance','fixed_amount'],
+          ['ACTING','Acting allowance','fixed_amount'],
+          ['AIRTIME','Airtime allowance','fixed_amount'],
+          ['TOOL_ALLOWANCE','Tools and equipment allowance','fixed_amount'],
+          ['PRODUCTIVITY_BONUS','Productivity bonus','percentage'],
+          ['OTHER_ALLOWANCE','Other approved allowance','fixed_amount'],
+        ];
+        for (const [code, name, method] of allowanceSeeds) {
+          await manager.query(
+            `INSERT INTO tenant_allowance_types(tenant_id,code,name,calculation_method,configuration,tax_treatment,is_enabled,requires_approval,effective_from)
+             VALUES ($1,$2,$3,$4,'{}'::jsonb,'review_required',true,true,CURRENT_DATE)
+             ON CONFLICT(tenant_id,code,effective_from) DO NOTHING`,
+            [tenant.id, code, name, method],
+          );
+        }
         const membership = await manager.query("INSERT INTO tenant_memberships (tenant_id, user_id, role, status) VALUES ($1, $2, 'owner', 'active') RETURNING id, role, status", [tenant.id, userId]);
         await manager.query("INSERT INTO platform_audit_events (actor_user_id, action, entity_type, entity_id, metadata) VALUES ($1, 'tenant.created', 'tenant', $2, $3::jsonb)", [userId, tenant.id, JSON.stringify({ slug: tenant.slug, auth0Subject: identity.subject })]);
         return { provisioned: true, tenant, membership: membership[0] };
