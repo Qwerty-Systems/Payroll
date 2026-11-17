@@ -124,7 +124,7 @@ export class OrganizationService {
       if(after.effectiveTo && after.effectiveTo < after.effectiveFrom) throw new BadRequestException('Assignment end date must not precede its start date.');
       const rows=await m.query(`UPDATE worker_assignments SET worker_id=$3,branch_id=$4,department_id=$5,cost_centre_id=$6,
         project_id=$7,site_id=$8,effective_from=$9,effective_to=$10,
-        status=CASE WHEN $9::date IS NOT NULL THEN 'ended' ELSE 'active' END
+        status=CASE WHEN $10::date IS NOT NULL THEN 'ended' ELSE 'active' END
         WHERE tenant_id=$1 AND id=$2 RETURNING id,worker_id AS "workerId",branch_id AS "branchId",
         department_id AS "departmentId",cost_centre_id AS "costCentreId",project_id AS "projectId",site_id AS "siteId",
         effective_from AS "effectiveFrom",effective_to AS "effectiveTo",status`,
