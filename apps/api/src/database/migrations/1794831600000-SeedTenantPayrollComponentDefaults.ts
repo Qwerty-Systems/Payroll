@@ -32,7 +32,7 @@ export class SeedTenantPayrollComponentDefaults1794831600000 implements Migratio
 
       INSERT INTO tenant_allowance_types
         (tenant_id,code,name,calculation_method,configuration,tax_treatment,is_enabled,requires_approval,effective_from)
-      SELECT t.id, seed.code, seed.name, seed.method, '{}'::jsonb, 'review_required', true, true, CURRENT_DATE
+      SELECT t.id, seed.code, seed.name, seed.method, CASE WHEN seed.code IN ('OVERTIME','NIGHT_SHIFT') THEN '{"hoursBasis":"all_approved_hours"}'::jsonb ELSE '{}'::jsonb END, 'review_required', true, true, CURRENT_DATE
       FROM tenants t
       CROSS JOIN (VALUES
         ('TRANSPORT','Transport allowance','fixed_amount'),
