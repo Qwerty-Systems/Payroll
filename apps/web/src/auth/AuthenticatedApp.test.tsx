@@ -69,7 +69,7 @@ describe('AuthenticatedApp', () => {
         headers: expect.objectContaining({ Authorization: 'Bearer test-access-token' }),
       }),
     );
-    expect(screen.getAllByText('Example Company').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Example Company').length).toBeGreaterThan(0);\n    expect(screen.queryByText(/authenticated workspace/i)).not.toBeInTheDocument();\n    expect(screen.queryByText(/set up or select your company workspace/i)).not.toBeInTheDocument();\n    expect(screen.getAllByRole('banner')).toHaveLength(1);
     expect(screen.getByText('People & workers')).toBeInTheDocument();
     expect(screen.getByText('Overview')).toBeInTheDocument();
   });
