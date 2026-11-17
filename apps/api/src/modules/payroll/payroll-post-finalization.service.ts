@@ -53,6 +53,9 @@ export class PayrollPostFinalizationService {
         }));
       }
       if (!correctionLines.length) throw new BadRequestException('At least one correction line is required.');
+      if (type === 'adjustment' && correctionLines.some(x => Math.round(((x.earningsDelta??0)-(x.employeeDeductionDelta??0)-(x.netPayDelta??0))*100)/100 !== 0)) {
+        throw new BadRequestException('Each adjustment line must balance: net pay change equals earnings change minus employee deduction change.');
+      }
       if (type === 'adjustment' && correctionLines.some(x => !x.workerId || !x.code?.trim() || !x.description?.trim())) {
         throw new BadRequestException('Each adjustment line requires a worker, code and description.');
       }
@@ -190,10 +193,10 @@ export class PayrollPostFinalizationService {
       const totals=run[0].totals??{};
       const journal=[
         {account:'Payroll expense',debit:Number(totals.grossEarnings??gross),credit:0},
-        {account:'Employer statutory contributions expense',debit:Number(totals.employerContributions??employerContributions),credit:0},
-        {account:'Net salaries payable',debit:0,credit:netPay},
-        {account:'Employee statutory and other deductions payable',debit:0,credit:employeeDeductions},
-        {account:'Employer statutory contributions payable',debit:0,credit:employerContributions},
+        {account:'Employer statutory contributions expense',debit:Math.max(0,employerContributions),credit:Math.max(0,-employerContributions)},
+        {account:'Net salaries payable',debit:Math.max(0,-netPay),credit:Math.max(0,netPay)},
+        {account:'Employee statutory and other deductions payable',debit:Math.max(0,-employeeDeductions),credit:Math.max(0,employeeDeductions)},
+        {account:'Employer statutory contributions payable',debit:Math.max(0,-employerContributions),credit:Math.max(0,employerContributions)},
       ].filter(x=>x.debit!==0||x.credit!==0);
       return {periodCode:run[0].period_code,currency:'KES',journal,totals:{debit:journal.reduce((n,x)=>n+x.debit,0),credit:journal.reduce((n,x)=>n+x.credit,0)}};
     });
