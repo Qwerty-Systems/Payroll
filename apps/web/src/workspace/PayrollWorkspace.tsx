@@ -20,6 +20,7 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
   const [selectedRun,setSelectedRun]=useState('');
   const [runDetail,setRunDetail]=useState<Row|null>(null);
   const [payslips,setPayslips]=useState<Row[]>([]);
+  const [selectedPayslip,setSelectedPayslip]=useState<Row|null>(null);
   const [paymentBatches,setPaymentBatches]=useState<Row[]>([]);
   const [paymentBatch,setPaymentBatch]=useState<Row|null>(null);
   const [paymentMethod,setPaymentMethod]=useState<'manual'|'bank_transfer'|'mpesa'>('manual');
@@ -249,9 +250,9 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
           <TextField select size="small" label="Finalized payroll run" value={selectedRun} onChange={e=>void loadPayslips(e.target.value)} sx={{maxWidth:480}}>
             {runs.filter(r=>r.status==='finalized').map(r=><MenuItem key={r.id} value={r.id}>{r.periodCode??r.periodId} · Run {r.runNumber}</MenuItem>)}
           </TextField>
-          <TableContainer><Table size="small"><TableHead><TableRow>{['Payslip no.','Employee','Gross','Deductions','Net pay','Issued'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
-            {payslips.map(p=>{const s=p.snapshot??{};return <TableRow key={p.id}><TableCell>{p.payslipNumber}</TableCell><TableCell>{s.worker?.firstName??p.workerId} {s.worker?.lastName??''}</TableCell><TableCell>{money(s.earnings?.amount)}</TableCell><TableCell>{money(Number(s.statutory?.employeeStatutoryDeductions??0)+Number(s.otherDeductions?.total??0))}</TableCell><TableCell>{money(s.netPay)}</TableCell><TableCell>{fmtDate(p.issuedAt)}</TableCell></TableRow>})}
-            {!payslips.length&&<TableRow><TableCell colSpan={6} align="center">Choose a finalized run to load its payslips.</TableCell></TableRow>}
+          <TableContainer><Table size="small"><TableHead><TableRow>{['Payslip no.','Employee','Gross','Deductions','Net pay','Issued',''].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
+            {payslips.map(p=>{const s=p.snapshot??{};return <TableRow key={p.id}><TableCell>{p.payslipNumber}</TableCell><TableCell>{s.worker?.firstName??p.workerId} {s.worker?.lastName??''}</TableCell><TableCell>{money(s.earnings?.amount)}</TableCell><TableCell>{money(Number(s.statutory?.employeeStatutoryDeductions??0)+Number(s.otherDeductions?.total??0))}</TableCell><TableCell>{money(s.netPay)}</TableCell><TableCell>{fmtDate(p.issuedAt)}</TableCell><TableCell><Button size="small" onClick={()=>setSelectedPayslip(p)}>View details</Button></TableCell></TableRow>})}
+            {!payslips.length&&<TableRow><TableCell colSpan={7} align="center">Choose a finalized run to load its payslips.</TableCell></TableRow>}
           </TableBody></Table></TableContainer>
         </Stack>}
       </CardContent>
@@ -270,6 +271,43 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
       <DialogActions><Button onClick={()=>setPeriodDialog(false)}>Cancel</Button><Button variant="contained" disabled={busy||!periodForm.code.trim()||!periodForm.name.trim()||!periodForm.startDate||!periodForm.endDate} onClick={()=>void savePeriod()}>Save period</Button></DialogActions>
     </Dialog>
 
+
+    <Dialog open={Boolean(selectedPayslip)} onClose={()=>setSelectedPayslip(null)} fullWidth maxWidth="md">
+      <DialogTitle>Employee payslip</DialogTitle>
+      <DialogContent>
+        {selectedPayslip&&(()=>{
+          const s=selectedPayslip.snapshot??{};
+          const w=s.worker??{},e=s.earnings??{},a=s.allowances??{},st=s.statutory??{},d=s.otherDeductions??{};
+          const lines=Array.isArray(st.lines)?st.lines as Row[]:[];
+          return <Stack spacing={2} sx={{pt:1}}>
+            <Box><Typography variant="h6" fontWeight={850}>{[w.firstName,w.middleName,w.lastName].filter(Boolean).join(' ')||w.workerNumber}</Typography><Typography variant="body2" color="text.secondary">{w.workerNumber} · {w.email??''}</Typography><Typography variant="caption" color="text.secondary">Period: {fmtDate(s.period?.startDate)} – {fmtDate(s.period?.endDate)} · Payslip {selectedPayslip.payslipNumber}</Typography></Box>
+            <Grid container spacing={1}>
+              <Grid size={{xs:6,md:3}}><Paper variant="outlined" sx={{p:1.5}}><Typography variant="caption">Basic earnings</Typography><Typography fontWeight={800}>{money(e.amount)}</Typography></Paper></Grid>
+              <Grid size={{xs:6,md:3}}><Paper variant="outlined" sx={{p:1.5}}><Typography variant="caption">Allowances</Typography><Typography fontWeight={800}>{money(a.total)}</Typography></Paper></Grid>
+              <Grid size={{xs:6,md:3}}><Paper variant="outlined" sx={{p:1.5}}><Typography variant="caption">Gross pay</Typography><Typography fontWeight={800}>{money(e.grossPay)}</Typography></Paper></Grid>
+              <Grid size={{xs:6,md:3}}><Paper variant="outlined" sx={{p:1.5}}><Typography variant="caption">Net pay</Typography><Typography fontWeight={900}>{money(s.netPay)}</Typography></Paper></Grid>
+            </Grid>
+            <Typography fontWeight={800}>Allowances</Typography>
+            <Table size="small"><TableHead><TableRow><TableCell>Component</TableCell><TableCell>Tax treatment</TableCell><TableCell align="right">Amount</TableCell></TableRow></TableHead><TableBody>
+              {asRows(a.lines).map((x,i)=><TableRow key={String(x.assignmentId??i)}><TableCell>{x.name??x.code}</TableCell><TableCell>{x.taxTreatment??'—'}</TableCell><TableCell align="right">{money(x.amount)}</TableCell></TableRow>)}
+              {!asRows(a.lines).length&&<TableRow><TableCell colSpan={3}>No allowances.</TableCell></TableRow>}
+            </TableBody></Table>
+            <Typography fontWeight={800}>Statutory deductions and employer contributions</Typography>
+            <Table size="small"><TableHead><TableRow><TableCell>Code</TableCell><TableCell>Side</TableCell><TableCell align="right">Amount</TableCell></TableRow></TableHead><TableBody>
+              {lines.map((x,i)=><TableRow key={String(x.code??i)}><TableCell>{String(x.code??'')}</TableCell><TableCell>{String(x.side??'')}</TableCell><TableCell align="right">{money(x.amount)}</TableCell></TableRow>)}
+              {!lines.length&&<TableRow><TableCell colSpan={3}>No statutory lines returned.</TableCell></TableRow>}
+            </TableBody></Table>
+            <Typography fontWeight={800}>Other deductions</Typography>
+            <Table size="small"><TableHead><TableRow><TableCell>Component</TableCell><TableCell align="right">Amount</TableCell></TableRow></TableHead><TableBody>
+              {asRows(d.lines).map((x,i)=><TableRow key={String(x.assignmentId??i)}><TableCell>{x.name??x.code}</TableCell><TableCell align="right">{money(x.amount)}</TableCell></TableRow>)}
+              {!asRows(d.lines).length&&<TableRow><TableCell colSpan={2}>No other deductions.</TableCell></TableRow>}
+            </TableBody></Table>
+            <Alert severity="info">This payslip is an issued payroll snapshot. It is read-only and remains unchanged if employee settings are later updated.</Alert>
+          </Stack>;
+        })()}
+      </DialogContent>
+      <DialogActions><Button onClick={()=>setSelectedPayslip(null)}>Close</Button></DialogActions>
+    </Dialog>
     <Dialog open={showReject} onClose={()=>setShowReject(false)} fullWidth maxWidth="sm">
       <DialogTitle>Return payroll for correction</DialogTitle>
       <DialogContent><TextField autoFocus multiline minRows={3} fullWidth label="Reason for rejection" value={rejectReason} onChange={e=>setRejectReason(e.target.value)} sx={{mt:1}} /></DialogContent>
