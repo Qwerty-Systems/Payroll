@@ -63,6 +63,10 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [syncMessage, setSyncMessage] = useState('');
   const isMobile = useMediaQuery('(max-width:1199px)');
   const [contracts, setContracts] = useState<RowData[]>([]);
+  const [workerDocuments, setWorkerDocuments] = useState<RowData[]>([]);
+  const [documentType, setDocumentType] = useState('contract');
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
   const [forms, setForms] = useState<Record<string, string>>({
     workerNumber: '', firstName: '', lastName: '', phone: '', email: '',
     engagementType: 'permanent', payBasis: 'monthly', rateAmount: '', effectiveFrom: dateToday(), unitCodes: '', payGradeId: '',
@@ -121,13 +125,50 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   useEffect(() => { void refresh(); }, [refresh]);
 
   useEffect(() => {
-    if (!selectedWorker) { setContracts([]); return; }
+    if (!selectedWorker) { setContracts([]); setWorkerDocuments([]); return; }
     let active = true;
     request<unknown>(`tenant/workers/${selectedWorker}/contracts`)
       .then(value => { if (active) setContracts(asRows(value)); })
       .catch(() => { if (active) setContracts([]); });
+    request<unknown>(`tenant/workers/${selectedWorker}/documents`)
+      .then(value => { if (active) setWorkerDocuments(asRows(value)); })
+      .catch(() => { if (active) setWorkerDocuments([]); });
     return () => { active = false; };
   }, [request, selectedWorker]);
+
+  async function uploadWorkerDocument() {
+    if (!selectedWorker || !documentFile) return;
+    setUploadingDocument(true); setError(''); setNotice('');
+    try {
+      const token = await getToken();
+      const form = new FormData();
+      form.append('file', documentFile);
+      form.append('documentType', documentType);
+      const response = await fetch(`${apiBaseUrl.replace(/\\/+$/, '')}/api/v1/tenant/workers/${selectedWorker}/documents`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'x-tenant-id': tenantId, Accept: 'application/json' },
+        body: form,
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof body.message === 'string' ? body.message : 'Document upload failed.');
+      setDocumentFile(null);
+      setNotice('Worker document uploaded securely.');
+      const docs = await request<unknown>(`tenant/workers/${selectedWorker}/documents`);
+      setWorkerDocuments(asRows(docs));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Worker document upload failed.');
+    } finally { setUploadingDocument(false); }
+  }
+
+  async function downloadWorkerDocument(documentId: string) {
+    try {
+      const result = await request<{ url: string }>(`tenant/workers/${selectedWorker}/documents/${documentId}/download`);
+      if (!result.url || !result.url.startsWith('https://')) throw new Error('The API did not return a secure download URL.');
+      window.open(result.url, '_blank', 'noopener,noreferrer');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to prepare the document download.');
+    }
+  }
 
   async function syncOfflineQueue() {
     setSyncing(true); setSyncMessage(''); setError('');
@@ -496,6 +537,25 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                   {!contracts.length && <TableRow><TableCell colSpan={5}>No contract history is recorded for this worker.</TableCell></TableRow>}
                 </TableBody></Table></TableContainer>
               </Box>}
+              {section === 'workers' && selectedWorker && <Box sx={{ p: 2.5, borderTop: '1px solid #E8EEE8' }}>
+                <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1.5} sx={{ mb: 2 }}>
+                  <Box><Typography fontWeight={850}>Worker documents</Typography><Typography variant="caption" color="text.secondary">Private tenant-scoped files. Download links expire after three minutes.</Typography></Box>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                    <TextField select size="small" label="Document type" value={documentType} onChange={e => setDocumentType(e.target.value)} sx={{ minWidth: 170 }}>
+                      {['identity','contract','tax','bank','qualification','medical_clearance','other'].map(x => <MenuItem key={x} value={x}>{x.replaceAll('_',' ')}</MenuItem>)}
+                    </TextField>
+                    <Button component="label" variant="outlined" color="inherit" sx={{ whiteSpace: 'nowrap' }}>Choose file
+                      <input hidden type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={e => setDocumentFile(e.target.files?.[0] ?? null)} />
+                    </Button>
+                    <Button variant="contained" disabled={!documentFile || uploadingDocument} onClick={() => void uploadWorkerDocument()}>{uploadingDocument ? 'Uploading…' : 'Upload document'}</Button>
+                  </Stack>
+                </Stack>
+                {documentFile && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>Selected: {documentFile.name} · {(documentFile.size / 1024 / 1024).toFixed(2)} MB</Typography>}
+                <TableContainer><Table size="small"><TableHead><TableRow>{['Type','File','Size','Uploaded',''].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
+                  {workerDocuments.map(doc => <TableRow key={String(doc.id)}><TableCell>{label(doc.documentType)}</TableCell><TableCell>{label(doc.originalName)}</TableCell><TableCell>{(Number(doc.sizeBytes ?? 0) / 1024).toFixed(1)} KB</TableCell><TableCell>{label(doc.createdAt)}</TableCell><TableCell><Button size="small" onClick={() => void downloadWorkerDocument(String(doc.id))}>Download</Button></TableCell></TableRow>)}
+                  {!workerDocuments.length && <TableRow><TableCell colSpan={5}>No documents have been uploaded for this worker.</TableCell></TableRow>}
+                </TableBody></Table></TableContainer>
+              </Box>}
               {section === 'projects' && <Box sx={{ p: 2.5, borderTop: '1px solid #E8EEE8' }}>
                 <Typography fontWeight={850} sx={{ mb: 1 }}>Project sites</Typography>
                 <TableContainer><Table size="small"><TableHead><TableRow>{['Site code','Site','Project','Status'].map(item => <TableCell key={item}>{item}</TableCell>)}</TableRow></TableHead><TableBody>
@@ -514,7 +574,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
         <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
           {dialog === 'worker' && <><TextField label="Worker number" required value={forms.workerNumber} onChange={e => setField('workerNumber', e.target.value)} /><TextField label="First name" required value={forms.firstName} onChange={e => setField('firstName', e.target.value)} /><TextField label="Last name" required value={forms.lastName} onChange={e => setField('lastName', e.target.value)} /><TextField label="Phone" value={forms.phone} onChange={e => setField('phone', e.target.value)} /><TextField label="Email" type="email" value={forms.email} onChange={e => setField('email', e.target.value)} /></>}
           {dialog === 'payGrade' && <><TextField label="Code" required value={forms.gradeCode} onChange={e => setField('gradeCode', e.target.value.toUpperCase())} /><TextField label="Name" required value={forms.gradeName} onChange={e => setField('gradeName', e.target.value)} /><TextField label="Description" multiline minRows={2} value={forms.gradeDescription} onChange={e => setField('gradeDescription', e.target.value)} /><TextField select label="Pay basis" value={forms.gradePayBasis} onChange={e => setField('gradePayBasis', e.target.value)}>{['hourly','daily','weekly','monthly','per_unit'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField label="Currency" required inputProps={{ maxLength: 3 }} value={forms.gradeCurrency} onChange={e => setField('gradeCurrency', e.target.value.toUpperCase())} /><TextField label="Minimum rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMinimum} onChange={e => setField('gradeMinimum', e.target.value)} /><TextField label="Midpoint rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMidpoint} onChange={e => setField('gradeMidpoint', e.target.value)} /><TextField label="Maximum rate" type="number" inputProps={{ min: 0, step: '0.0001' }} value={forms.gradeMaximum} onChange={e => setField('gradeMaximum', e.target.value)} /></>}
-           {dialog === 'contract' && <><TextField select label="Engagement" value={forms.engagementType} onChange={e => setField('engagementType', e.target.value)}>{['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Pay basis" value={forms.payBasis} onChange={e => setField('payBasis', e.target.value)}>{['hourly','daily','weekly','monthly','per_unit'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Pay grade (optional)" value={forms.payGradeId} onChange={e => { const grade = (data.payGrades ?? []).find(item => item.id === e.target.value); setField('payGradeId', e.target.value); if (grade) setField('payBasis', String(grade.payBasis)); }}><MenuItem value="">No pay grade</MenuItem>{(data.payGrades ?? []).filter(grade => grade.status === 'active').map(grade => <MenuItem key={String(grade.id)} value={String(grade.id)}>{label(grade.code)} — {label(grade.name)}</MenuItem>)}</TextField><TextField select label="Pay grade (optional)" value={forms.payGradeId} onChange={e => { const grade = (data.payGrades ?? []).find(item => item.id === e.target.value); setField('payGradeId', e.target.value); if (grade) setField('payBasis', String(grade.payBasis)); }}><MenuItem value="">No pay grade</MenuItem>{(data.payGrades ?? []).filter(grade => grade.status === 'active').map(grade => <MenuItem key={String(grade.id)} value={String(grade.id)}>{label(grade.code)} — {label(grade.name)}</MenuItem>)}</TextField>{forms.payBasis === 'per_unit' && <TextField label="Approved unit codes (comma-separated)" required helperText="Example: blocks, metres, deliveries. These must match approved output entries." value={forms.unitCodes} onChange={e => setField('unitCodes', e.target.value)} />}<TextField label="Rate (KES)" type="number" required value={forms.rateAmount} onChange={e => setField('rateAmount', e.target.value)} /><TextField label="Effective from" type="date" required InputLabelProps={{ shrink: true }} value={forms.effectiveFrom} onChange={e => setField('effectiveFrom', e.target.value)} /></>}
+           {dialog === 'contract' && <><TextField select label="Engagement" value={forms.engagementType} onChange={e => setField('engagementType', e.target.value)}>{['permanent','fixed_term','casual','piece_rate','subcontractor','independent_contractor'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Pay basis" value={forms.payBasis} onChange={e => setField('payBasis', e.target.value)}>{['hourly','daily','weekly','monthly','per_unit'].map(x => <MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Pay grade (optional)" value={forms.payGradeId} onChange={e => { const grade = (data.payGrades ?? []).find(item => item.id === e.target.value); setField('payGradeId', e.target.value); if (grade) setField('payBasis', String(grade.payBasis)); }}><MenuItem value="">No pay grade</MenuItem>{(data.payGrades ?? []).filter(grade => grade.status === 'active').map(grade => <MenuItem key={String(grade.id)} value={String(grade.id)}>{label(grade.code)} — {label(grade.name)}</MenuItem>)}</TextField>{forms.payBasis === 'per_unit' && <TextField label="Approved unit codes (comma-separated)" required helperText="Example: blocks, metres, deliveries. These must match approved output entries." value={forms.unitCodes} onChange={e => setField('unitCodes', e.target.value)} />}<TextField label="Rate (KES)" type="number" required value={forms.rateAmount} onChange={e => setField('rateAmount', e.target.value)} /><TextField label="Effective from" type="date" required InputLabelProps={{ shrink: true }} value={forms.effectiveFrom} onChange={e => setField('effectiveFrom', e.target.value)} /></>}
           {dialog === 'project' && <><TextField label="Project code" required value={forms.projectCode} onChange={e => setField('projectCode', e.target.value)} /><TextField label="Project name" required value={forms.projectName} onChange={e => setField('projectName', e.target.value)} /><TextField label="Client name" value={forms.clientName} onChange={e => setField('clientName', e.target.value)} /></>}
           {dialog === 'site' && <><TextField label="Site code" required value={forms.siteCode} onChange={e => setField('siteCode', e.target.value)} /><TextField label="Site name" required value={forms.siteName} onChange={e => setField('siteName', e.target.value)} /></>}
           {dialog === 'attendance' && <><TextField select label="Site" required value={forms.siteId ?? ''} onChange={e => setField('siteId', e.target.value)}>{(data.sites ?? []).filter(site => site.projectId === selectedProject).map(site => <MenuItem key={String(site.id)} value={String(site.id)}>{label(site.name)}</MenuItem>)}</TextField><TextField label="Work date" type="date" required InputLabelProps={{ shrink: true }} value={forms.workDate} onChange={e => setField('workDate', e.target.value)} /><TextField label="Minutes worked" type="number" required value={forms.minutesWorked} onChange={e => setField('minutesWorked', e.target.value)} /></>}
