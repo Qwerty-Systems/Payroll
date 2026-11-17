@@ -53,14 +53,32 @@ export class PayrollCatalogueRuntimeGrants1794831700000 implements MigrationInte
       DO $$
       BEGIN
         IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'jengaflow_app') THEN
-          REVOKE SELECT, INSERT, UPDATE, DELETE ON worker_pay_grades FROM jengaflow_app;
-          REVOKE SELECT, INSERT, UPDATE, DELETE ON tenant_allowance_types FROM jengaflow_app;
-          REVOKE SELECT, INSERT, UPDATE, DELETE ON tenant_deduction_types FROM jengaflow_app;
+          REVOKE SELECT ON statutory_rule_sets, statutory_rules FROM jengaflow_app;
+          REVOKE SELECT, INSERT, UPDATE, DELETE ON
+            tenant_statutory_assignments, tenant_statutory_rule_overrides,
+            tenant_payroll_settings, tenant_allowance_types, tenant_deduction_types,
+            worker_allowance_assignments, worker_deduction_assignments,
+            payroll_periods, payroll_runs, payroll_run_items, payslips,
+            payroll_payment_batches, payroll_payment_batch_items,
+            tenant_branches, tenant_departments, tenant_cost_centres, worker_assignments,
+            tenant_invitations, tenant_devices, sync_commands, sync_conflicts,
+            worker_output_entries, worker_pay_grades, worker_documents,
+            attendance_correction_requests
+          FROM jengaflow_app;
         END IF;
         IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'jf_app') THEN
-          REVOKE SELECT, INSERT, UPDATE, DELETE ON worker_pay_grades FROM jf_app;
-          REVOKE SELECT, INSERT, UPDATE, DELETE ON tenant_allowance_types FROM jf_app;
-          REVOKE SELECT, INSERT, UPDATE, DELETE ON tenant_deduction_types FROM jf_app;
+          REVOKE SELECT ON statutory_rule_sets, statutory_rules FROM jf_app;
+          REVOKE SELECT, INSERT, UPDATE, DELETE ON
+            tenant_statutory_assignments, tenant_statutory_rule_overrides,
+            tenant_payroll_settings, tenant_allowance_types, tenant_deduction_types,
+            worker_allowance_assignments, worker_deduction_assignments,
+            payroll_periods, payroll_runs, payroll_run_items, payslips,
+            payroll_payment_batches, payroll_payment_batch_items,
+            tenant_branches, tenant_departments, tenant_cost_centres, worker_assignments,
+            tenant_invitations, tenant_devices, sync_commands, sync_conflicts,
+            worker_output_entries, worker_pay_grades, worker_documents,
+            attendance_correction_requests
+          FROM jf_app;
         END IF;
       END
       $$;
