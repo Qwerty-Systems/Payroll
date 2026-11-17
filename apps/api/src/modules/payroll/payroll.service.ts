@@ -158,7 +158,7 @@ export class PayrollService {
   listRuns(tenantId: string, periodId?: string) {
     return this.tenantDb.run(tenantId, m => m.query(`
       SELECT r.id,r.period_id AS "periodId",p.code AS "periodCode",r.run_number AS "runNumber",
-        r.status,r.engine_version AS "engineVersion",r.totals,r.warnings,r.created_at AS "createdAt",
+        r.status,r.description,r.engine_version AS "engineVersion",r.totals,r.warnings,r.created_at AS "createdAt",
         r.calculated_at AS "calculatedAt",r.approved_at AS "approvedAt",r.finalized_at AS "finalizedAt"
       FROM payroll_runs r JOIN payroll_periods p ON p.tenant_id=r.tenant_id AND p.id=r.period_id
       WHERE r.tenant_id=$1 AND ($2::uuid IS NULL OR r.period_id=$2::uuid)
