@@ -31,7 +31,7 @@ type Membership = {
   tenantStatus: string; membershipId: string; role: string;
 };
 type RowData = Record<string, unknown> & { id?: string };
-type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'payroll' | 'organization' | 'people';
+type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'payroll' | 'billing' | 'organization' | 'people';
 type Props = {
   memberships: Membership[];
   userName?: string;
@@ -52,7 +52,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [dialog, setDialog] = useState<'' | 'worker' | 'contract' | 'payGrade' | 'endContract' | 'project' | 'site' | 'attendance' | 'period' | 'shift' | 'leave' | 'overtime' | 'timesheet' | 'correction' | 'leavePolicy' | 'payComponent'>('');
+  const [dialog, setDialog] = useState<'' | 'worker' | 'contract' | 'payGrade' | 'endContract' | 'project' | 'site' | 'attendance' | 'period' | 'shift' | 'leave' | 'overtime' | 'timesheet' | 'correction' | 'leavePolicy' | 'payComponent' | 'billingQuote' | 'billingInvoice' | 'billingRecurring' | 'billingSubscription' | 'billingPayment'>('');
   const [busy, setBusy] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
@@ -80,7 +80,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     workDate: dateToday(), minutesWorked: '480', periodCode: '', periodName: '',
     shiftCode: '', shiftName: '', shiftStart: '08:00', shiftEnd: '17:00', shiftBreak: '60', shiftGrace: '10',
     leaveType: 'annual', leaveStart: dateToday(), leaveEnd: dateToday(), leaveDays: '1', leaveReason: '', leaveYear: String(new Date().getUTCFullYear()), leaveEntitlement: '21', reviewReason: '',
-    overtimeAttendanceId: '', overtimeMinutes: '60', overtimeReason: '', timesheetStart: dateToday().slice(0,8)+'01', timesheetEnd: dateToday(), correctionClockIn: '', correctionClockOut: '', correctionMinutes: '', correctionReason: '', componentCode: '', componentName: '', componentType: 'allowance', componentMethod: 'fixed', componentAmount: '', componentTaxable: 'false', componentFrom: dateToday(),
+    overtimeAttendanceId: '', overtimeMinutes: '60', overtimeReason: '', timesheetStart: dateToday().slice(0,8)+'01', timesheetEnd: dateToday(), correctionClockIn: '', correctionClockOut: '', correctionMinutes: '', correctionReason: '', componentCode: '', componentName: '', componentType: 'allowance', componentMethod: 'fixed', componentAmount: '', componentTaxable: 'false', componentFrom: dateToday(), billingCustomer: '', billingEmail: '', billingCurrency: 'KES', billingDescription: '', billingQuantity: '1', billingUnitPrice: '', billingTaxRate: '0', billingDueDate: dateToday(), billingValidUntil: '', billingFrequency: 'monthly', billingNextRun: dateToday(), billingDueDays: '30', billingPlanId: '', billingInvoiceId: '', billingPaymentAmount: '', billingPaymentMethod: 'bank_transfer', billingPaymentReference: '', billingReviewReason: '',
     startDate: dateToday().slice(0, 8) + '01', endDate: dateToday(),
   });
 
@@ -115,7 +115,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
       projects: 'tenant/projects',
       sites: 'tenant/sites',
       attendance: 'tenant/attendance',
-      shifts: 'tenant/attendance/shifts', leaveRequests: 'tenant/attendance/leave-requests', overtimeRequests: 'tenant/attendance/overtime-requests', timesheets: 'tenant/attendance/timesheets', conflicts: 'tenant/sync/conflicts',
+      shifts: 'tenant/attendance/shifts', leaveRequests: 'tenant/attendance/leave-requests', overtimeRequests: 'tenant/attendance/overtime-requests', timesheets: 'tenant/attendance/timesheets', conflicts: 'tenant/sync/conflicts', billingPlans: 'tenant/billing/plans', subscriptions: 'tenant/billing/subscriptions', quotes: 'tenant/billing/quotes', invoices: 'tenant/billing/invoices', payments: 'tenant/billing/payments', recurringSchedules: 'tenant/billing/recurring-schedules',
       periods: 'payroll/periods',
       branches: 'tenant/organization/branches',
       departments: 'tenant/organization/departments',
@@ -231,6 +231,20 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
         }) });
         setContracts(asRows(await request<unknown>(`tenant/workers/${selectedWorker}/contracts`)));
         setNotice('Contract added to the worker history.');
+      } else if (dialog === 'billingQuote' || dialog === 'billingInvoice') {
+        const payload = { customerName: forms.billingCustomer, customerEmail: forms.billingEmail || undefined, currency: forms.billingCurrency, notes: undefined, lines: [{ description: forms.billingDescription, quantity: Number(forms.billingQuantity), unitPriceMinor: Number(forms.billingUnitPrice), taxRate: Number(forms.billingTaxRate) }] };
+        if (dialog === 'billingQuote') await request('tenant/billing/quotes', { method: 'POST', body: JSON.stringify({ ...payload, validUntil: forms.billingValidUntil || undefined }) });
+        else await request('tenant/billing/invoices', { method: 'POST', body: JSON.stringify({ ...payload, dueDate: forms.billingDueDate }) });
+        setNotice(dialog === 'billingQuote' ? 'Quotation created.' : 'Invoice issued.');
+      } else if (dialog === 'billingRecurring') {
+        await request('tenant/billing/recurring-schedules', { method: 'POST', body: JSON.stringify({ name: forms.billingDescription, customerName: forms.billingCustomer, customerEmail: forms.billingEmail || undefined, currency: forms.billingCurrency, frequency: forms.billingFrequency, nextRunDate: forms.billingNextRun, dueDays: Number(forms.billingDueDays), lines: [{ description: forms.billingDescription, quantity: Number(forms.billingQuantity), unitPriceMinor: Number(forms.billingUnitPrice), taxRate: Number(forms.billingTaxRate) }] }) });
+        setNotice('Recurring billing schedule created.');
+      } else if (dialog === 'billingSubscription') {
+        await request('tenant/billing/subscriptions', { method: 'POST', body: JSON.stringify({ planId: forms.billingPlanId }) });
+        setNotice('Subscription request submitted.');
+      } else if (dialog === 'billingPayment') {
+        await request('tenant/billing/payments', { method: 'POST', body: JSON.stringify({ invoiceId: forms.billingInvoiceId, amountMinor: Number(forms.billingPaymentAmount), currency: forms.billingCurrency, method: forms.billingPaymentMethod, externalReference: forms.billingPaymentReference }) });
+        setNotice('Payment recorded and awaiting independent reconciliation.');
       } else if (dialog === 'payComponent') {
         await request(`payroll/workers/${selectedWorker}/components`, { method: 'POST', body: JSON.stringify({ code: forms.componentCode, name: forms.componentName, componentType: forms.componentType, calculationMethod: forms.componentMethod, amount: Number(forms.componentAmount), taxable: forms.componentType === 'allowance' && forms.componentTaxable === 'true', effectiveFrom: forms.componentFrom }) });
         setWorkerPayComponents(asRows(await request<unknown>(`payroll/workers/${selectedWorker}/components`)));
@@ -365,7 +379,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   }
 
   const currentRows = (section === 'workers' ? data.workers : section === 'pay-grades' ? data.payGrades : section === 'projects' ? data.projects :
-    section === 'attendance' ? data.attendance : section === 'payroll' ? data.periods :
+    section === 'attendance' ? data.attendance : section === 'payroll' ? data.periods : section === 'billing' ? data.invoices :
     section === 'people' ? data.members : section === 'organization' ? data.branches : []) ?? [];
   const filteredRows = currentRows.filter(row => !searchQuery.trim() ||
     JSON.stringify(row).toLowerCase().includes(searchQuery.trim().toLowerCase()));
@@ -376,12 +390,13 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     { value: 'projects' as Section, label: 'Projects & sites', icon: <BusinessRounded />, group: 'WORKSPACE' },
     { value: 'attendance' as Section, label: 'Attendance', icon: <EventAvailableRounded />, group: 'WORKSPACE' },
     { value: 'payroll' as Section, label: 'Payroll', icon: <PaymentsRounded />, group: 'FINANCE' },
+    { value: 'billing' as Section, label: 'Billing', icon: <PaymentsRounded />, group: 'FINANCE' },
     { value: 'organization' as Section, label: 'Organization', icon: <SettingsRounded />, group: 'ADMINISTRATION' },
     { value: 'people' as Section, label: 'Team access', icon: <GroupsRounded />, group: 'ADMINISTRATION' },
   ];
   const pageTitle: Record<Section, string> = {
     overview: 'Overview', workers: 'People & workers', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
-    attendance: 'Attendance', payroll: 'Payroll', organization: 'Organization', people: 'Team access',
+    attendance: 'Attendance', payroll: 'Payroll', billing: 'Billing & subscriptions', organization: 'Organization', people: 'Team access',
   };
   const pageDescription: Record<Section, string> = {
     overview: 'A clear picture of your workforce and operations.',
@@ -390,6 +405,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     projects: 'Organize projects, clients and work sites.',
     attendance: 'Capture work activity and review submitted records.',
     payroll: 'Manage pay periods and review payroll calculation previews.',
+    billing: 'Manage subscriptions, quotes, invoices, recurring billing and payment reconciliation.',
     organization: 'Structure your company and assign people to teams.',
     people: 'Control who can access this company workspace.',
   };
@@ -577,6 +593,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               {section === 'projects' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('project')}>Add project</Button>}
               {section === 'attendance' && <><Button variant="outlined" disabled={downloadingReferenceData} onClick={() => void downloadReferenceData()}>{downloadingReferenceData ? 'Downloading…' : 'Download offline data'}</Button><Button variant="contained" startIcon={<AddRounded />} disabled={!selectedWorker || !selectedProject} onClick={() => setDialog('attendance')}>Capture</Button><Button variant="outlined" onClick={() => setDialog('shift')}>New shift</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('leave')}>Request leave</Button><Button variant="outlined" disabled={!['owner','admin','hr_manager'].includes(membership?.role ?? '')} onClick={() => setDialog('leavePolicy')}>Leave policy</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('overtime')}>Request overtime</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('timesheet')}>Generate timesheet</Button></>}
               {section === 'payroll' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('period')}>New period</Button>}
+          {section === 'billing' && <><Button variant="contained" onClick={()=>setDialog('billingQuote')}>New quote</Button><Button variant="outlined" onClick={()=>setDialog('billingInvoice')}>New invoice</Button><Button variant="outlined" onClick={()=>setDialog('billingRecurring')}>Recurring schedule</Button><Button variant="outlined" onClick={()=>setDialog('billingSubscription')}>Request plan</Button></>}
             </Stack>
           </Stack>
           {referenceDataMessage && <Alert severity="success" sx={{ mb: 2 }}>{referenceDataMessage}</Alert>}
@@ -672,7 +689,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
 
     <Dialog open={Boolean(dialog)} onClose={() => setDialog('')} fullWidth maxWidth="sm">
       <Box component="form" onSubmit={submit}>
-        <DialogTitle>{dialog === 'worker' ? 'Add worker' : dialog === 'contract' ? 'Add worker contract' : dialog === 'endContract' ? 'End worker contract' : dialog === 'payGrade' ? 'Create pay grade' : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : dialog === 'shift' ? 'Create shift' : dialog === 'leave' ? 'Request leave' : dialog === 'leavePolicy' ? 'Configure leave entitlement' : dialog === 'payComponent' ? 'Add payroll component' : dialog === 'overtime' ? 'Request overtime' : dialog === 'timesheet' ? 'Generate timesheet' : dialog === 'correction' ? 'Request attendance correction' : 'Create payroll period'}</DialogTitle>
+        <DialogTitle>{dialog === 'worker' ? 'Add worker' : dialog === 'contract' ? 'Add worker contract' : dialog === 'endContract' ? 'End worker contract' : dialog === 'payGrade' ? 'Create pay grade' : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : dialog === 'shift' ? 'Create shift' : dialog === 'leave' ? 'Request leave' : dialog === 'leavePolicy' ? 'Configure leave entitlement' : dialog === 'payComponent' ? 'Add payroll component' : dialog === 'billingQuote' ? 'Create quotation' : dialog === 'billingInvoice' ? 'Issue invoice' : dialog === 'billingRecurring' ? 'Create recurring schedule' : dialog === 'billingSubscription' ? 'Request subscription' : dialog === 'billingPayment' ? 'Record payment' : dialog === 'overtime' ? 'Request overtime' : dialog === 'timesheet' ? 'Generate timesheet' : dialog === 'correction' ? 'Request attendance correction' : 'Create payroll period'}</DialogTitle>
         <DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
 
           {dialog === 'shift' && <><TextField label="Shift code" required value={forms.shiftCode} onChange={e=>setField('shiftCode',e.target.value)} /><TextField label="Shift name" required value={forms.shiftName} onChange={e=>setField('shiftName',e.target.value)} /><TextField label="Start time" type="time" required InputLabelProps={{shrink:true}} value={forms.shiftStart} onChange={e=>setField('shiftStart',e.target.value)} /><TextField label="End time" type="time" required InputLabelProps={{shrink:true}} value={forms.shiftEnd} onChange={e=>setField('shiftEnd',e.target.value)} /><TextField label="Break (minutes)" type="number" value={forms.shiftBreak} onChange={e=>setField('shiftBreak',e.target.value)} /><TextField label="Grace (minutes)" type="number" value={forms.shiftGrace} onChange={e=>setField('shiftGrace',e.target.value)} /><Alert severity="info">If a worker is selected, the shift is assigned to that worker from today.</Alert></>}
@@ -680,6 +697,10 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           {dialog === 'overtime' && <><TextField select label="Approved attendance record" required value={forms.overtimeAttendanceId} onChange={e=>setField('overtimeAttendanceId',e.target.value)}>{(data.attendance??[]).filter(a=>a.workerId===selectedWorker&&a.status==='approved').map(a=><MenuItem key={String(a.id)} value={String(a.id)}>{label(a.workDate)} · {label(a.minutesWorked)} min</MenuItem>)}</TextField><TextField label="Overtime minutes" type="number" value={forms.overtimeMinutes} onChange={e=>setField('overtimeMinutes',e.target.value)} /><TextField label="Reason" required multiline minRows={2} value={forms.overtimeReason} onChange={e=>setField('overtimeReason',e.target.value)} /></>}
           {dialog === 'timesheet' && <><TextField label="Period start" type="date" InputLabelProps={{shrink:true}} value={forms.timesheetStart} onChange={e=>setField('timesheetStart',e.target.value)} /><TextField label="Period end" type="date" InputLabelProps={{shrink:true}} value={forms.timesheetEnd} onChange={e=>setField('timesheetEnd',e.target.value)} /><Alert severity="info">Only approved attendance is included.</Alert></>}
           {dialog === 'correction' && <><Alert severity="warning">Corrections are requests, not direct edits. Another authorized reviewer must approve the change.</Alert><TextField label="Corrected clock-in" type="datetime-local" InputLabelProps={{shrink:true}} value={forms.correctionClockIn} onChange={e=>setField('correctionClockIn',e.target.value)} /><TextField label="Corrected clock-out" type="datetime-local" InputLabelProps={{shrink:true}} value={forms.correctionClockOut} onChange={e=>setField('correctionClockOut',e.target.value)} /><TextField label="Corrected minutes" type="number" value={forms.correctionMinutes} onChange={e=>setField('correctionMinutes',e.target.value)} /><TextField label="Reason" required multiline minRows={2} value={forms.correctionReason} onChange={e=>setField('correctionReason',e.target.value)} /></>}
+
+          {(dialog === 'billingQuote' || dialog === 'billingInvoice' || dialog === 'billingRecurring') && <><TextField label="Customer name" required value={forms.billingCustomer} onChange={e=>setField('billingCustomer',e.target.value)} /><TextField label="Customer email" type="email" value={forms.billingEmail} onChange={e=>setField('billingEmail',e.target.value)} /><TextField label="Currency" value={forms.billingCurrency} onChange={e=>setField('billingCurrency',e.target.value.toUpperCase())} /><TextField label="Line description" required value={forms.billingDescription} onChange={e=>setField('billingDescription',e.target.value)} /><TextField label="Quantity" type="number" value={forms.billingQuantity} onChange={e=>setField('billingQuantity',e.target.value)} /><TextField label="Unit price (minor units)" type="number" value={forms.billingUnitPrice} onChange={e=>setField('billingUnitPrice',e.target.value)} /><TextField label="Tax rate (0–1)" type="number" value={forms.billingTaxRate} onChange={e=>setField('billingTaxRate',e.target.value)} />{dialog==='billingQuote'&&<TextField label="Valid until" type="date" InputLabelProps={{shrink:true}} value={forms.billingValidUntil} onChange={e=>setField('billingValidUntil',e.target.value)} />}{dialog==='billingInvoice'&&<TextField label="Due date" type="date" InputLabelProps={{shrink:true}} value={forms.billingDueDate} onChange={e=>setField('billingDueDate',e.target.value)} />}{dialog==='billingRecurring'&&<><TextField label="Frequency" select value={forms.billingFrequency} onChange={e=>setField('billingFrequency',e.target.value)}><MenuItem value="monthly">Monthly</MenuItem><MenuItem value="yearly">Yearly</MenuItem></TextField><TextField label="Next run date" type="date" InputLabelProps={{shrink:true}} value={forms.billingNextRun} onChange={e=>setField('billingNextRun',e.target.value)} /><TextField label="Payment terms (days)" type="number" value={forms.billingDueDays} onChange={e=>setField('billingDueDays',e.target.value)} /></>}</>}
+          {dialog==='billingSubscription'&&<TextField select label="Plan" required value={forms.billingPlanId} onChange={e=>setField('billingPlanId',e.target.value)}>{(data.billingPlans??[]).map(p=><MenuItem key={String(p.id)} value={String(p.id)}>{label(p.name)} · {p.priceMinor==null?'Price to be configured':String(p.currency)+' '+String(p.priceMinor)}</MenuItem>)}</TextField>}
+          {dialog==='billingPayment'&&<><TextField select label="Invoice" required value={forms.billingInvoiceId} onChange={e=>setField('billingInvoiceId',e.target.value)}>{(data.invoices??[]).filter(x=>['issued','partially_paid','overdue'].includes(String(x.status))).map(x=><MenuItem key={String(x.id)} value={String(x.id)}>{label(x.invoiceNumber)} · {label(x.customerName)} · {label(x.totalMinor)}</MenuItem>)}</TextField><TextField label="Amount (minor units)" type="number" value={forms.billingPaymentAmount} onChange={e=>setField('billingPaymentAmount',e.target.value)} /><TextField label="Method" select value={forms.billingPaymentMethod} onChange={e=>setField('billingPaymentMethod',e.target.value)}>{['bank_transfer','mpesa','card','cash','other'].map(x=><MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField label="External reference" required value={forms.billingPaymentReference} onChange={e=>setField('billingPaymentReference',e.target.value)} /></>}
           {dialog === 'payComponent' && <><Alert severity="info">Components are period amounts. Taxable allowances enter the statutory calculation base; other component lines are shown separately in payroll snapshots.</Alert><TextField label="Component code" required value={forms.componentCode} onChange={e=>setField('componentCode',e.target.value.toUpperCase())} /><TextField label="Component name" required value={forms.componentName} onChange={e=>setField('componentName',e.target.value)} /><TextField select label="Component type" value={forms.componentType} onChange={e=>setField('componentType',e.target.value)}>{['allowance','deduction','benefit'].map(x=><MenuItem key={x} value={x}>{x}</MenuItem>)}</TextField><TextField select label="Calculation method" value={forms.componentMethod} onChange={e=>setField('componentMethod',e.target.value)}>{['fixed','percentage_of_base'].map(x=><MenuItem key={x} value={x}>{x==='fixed'?'Fixed amount':'Percentage of base earnings'}</MenuItem>)}</TextField><TextField label={forms.componentMethod==='fixed'?'Amount per payroll period':'Percentage'} type="number" required value={forms.componentAmount} onChange={e=>setField('componentAmount',e.target.value)} /><TextField select label="Taxable allowance" disabled={forms.componentType!=='allowance'} value={forms.componentTaxable} onChange={e=>setField('componentTaxable',e.target.value)}><MenuItem value="false">No</MenuItem><MenuItem value="true">Yes</MenuItem></TextField><TextField label="Effective from" type="date" InputLabelProps={{shrink:true}} value={forms.componentFrom} onChange={e=>setField('componentFrom',e.target.value)} /></>}
           {dialog === 'endContract' && <><Alert severity="warning">Ending a contract is effective-dated and cannot be extended. Create a new contract version if the worker is rehired.</Alert><TextField label="Effective to" type="date" required InputLabelProps={{ shrink: true }} value={forms.contractEndDate} onChange={e => setField('contractEndDate', e.target.value)} /></>}
           {dialog === 'worker' && <><TextField label="Worker number" required value={forms.workerNumber} onChange={e => setField('workerNumber', e.target.value)} /><TextField label="First name" required value={forms.firstName} onChange={e => setField('firstName', e.target.value)} /><TextField label="Last name" required value={forms.lastName} onChange={e => setField('lastName', e.target.value)} /><TextField label="Phone" value={forms.phone} onChange={e => setField('phone', e.target.value)} /><TextField label="Email" type="email" value={forms.email} onChange={e => setField('email', e.target.value)} /></>}
