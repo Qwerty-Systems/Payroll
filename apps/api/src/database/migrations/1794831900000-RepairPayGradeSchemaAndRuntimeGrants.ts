@@ -74,15 +74,7 @@ export class RepairPayGradeSchemaAndRuntimeGrants1794831900000 implements Migrat
     `);
   }
 
-  async down(q: QueryRunner): Promise<void> {
-    // Deliberately retain the repaired table: it may contain live employee pay data.
-    await q.query(`
-      DO $$ BEGIN
-        IF EXISTS (SELECT 1 FROM pg_class WHERE relname='worker_pay_grades' AND relkind='r') THEN
-          ALTER TABLE worker_contracts DROP CONSTRAINT IF EXISTS worker_contracts_pay_grade_fk;
-          ALTER TABLE worker_contracts DROP COLUMN IF EXISTS pay_grade_id;
-        END IF;
-      END $$;
-    `);
+  async down(_q: QueryRunner): Promise<void> {
+    // Forward-only repair: do not drop a live pay-grade table or employee contract data.
   }
 }
