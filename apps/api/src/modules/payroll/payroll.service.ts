@@ -15,6 +15,17 @@ export class PayrollService {
 
   listPeriods(tenantId: string) { return this.tenantDb.run(tenantId, m => m.query('SELECT id,code,name,start_date AS "startDate",end_date AS "endDate",payment_date AS "paymentDate",status FROM payroll_periods WHERE tenant_id=$1 ORDER BY start_date DESC',[tenantId])); }
 
+  listRuns(tenantId: string, periodId?: string) {
+    return this.tenantDb.run(tenantId, m => m.query(`
+      SELECT r.id,r.period_id AS "periodId",p.code AS "periodCode",r.run_number AS "runNumber",
+        r.status,r.engine_version AS "engineVersion",r.totals,r.warnings,r.created_at AS "createdAt",
+        r.calculated_at AS "calculatedAt",r.approved_at AS "approvedAt",r.finalized_at AS "finalizedAt"
+      FROM payroll_runs r JOIN payroll_periods p ON p.tenant_id=r.tenant_id AND p.id=r.period_id
+      WHERE r.tenant_id=$1 AND ($2::uuid IS NULL OR r.period_id=$2::uuid)
+      ORDER BY r.created_at DESC
+    `,[tenantId,periodId??null]));
+  }
+
   createPeriod(tenantId: string, actorId: string, dto: CreatePayrollPeriodDto) {
     if (dto.endDate < dto.startDate) throw new BadRequestException('Payroll period end date must not precede its start date.');
     const start = new Date(dto.startDate + 'T00:00:00Z'); const end = new Date(dto.endDate + 'T00:00:00Z');
