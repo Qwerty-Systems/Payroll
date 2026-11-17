@@ -772,7 +772,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               {(selectedComponentType === 'allowance' ? ['fixed_amount','per_day','per_hour','percentage','quantity_times_rate'] : ['fixed_amount','percentage','balance_recovery']).map(method => <MenuItem key={method} value={method}>{method.replaceAll('_',' ')}</MenuItem>)}
             </TextField>
             <TextField select label="Tax treatment" value={forms.componentTreatment} onChange={e => setField('componentTreatment',e.target.value)}>
-              {(selectedComponentType === 'allowance' ? ['review_required','taxable','non_taxable'] : ['review_required','not_applicable','pre_tax','post_tax']).map(value => <MenuItem key={value} value={value}>{value.replaceAll('_',' ')}</MenuItem>)}
+              {(selectedComponentType === 'allowance' ? ['review_required','taxable','non_taxable'] : ['review_required','not_applicable','post_tax']).map(value => <MenuItem key={value} value={value}>{value.replaceAll('_',' ')}</MenuItem>)}
             </TextField>
             <TextField label="Calculation configuration (JSON)" multiline minRows={5} helperText='Example: {"rate": 1.5, "maximumMonthly": 5000}. Use an empty object when no parameters are required.' value={forms.componentConfiguration} onChange={e => setField('componentConfiguration',e.target.value)} />
             <TextField select label="Status" value={forms.componentEnabled} onChange={e => setField('componentEnabled',e.target.value)}><MenuItem value="true">Enabled</MenuItem><MenuItem value="false">Disabled</MenuItem></TextField>
