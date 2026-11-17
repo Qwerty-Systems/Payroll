@@ -1,5 +1,5 @@
 export type OfflineEntity = 'workers' | 'projects' | 'sites' | 'attendance';
-export type SyncState = 'pending' | 'syncing' | 'synced' | 'conflict' | 'failed';
+export type SyncState = 'pending' | 'syncing' | 'synced' | 'conflict' | 'failed' | 'rejected';
 
 export interface OfflineRecord {
   id: string;
