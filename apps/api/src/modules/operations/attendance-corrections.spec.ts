@@ -10,7 +10,7 @@ describe('Attendance correction workflow', () => {
   function serviceWithQuery(query: jest.Mock) {
     const manager = { query };
     const tenantDb = {
-      run: jest.fn(async (_tenant: string, work: (manager: typeof manager) => Promise<unknown>) => work(manager)),
+      run: jest.fn(async (_tenant: string, work: (manager: { query: jest.Mock }) => Promise<unknown>) => work(manager)),
     };
     return new OperationsService(tenantDb as never);
   }
