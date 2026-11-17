@@ -71,7 +71,7 @@ API endpoints:
 - `GET /api/v1/health/ready`
 - Swagger: `/api/docs`
 
-Migrations are an explicit deployment step; they are not automatically run at application startup. Do not use production personal or payroll data until authentication, authorization, operational workflows and security reviews are complete.
+**Deployment migrations:** Dockerfile-based API deployments automatically run pending TypeORM migrations before the API process starts. The container exits without starting the API if migrations fail. Configure `MIGRATIONS_DATABASE_URL` (or the `MIGRATIONS_DATABASE_HOST`, `MIGRATIONS_DATABASE_PORT`, `MIGRATIONS_DATABASE_USERNAME`, `MIGRATIONS_DATABASE_PASSWORD` and `MIGRATIONS_DATABASE_NAME` variables) with a database role that can apply schema migrations; if these are not set, the migration data source falls back to `DATABASE_*`. In Docker Compose deployments, the one-shot `migrate` service runs first and the API skips its own migration step. Do not set `SKIP_DATABASE_MIGRATIONS=true` for a standalone API deployment unless another deployment step is guaranteed to run migrations successfully. Do not use production personal or payroll data until authentication, authorization, operational workflows and security reviews are complete.
 
 ## Legal and operational notice
 This software is an administrative tool, not a substitute for professional payroll, tax, employment or legal advice. Before production payroll is run, the operator must verify statutory rules and filing processes against current official Kenyan sources and obtain appropriate review. The system retains the source, effective date, approver and version for every statutory configuration.
