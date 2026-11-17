@@ -4,6 +4,7 @@ import { EntityManager } from 'typeorm';
 import {
   CreateLeaveRequestDto, CreateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
+  CreateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
 } from './workforce-time.dto';
 
 @Injectable()
@@ -253,6 +254,150 @@ export class WorkforceTimeService {
           review_reason AS "reviewReason",reviewed_at AS "reviewedAt"
       `,[tenantId,id,decision==='approve'?'approved':'rejected',approvedMinutes,actorId,dto.reason]);
       await this.audit(m,tenantId,actorId,'overtime.request.'+decision,'overtime_request',id,{approvedMinutes,reason:dto.reason});
+      return updated[0];
+    });
+  }
+
+
+  listTimesheets(tenantId: string, status?: string, workerId?: string) {
+    return this.tenantDb.run(tenantId,m=>m.query(`
+      SELECT t.id,t.worker_id AS "workerId",w.worker_number AS "workerNumber",
+        concat_ws(' ',w.first_name,w.last_name) AS "workerName",
+        t.period_start::text AS "periodStart",t.period_end::text AS "periodEnd",
+        t.status,t.notes,t.submitted_at AS "submittedAt",t.reviewed_at AS "reviewedAt",
+        t.review_reason AS "reviewReason",count(l.id)::int AS "lineCount",
+        COALESCE(sum(l.minutes_worked),0)::int AS "minutesWorked",
+        COALESCE(sum(l.overtime_minutes),0)::int AS "overtimeMinutes"
+      FROM timesheets t JOIN workers w ON w.tenant_id=t.tenant_id AND w.id=t.worker_id
+      LEFT JOIN timesheet_lines l ON l.tenant_id=t.tenant_id AND l.timesheet_id=t.id
+      WHERE t.tenant_id=$1 AND ($2::text IS NULL OR t.status=$2)
+        AND ($3::uuid IS NULL OR t.worker_id=$3)
+      GROUP BY t.id,w.worker_number,w.first_name,w.last_name
+      ORDER BY t.period_start DESC,t.created_at DESC
+    `,[tenantId,status??null,workerId??null]));
+  }
+
+  async getTimesheet(tenantId: string, id: string) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const headers=await m.query(`
+        SELECT id,worker_id AS "workerId",period_start::text AS "periodStart",
+          period_end::text AS "periodEnd",status,notes,submitted_at AS "submittedAt",
+          reviewed_at AS "reviewedAt",review_reason AS "reviewReason"
+        FROM timesheets WHERE tenant_id=$1 AND id=$2
+      `,[tenantId,id]);
+      if(!headers.length) throw new NotFoundException('Timesheet not found.');
+      const lines=await m.query(`
+        SELECT id,work_date::text AS "workDate",project_id AS "projectId",site_id AS "siteId",
+          minutes_worked AS "minutesWorked",overtime_minutes AS "overtimeMinutes",
+          units_completed AS "unitsCompleted",description
+        FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2 ORDER BY work_date,id
+      `,[tenantId,id]);
+      return {...headers[0],lines};
+    });
+  }
+
+  createTimesheet(tenantId: string, actorId: string, dto: CreateTimesheetDto) {
+    if(dto.periodEnd<dto.periodStart) throw new BadRequestException('Timesheet period end cannot precede its start date.');
+    return this.tenantDb.run(tenantId,async m=>{
+      const worker=await m.query("SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active'",[tenantId,dto.workerId]);
+      if(!worker.length) throw new NotFoundException('Active worker not found.');
+      const rows=await m.query(`
+        INSERT INTO timesheets(tenant_id,worker_id,period_start,period_end,notes)
+        VALUES($1,$2,$3,$4,$5)
+        RETURNING id,worker_id AS "workerId",period_start::text AS "periodStart",
+          period_end::text AS "periodEnd",status,notes
+      `,[tenantId,dto.workerId,dto.periodStart,dto.periodEnd,dto.notes??null]);
+      await this.audit(m,tenantId,actorId,'timesheet.created','timesheet',rows[0].id,rows[0]);
+      return rows[0];
+    });
+  }
+
+  createTimesheetLine(tenantId: string, actorId: string, timesheetId: string, dto: CreateTimesheetLineDto) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const headers=await m.query('SELECT period_start,period_end,status FROM timesheets WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,timesheetId]);
+      if(!headers.length) throw new NotFoundException('Timesheet not found.');
+      if(!['draft','rejected'].includes(headers[0].status)) throw new ConflictException('Only draft or rejected timesheets can be edited.');
+      if(dto.workDate<headers[0].period_start.toISOString?.().slice(0,10) && dto.workDate< String(headers[0].period_start).slice(0,10)) throw new BadRequestException('Work date is outside the timesheet period.');
+      const from=String(headers[0].period_start).slice(0,10),to=String(headers[0].period_end).slice(0,10);
+      if(dto.workDate<from || dto.workDate>to) throw new BadRequestException('Work date is outside the timesheet period.');
+      const rows=await m.query(`
+        INSERT INTO timesheet_lines(tenant_id,timesheet_id,work_date,project_id,site_id,minutes_worked,overtime_minutes,units_completed,description)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        RETURNING id,work_date::text AS "workDate",project_id AS "projectId",site_id AS "siteId",
+          minutes_worked AS "minutesWorked",overtime_minutes AS "overtimeMinutes",
+          units_completed AS "unitsCompleted",description
+      `,[tenantId,timesheetId,dto.workDate,dto.projectId??null,dto.siteId??null,dto.minutesWorked,dto.overtimeMinutes??0,dto.unitsCompleted??null,dto.description??null]);
+      await this.audit(m,tenantId,actorId,'timesheet.line.created','timesheet_line',rows[0].id,{timesheetId,line:rows[0]});
+      return rows[0];
+    });
+  }
+
+  updateTimesheetLine(tenantId: string, actorId: string, timesheetId: string, lineId: string, dto: UpdateTimesheetLineDto) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const headers=await m.query('SELECT period_start,period_end,status FROM timesheets WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,timesheetId]);
+      if(!headers.length) throw new NotFoundException('Timesheet not found.');
+      if(!['draft','rejected'].includes(headers[0].status)) throw new ConflictException('Only draft or rejected timesheets can be edited.');
+      const found=await m.query('SELECT * FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2 AND id=$3 FOR UPDATE',[tenantId,timesheetId,lineId]);
+      if(!found.length) throw new NotFoundException('Timesheet line not found.');
+      const before=found[0],workDate=dto.workDate??String(before.work_date).slice(0,10);
+      const from=String(headers[0].period_start).slice(0,10),to=String(headers[0].period_end).slice(0,10);
+      if(workDate<from || workDate>to) throw new BadRequestException('Work date is outside the timesheet period.');
+      const rows=await m.query(`
+        UPDATE timesheet_lines SET work_date=$4,project_id=$5,site_id=$6,minutes_worked=$7,
+          overtime_minutes=$8,units_completed=$9,description=$10,updated_at=now()
+        WHERE tenant_id=$1 AND timesheet_id=$2 AND id=$3
+        RETURNING id,work_date::text AS "workDate",project_id AS "projectId",site_id AS "siteId",
+          minutes_worked AS "minutesWorked",overtime_minutes AS "overtimeMinutes",
+          units_completed AS "unitsCompleted",description
+      `,[tenantId,timesheetId,lineId,workDate,dto.projectId===undefined?before.project_id:dto.projectId,
+        dto.siteId===undefined?before.site_id:dto.siteId,dto.minutesWorked??before.minutes_worked,
+        dto.overtimeMinutes??before.overtime_minutes,dto.unitsCompleted===undefined?before.units_completed:dto.unitsCompleted,
+        dto.description===undefined?before.description:dto.description]);
+      await this.audit(m,tenantId,actorId,'timesheet.line.updated','timesheet_line',lineId,{before,after:rows[0]});
+      return rows[0];
+    });
+  }
+
+  deleteTimesheetLine(tenantId: string, actorId: string, timesheetId: string, lineId: string) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const header=await m.query('SELECT status FROM timesheets WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,timesheetId]);
+      if(!header.length) throw new NotFoundException('Timesheet not found.');
+      if(!['draft','rejected'].includes(header[0].status)) throw new ConflictException('Only draft or rejected timesheets can be edited.');
+      const rows=await m.query('DELETE FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2 AND id=$3 RETURNING id',[tenantId,timesheetId,lineId]);
+      if(!rows.length) throw new NotFoundException('Timesheet line not found.');
+      await this.audit(m,tenantId,actorId,'timesheet.line.deleted','timesheet_line',lineId,{timesheetId});
+      return {id:lineId,deleted:true};
+    });
+  }
+
+  submitTimesheet(tenantId: string, actorId: string, id: string) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const rows=await m.query('SELECT status FROM timesheets WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);
+      if(!rows.length) throw new NotFoundException('Timesheet not found.');
+      if(!['draft','rejected'].includes(rows[0].status)) throw new ConflictException('Only draft or rejected timesheets can be submitted.');
+      const count=await m.query('SELECT count(*)::int AS count FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2',[tenantId,id]);
+      if(Number(count[0].count)===0) throw new BadRequestException('Add at least one timesheet line before submitting.');
+      const updated=await m.query(`
+        UPDATE timesheets SET status='submitted',submitted_by=$3,submitted_at=now(),
+          reviewed_by=NULL,reviewed_at=NULL,review_reason=NULL,updated_at=now()
+        WHERE tenant_id=$1 AND id=$2 RETURNING id,status,submitted_at AS "submittedAt"
+      `,[tenantId,id,actorId]);
+      await this.audit(m,tenantId,actorId,'timesheet.submitted','timesheet',id,{});
+      return updated[0];
+    });
+  }
+
+  reviewTimesheet(tenantId: string, actorId: string, id: string, decision: 'approve'|'reject', dto: ReviewTimesheetDto) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const rows=await m.query('SELECT * FROM timesheets WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);
+      if(!rows.length) throw new NotFoundException('Timesheet not found.');
+      if(rows[0].status!=='submitted') throw new ConflictException('Only submitted timesheets can be reviewed.');
+      if(rows[0].submitted_by===actorId) throw new BadRequestException('The submitter cannot review their own timesheet.');
+      const updated=await m.query(`
+        UPDATE timesheets SET status=$3,reviewed_by=$4,reviewed_at=now(),review_reason=$5,updated_at=now()
+        WHERE tenant_id=$1 AND id=$2 RETURNING id,status,review_reason AS "reviewReason",reviewed_at AS "reviewedAt"
+      `,[tenantId,id,decision==='approve'?'approved':'rejected',actorId,dto.reason]);
+      await this.audit(m,tenantId,actorId,'timesheet.'+decision,'timesheet',id,{reason:dto.reason});
       return updated[0];
     });
   }
