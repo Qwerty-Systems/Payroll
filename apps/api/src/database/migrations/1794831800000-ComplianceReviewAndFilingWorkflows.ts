@@ -113,7 +113,7 @@ export class ComplianceReviewAndFilingWorkflows1794831800000 implements Migratio
       CREATE INDEX statutory_filings_period_idx
         ON statutory_filing_records(tenant_id,payroll_period_id,authority);
 
-      DO $
+      DO $compliance$
       DECLARE role_name text;
       BEGIN
         FOREACH role_name IN ARRAY ARRAY['jengaflow_app','jf_app'] LOOP
@@ -121,9 +121,9 @@ export class ComplianceReviewAndFilingWorkflows1794831800000 implements Migratio
             EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_statutory_rule_reviews, tenant_statutory_rule_changes, statutory_filing_records, tenant_statutory_rule_overrides TO %I',role_name);
           END IF;
         END LOOP;
-      END $;
+      END $compliance$;
 
-      DO $ DECLARE t text; BEGIN
+      DO $rls$ DECLARE t text; BEGIN
         FOREACH t IN ARRAY ARRAY[
           'tenant_statutory_rule_reviews',
           'tenant_statutory_rule_changes',
@@ -136,7 +136,7 @@ export class ComplianceReviewAndFilingWorkflows1794831800000 implements Migratio
             t
           );
         END LOOP;
-      END $$;
+      END $rls$;
     `);
   }
 
