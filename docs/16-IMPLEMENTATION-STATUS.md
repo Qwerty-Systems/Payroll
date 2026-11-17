@@ -61,10 +61,7 @@ These additions do not make the application production-ready by themselves. Tena
 Worker documents are stored in private object storage with tenant-scoped metadata. Uploads are limited to 10 MB and PDF/JPEG/PNG/WebP, with server-side signature checks. Download URLs are issued only after a tenant-scoped metadata lookup and expire after three minutes. The worker detail screen supports document type selection, upload and download.
 
 
-## Allowances and non-statutory deductions (engine jengaflow-ke-0.2.0)
-Payroll runs now calculate tenant allowance and deduction assignments instead of blocking on them.
-- Taxable allowances enter the PAYE/SHIF/NSSF/AHL base; non-taxable allowances are paid on top. An allowance whose tax treatment is still `review_required` is treated as taxable provisionally and blocks finalization.
-- Supported allowance methods: `fixed_amount` (optional `prorate`), `per_day` (approved days), `percentage` (of basic earnings). `per_hour` is computed only when the type sets `hoursBasis: all_approved_hours`, because approved overtime/night hours are not yet recorded; `quantity_times_rate` has no quantity source yet. Both block finalization otherwise.
-- Deductions are applied after tax: `fixed_amount`, `percentage` (of gross, or `base: basic_earnings`) and `balance_recovery`. Pre-tax relief is unsupported and blocks finalization. Unreviewed deduction treatment is assumed post-tax with a non-blocking note.
-- Recovery balances are reduced only at finalization, guarded against stale runs. Duplicate active assignments of one allowance type, disabled or non-effective types, and negative net pay block finalization.
-- Not implemented: a legal cap on total deductions relative to wages. Confirm the applicable Employment Act limit with a payroll/legal reviewer before enabling production payroll.
+## Attendance correction workflow (in review)
+- Approved attendance records can receive tenant-scoped correction requests with a reason and proposed clock-in, clock-out and/or minutes-worked values.
+- A single pending correction is allowed per attendance record. The requester cannot approve their own correction; approval/rejection requires a review reason and is audited.
+- The correction request table enforces tenant RLS and a composite tenant/attendance foreign key. This does not yet replace the remaining shift, leave, overtime and timesheet workflows.

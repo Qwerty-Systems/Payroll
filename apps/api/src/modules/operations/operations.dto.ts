@@ -22,6 +22,16 @@ export class CreateWorkerDto {
   @IsOptional() @IsString() @Length(7, 32) phone?: string;
   @IsOptional() @IsEmail() email?: string;
 }
+export class CreateAttendanceCorrectionDto {
+  @IsOptional() @IsDateString() clockIn?: string;
+  @IsOptional() @IsDateString() clockOut?: string;
+  @IsOptional() @IsInt() @Min(0) @Max(1440) minutesWorked?: number;
+  @IsString() @Length(5,500) reason!: string;
+}
+export class ReviewAttendanceCorrectionDto {
+  @IsString() @Length(3,500) reason!: string;
+}
+
 export class CreateAttendanceDto {
   @IsUUID() workerId!: string;
   @IsUUID() projectId!: string;
