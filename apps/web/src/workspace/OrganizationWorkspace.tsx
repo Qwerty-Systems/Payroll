@@ -85,6 +85,13 @@ export default function OrganizationWorkspace({ request, workers, projects, site
     finally{setBusy(false);}
   }
 
+  async function deleteAssignment(row:Row){
+    if(!window.confirm('Permanently delete this assignment? Use this only for an incorrect record. If payroll or another record depends on it, deletion will be blocked; end the assignment instead.'))return;
+    setBusy(true);setError('');setNotice('');
+    try{await request(`tenant/organization/worker-assignments/${row.id}`,{method:'DELETE'});setNotice('Incorrect assignment deleted and deletion audited.');await refresh();}
+    catch(e){setError(e instanceof Error?e.message:'Could not delete assignment. If it is referenced by payroll history, end it instead.');}
+    finally{setBusy(false);}
+  }
   const workerName=(id:string)=>{const w=workers.find(x=>x.id===id);return w?[w.firstName,w.lastName].filter(Boolean).join(' ')||w.workerNumber:id;};
   const branchName=(id:string)=>branches.find(x=>x.id===id)?.name??'—';
   const departmentName=(id:string)=>departments.find(x=>x.id===id)?.name??'—';
@@ -128,7 +135,7 @@ export default function OrganizationWorkspace({ request, workers, projects, site
           <TableCell>{branchName(row.branchId)}</TableCell><TableCell>{departmentName(row.departmentId)}</TableCell><TableCell>{costName(row.costCentreId)}</TableCell><TableCell>{projectName(row.projectId)}</TableCell><TableCell>{siteName(row.siteId)}</TableCell>
           <TableCell sx={{whiteSpace:'nowrap'}}>{String(row.effectiveFrom).slice(0,10)}</TableCell><TableCell>{row.effectiveTo?String(row.effectiveTo).slice(0,10):'—'}</TableCell>
           <TableCell><Chip size="small" label={row.status} color={row.status==='active'?'success':'default'}/></TableCell>
-          <TableCell><Stack direction="row" spacing={.5}>{row.status==='active'&&<><Button size="small" onClick={()=>start('assignment',row)}>Edit</Button><Button size="small" color="warning" disabled={busy} onClick={()=>void endAssignment(row)}>End</Button></>}</Stack></TableCell>
+          <TableCell><Stack direction="row" spacing={.5}>{row.status==='active'&&<><Button size="small" onClick={()=>start('assignment',row)}>Edit</Button><Button size="small" color="warning" disabled={busy} onClick={()=>void endAssignment(row)}>End</Button></>}<Button size="small" color="error" disabled={busy} onClick={()=>void deleteAssignment(row)}>Delete</Button></Stack></TableCell>
         </TableRow>)}
         {!assignments.length&&<TableRow><TableCell colSpan={10} sx={{py:4,textAlign:'center',color:'text.secondary'}}>No worker assignments yet.</TableCell></TableRow>}
         </TableBody></Table></TableContainer>
@@ -142,7 +149,7 @@ export default function OrganizationWorkspace({ request, workers, projects, site
             {kind==='branch'&&<TextField label="Address" multiline minRows={2} value={form.address} onChange={e=>set('address',e.target.value)}/>}
             {kind==='department'&&<TextField select label="Branch" value={form.branchId} onChange={e=>set('branchId',e.target.value)}><MenuItem value="">No branch</MenuItem>{branches.filter(x=>x.status==='active').map(x=><MenuItem key={x.id} value={x.id}>{x.code} · {x.name}</MenuItem>)}</TextField>}
           </>:<>
-            <TextField select label="Worker" required disabled={!!editing} value={form.workerId} onChange={e=>set('workerId',e.target.value)}>{workers.filter(x=>x.status==='active').map(x=><MenuItem key={x.id} value={x.id}>{workerName(x.id)}</MenuItem>)}</TextField>
+            <TextField select label="Worker" required value={form.workerId} onChange={e=>set('workerId',e.target.value)}>{workers.filter(x=>x.status==='active').map(x=><MenuItem key={x.id} value={x.id}>{workerName(x.id)}</MenuItem>)}</TextField>
             <TextField select label="Branch" value={form.branchId} onChange={e=>set('branchId',e.target.value)}><MenuItem value="">Not assigned</MenuItem>{branches.filter(x=>x.status==='active').map(x=><MenuItem key={x.id} value={x.id}>{x.name}</MenuItem>)}</TextField>
             <TextField select label="Department" value={form.departmentId} onChange={e=>set('departmentId',e.target.value)}><MenuItem value="">Not assigned</MenuItem>{departments.filter(x=>x.status==='active').map(x=><MenuItem key={x.id} value={x.id}>{x.name}</MenuItem>)}</TextField>
             <TextField select label="Cost centre" value={form.costCentreId} onChange={e=>set('costCentreId',e.target.value)}><MenuItem value="">Not assigned</MenuItem>{costCentres.filter(x=>x.status==='active').map(x=><MenuItem key={x.id} value={x.id}>{x.name}</MenuItem>)}</TextField>
