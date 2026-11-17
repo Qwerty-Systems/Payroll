@@ -63,6 +63,7 @@ export class ComplianceReviewAndFilingWorkflows1794831800000 implements Migratio
       );
 
       ALTER TABLE tenant_statutory_rule_overrides
+        ADD COLUMN rule_set_id uuid REFERENCES statutory_rule_sets(id) ON DELETE RESTRICT,
         ADD COLUMN status varchar(20) NOT NULL DEFAULT 'approved'
           CHECK (status IN ('draft','submitted','approved','rejected','superseded')),
         ADD COLUMN submitted_by uuid REFERENCES platform_users(id) ON DELETE SET NULL,
@@ -134,6 +135,7 @@ export class ComplianceReviewAndFilingWorkflows1794831800000 implements Migratio
       DROP TABLE IF EXISTS statutory_filing_records;
       ALTER TABLE tenant_statutory_rule_overrides
         DROP COLUMN IF EXISTS verified_on,
+        DROP COLUMN IF EXISTS rule_set_id,
         DROP COLUMN IF EXISTS source_url,
         DROP COLUMN IF EXISTS source_title,
         DROP COLUMN IF EXISTS review_notes,
