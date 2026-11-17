@@ -120,6 +120,6 @@ export class ComplianceController {
   }
 
   @Get('audit')
-  @TenantPermissions('audit.read')
+  @TenantPermissions('compliance.read')
   audit(@Req() req:TenantRequest,@Query('limit') limit?:string) { return this.compliance.listAudit(req.tenant.id,Number(limit??100)); }
 }
