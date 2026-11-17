@@ -98,3 +98,12 @@ Worker documents are stored in private object storage with tenant-scoped metadat
 - Attendance capture queues a tenant-scoped command locally when the browser is offline; the authenticated sync endpoint remains responsible for validation, tenant membership, device registration and idempotency.
 - Failed transient sync attempts receive exponential retry delays capped at fifteen minutes. Interrupted `syncing` commands are eligible for safe replay; server command IDs and payload hashes protect against duplicate writes.
 - Open sync conflicts are visible in the workspace. The current conflict UI supports explicitly discarding the local duplicate while retaining the server record; automatic field-level merging is not implemented.
+
+
+## Tenant billing and subscriptions (in review)
+- A platform-gated plan catalogue supports immutable price snapshots on tenant subscription requests. Platform billing administrators are provisioned through the controlled `platform_billing_admins` registry; plan creation/status changes are audited.
+- Tenant owners/admins/accountants can request a configured subscription plan. Subscription requests remain pending until a separately integrated billing-provider activation workflow is completed.
+- Tenant quotations support issue, independent accept/reject and conversion to invoices.
+- Invoices support line-level quantity, minor-unit prices, tax rates, due dates, payment recording and independent payment reconciliation/reversal.
+- Recurring schedules preserve their line snapshots and due-date terms. A tenant-authorized endpoint generates due invoices idempotently; a scheduler must invoke that endpoint to automate cadence. No external payment gateway or customer email delivery is claimed.
+- Currency values are stored as integer minor units. Plan prices are not invented; platform billing admins must configure them before subscription requests can be accepted.

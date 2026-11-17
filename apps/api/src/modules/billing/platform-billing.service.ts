@@ -1,0 +1,10 @@
+import { ConflictException,Injectable,NotFoundException } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { CreateBillingPlanDto } from './billing.dto';
+@Injectable()
+export class PlatformBillingService{
+ constructor(private readonly dataSource:DataSource){}
+ listPlans(){return this.dataSource.query('SELECT id,code,name,description,price_minor AS "priceMinor",currency,billing_interval AS "billingInterval",features,seat_limit AS "seatLimit",worker_limit AS "workerLimit",status,created_at AS "createdAt" FROM billing_plans ORDER BY code');}
+ async createPlan(actorId:string,dto:CreateBillingPlanDto){const currency=dto.currency.toUpperCase();if(!/^[A-Z]{3}$/.test(currency))throw new ConflictException('Currency must be a three-letter ISO code.');const rows=await this.dataSource.query('INSERT INTO billing_plans(code,name,description,price_minor,currency,billing_interval,features,seat_limit,worker_limit) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9) RETURNING id,code,name,price_minor AS "priceMinor",currency,billing_interval AS "billingInterval",status',[dto.code.trim().toUpperCase(),dto.name.trim(),dto.description??null,dto.priceMinor,currency,dto.billingInterval,JSON.stringify(dto.features),dto.seatLimit??null,dto.workerLimit??null]);await this.dataSource.query("INSERT INTO platform_audit_events(actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,'billing.plan.created','billing_plan',$2,$3::jsonb)",[actorId,rows[0].id,JSON.stringify({code:rows[0].code,priceMinor:dto.priceMinor,currency})]);return rows[0];}
+ async setPlanStatus(actorId:string,id:string,status:'active'|'inactive'){const rows=await this.dataSource.query('UPDATE billing_plans SET status=$2,updated_at=now() WHERE id=$1 RETURNING id,code,status',[id,status]);if(!rows.length)throw new NotFoundException('Billing plan not found.');await this.dataSource.query("INSERT INTO platform_audit_events(actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,'billing.plan.status_changed','billing_plan',$2,$3::jsonb)",[actorId,id,JSON.stringify({status})]);return rows[0];}
+}
