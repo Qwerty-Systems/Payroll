@@ -90,3 +90,11 @@ Worker documents are stored in private object storage with tenant-scoped metadat
 - Finalized payroll snapshots can produce tenant filing schedules for PAYE, SHIF, NSSF, AHL and NITA, including employee/employer totals where applicable.
 - Filing records move through draft, reviewed, submitted, accepted or rejected states. Marking a filing submitted requires an independent review and an external reference; this API does not transmit returns to KRA, SHA or NSSF.
 - Platform compliance reviewers must be provisioned through the controlled database administration process in `platform_compliance_reviewers`; there is intentionally no self-service endpoint for granting platform reviewer access.
+
+
+## Offline reference data and retry recovery (in review)
+- Authenticated tenant users with attendance-read permission can download active worker, project, site, shift, pay-grade and current leave-entitlement reference data.
+- The web workspace caches this snapshot in IndexedDB and falls back to it when online refresh requests fail.
+- Attendance capture queues a tenant-scoped command locally when the browser is offline; the authenticated sync endpoint remains responsible for validation, tenant membership, device registration and idempotency.
+- Failed transient sync attempts receive exponential retry delays capped at fifteen minutes. Interrupted `syncing` commands are eligible for safe replay; server command IDs and payload hashes protect against duplicate writes.
+- Open sync conflicts are visible in the workspace. The current conflict UI supports explicitly discarding the local duplicate while retaining the server record; automatic field-level merging is not implemented.
