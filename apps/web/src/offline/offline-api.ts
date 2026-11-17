@@ -19,7 +19,7 @@ async function getOrRegisterDevice(tenantId: string, request: ApiRequest): Promi
   const registered = await request<RegisteredDevice>('tenant/sync/devices', {
     method: 'POST',
     body: JSON.stringify({
-      name: typeof navigator !== 'undefined' ? (navigator.userAgentData?.platform || navigator.platform || 'Browser').slice(0, 120) : 'Browser',
+      name: typeof navigator !== 'undefined' ? (navigator.platform || 'Browser').slice(0, 120) : 'Browser',
       platform: 'web',
     }),
   });
