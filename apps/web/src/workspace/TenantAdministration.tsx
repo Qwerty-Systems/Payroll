@@ -100,6 +100,7 @@ export default function TenantAdministration({ section, role, data, request, ref
   const departments = data.departments ?? [];
   const costCentres = data.costCentres ?? [];
   const canManage = ['owner','admin'].includes(role);
+  const assignableRoles = role === 'owner' ? roles : roles.filter(item => item !== 'admin');
   return <Stack spacing={2}>
     {error && <Alert severity="error" onClose={() => setError('')}>{error}</Alert>}
     {notice && <Alert severity="success" onClose={() => setNotice('')}>{notice}{issuedToken && <TextField fullWidth multiline minRows={2} label="Invitation token — copy and share securely" value={issuedToken} InputProps={{readOnly:true}} sx={{mt:1}} />}</Alert>}
@@ -113,7 +114,7 @@ export default function TenantAdministration({ section, role, data, request, ref
         <Table size="small" sx={{mt:2}}><TableHead><TableRow>{['Name','Email','Role','Status','Actions'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
           {members.map(member=><TableRow key={String(member.membershipId ?? member.id)}>
             <TableCell>{value(member.fullName)}</TableCell><TableCell>{value(member.email)}</TableCell>
-            <TableCell><TextField select size="small" value={String(member.role ?? 'viewer')} disabled={!canManage || busy || member.role==='owner'} onChange={e=>void updateRole(String(member.membershipId),e.target.value)} sx={{minWidth:150}}>{roles.map(item=><MenuItem key={item} value={item}>{item}</MenuItem>)}</TextField></TableCell>
+            <TableCell><TextField select size="small" value={String(member.role ?? 'viewer')} disabled={!canManage || busy || member.role==='owner'} onChange={e=>void updateRole(String(member.membershipId),e.target.value)} sx={{minWidth:150}}>{assignableRoles.map(item=><MenuItem key={item} value={item}>{item}</MenuItem>)}</TextField></TableCell>
             <TableCell><Chip size="small" label={value(member.status)} color={member.status==='active'?'success':'default'}/></TableCell>
             <TableCell><Button size="small" color="error" disabled={!canManage || busy || member.role==='owner'} onClick={()=>void suspend(String(member.membershipId))}>Suspend</Button></TableCell>
           </TableRow>)}
