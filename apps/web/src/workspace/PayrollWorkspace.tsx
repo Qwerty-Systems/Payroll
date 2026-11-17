@@ -127,7 +127,7 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
     },'Remittance schedule and ledger preview loaded.');
   }
 
-  async function loadPayslips(runId:string) {
+  async function openPayslipPrint(id:string) {\n    const html=await request<string>('payroll/payslips/'+id+'/print');\n    const win=window.open('','_blank');\n    if(!win)throw new Error('Allow pop-ups to open the printable payslip.');\n    win.document.write(html);win.document.close();\n  }\n\n  async function loadPayslips(runId:string) {
     await perform(async()=>{
       const result=await request<unknown>('payroll/runs/'+runId+'/payslips');
       setPayslips(asRows(result));setSelectedRun(runId);setTab('payslips');
@@ -361,7 +361,7 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
             {runs.filter(r=>r.status==='finalized').map(r=><MenuItem key={r.id} value={r.id}>{r.periodCode??r.periodId} · Run {r.runNumber}</MenuItem>)}
           </TextField>
           <TableContainer><Table size="small"><TableHead><TableRow>{['Payslip no.','Employee','Gross','Deductions','Net pay','Issued',''].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
-            {payslips.map(p=>{const s=p.snapshot??{};return <TableRow key={p.id}><TableCell>{p.payslipNumber}</TableCell><TableCell>{s.worker?.firstName??p.workerId} {s.worker?.lastName??''}</TableCell><TableCell>{money(s.earnings?.amount)}</TableCell><TableCell>{money(Number(s.statutory?.employeeStatutoryDeductions??0)+Number(s.otherDeductions?.total??0))}</TableCell><TableCell>{money(s.netPay)}</TableCell><TableCell>{fmtDate(p.issuedAt)}</TableCell><TableCell><Button size="small" onClick={()=>setSelectedPayslip(p)}>View details</Button></TableCell></TableRow>})}
+            {payslips.map(p=>{const s=p.snapshot??{};return <TableRow key={p.id}><TableCell>{p.payslipNumber}</TableCell><TableCell>{s.worker?.firstName??p.workerId} {s.worker?.lastName??''}</TableCell><TableCell>{money(s.earnings?.amount)}</TableCell><TableCell>{money(Number(s.statutory?.employeeStatutoryDeductions??0)+Number(s.otherDeductions?.total??0))}</TableCell><TableCell>{money(s.netPay)}</TableCell><TableCell>{fmtDate(p.issuedAt)}</TableCell><TableCell><Stack direction="row" spacing={.5}><Button size="small" onClick={()=>setSelectedPayslip(p)}>View details</Button><Button size="small" onClick={()=>void openPayslipPrint(p.id)}>Print / PDF</Button></Stack></TableCell></TableRow>})}
             {!payslips.length&&<TableRow><TableCell colSpan={7} align="center">Choose a finalized run to load its payslips.</TableCell></TableRow>}
           </TableBody></Table></TableContainer>
         </Stack>}
@@ -416,7 +416,7 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
           </Stack>;
         })()}
       </DialogContent>
-      <DialogActions><Button onClick={()=>setSelectedPayslip(null)}>Close</Button></DialogActions>
+      <DialogActions><Button onClick={()=>setSelectedPayslip(null)}>Close</Button>{selectedPayslip&&<Button variant="contained" onClick={()=>void openPayslipPrint(selectedPayslip.id)}>Print / Save PDF</Button>}</DialogActions>
     </Dialog>
     <Dialog open={showReject} onClose={()=>setShowReject(false)} fullWidth maxWidth="sm">
       <DialogTitle>Return payroll for correction</DialogTitle>
