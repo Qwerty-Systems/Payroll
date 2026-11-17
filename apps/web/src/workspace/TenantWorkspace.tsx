@@ -56,13 +56,15 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [dialog, setDialog] = useState<'' | 'worker' | 'contract' | 'payGrade' | 'endContract' | 'project' | 'site' | 'attendance' | 'period'>('');
+  const [dialog, setDialog] = useState<'' | 'worker' | 'contract' | 'payGrade' | 'endContract' | 'project' | 'site' | 'attendance' | 'period' | 'payComponent'>('');
   const [busy, setBusy] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedRun, setSelectedRun] = useState('');
   const [selectedContract, setSelectedContract] = useState('');
   const [selectedPayGrade, setSelectedPayGrade] = useState('');
+  const [selectedComponentId, setSelectedComponentId] = useState('');
+  const [selectedComponentType, setSelectedComponentType] = useState<'allowance' | 'deduction'>('allowance');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -77,6 +79,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [forms, setForms] = useState<Record<string, string>>({
     workerNumber: '', firstName: '', lastName: '', phone: '', email: '',
+    componentName: '', componentMethod: 'fixed_amount', componentTreatment: 'review_required', componentConfiguration: '{}', componentEnabled: 'true', componentApproval: 'true',
     engagementType: 'permanent', payBasis: 'monthly', rateAmount: '', effectiveFrom: dateToday(), contractEndDate: dateToday(), unitCodes: '', payGradeId: '',
     gradeCode: '', gradeName: '', gradeDescription: '', gradePayBasis: 'monthly', gradeMinimum: '', gradeMidpoint: '', gradeMaximum: '', gradeCurrency: 'KES',
     projectCode: '', projectName: '', clientName: '', siteCode: '', siteName: '',
@@ -112,6 +115,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     const endpoints: Record<string, string> = {
       workers: 'tenant/workers',
       payGrades: 'tenant/pay-grades',
+      allowanceTypes: 'tenant/pay-components/allowances',
+      deductionTypes: 'tenant/pay-components/deductions',
       projects: 'tenant/projects',
       sites: 'tenant/sites',
       attendance: 'tenant/attendance',
@@ -275,6 +280,24 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
           setNotice('Pay grade created and made available for new employee contracts.');
         }
         setSelectedPayGrade('');
+      } else if (dialog === 'payComponent') {
+        let configuration: Record<string, unknown>;
+        try {
+          configuration = JSON.parse(forms.componentConfiguration || '{}') as Record<string, unknown>;
+          if (!configuration || Array.isArray(configuration) || typeof configuration !== 'object') throw new Error('Configuration must be a JSON object.');
+        } catch (cause) {
+          throw new Error(cause instanceof Error ? 'Configuration JSON is invalid: ' + cause.message : 'Configuration JSON is invalid.');
+        }
+        const payload: Record<string, unknown> = {
+          name: forms.componentName, calculationMethod: forms.componentMethod, configuration,
+          isEnabled: forms.componentEnabled === 'true', requiresApproval: forms.componentApproval === 'true',
+        };
+        if (selectedComponentType === 'allowance') payload.taxTreatment = forms.componentTreatment;
+        else payload.taxableTreatment = forms.componentTreatment;
+        const route = selectedComponentType === 'allowance' ? 'allowances' : 'deductions';
+        await request('tenant/pay-components/' + route + '/' + selectedComponentId, { method: 'PATCH', body: JSON.stringify(payload) });
+        setNotice('Pay component settings saved. New calculations will use the updated configuration; existing payroll snapshots remain unchanged.');
+        setSelectedComponentId('');
       } else if (dialog === 'project') {
         const project = await request<RowData>('tenant/projects', { method: 'POST', body: JSON.stringify({
           projectCode: forms.projectCode, name: forms.projectName, clientName: forms.clientName || undefined,
