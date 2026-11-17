@@ -198,17 +198,28 @@ export class ComplianceService {
       `,[tenantId,dto.payrollRunId,dto.payrollPeriodId]);
       if(!runs.length) throw new NotFoundException('Payroll run and period combination not found.');
       if(!['approved','finalized'].includes(runs[0].status)) throw new ConflictException('A statutory filing can only be prepared from an approved or finalized payroll run.');
-      const items=await m.query(`
-        SELECT s.worker,s.earnings,s.allowances,s.otherDeductions,s.statutory,s.netPay
-        FROM payroll_run_items i
-        CROSS JOIN LATERAL (SELECT i.calculation_snapshot->'worker' AS worker,
-          i.calculation_snapshot->'earnings' AS earnings,i.calculation_snapshot->'allowances' AS allowances,
-          i.calculation_snapshot->'otherDeductions' AS "otherDeductions",
-          i.calculation_snapshot->'statutory' AS statutory,i.calculation_snapshot->'netPay' AS "netPay") s
-        WHERE i.tenant_id=$1 AND i.payroll_run_id=$2 ORDER BY i.id
-      `,[tenantId,dto.payrollRunId]);
-      const totals=runs[0].totals??{};
-      const snapshot={authority:dto.authority,filingType:dto.filingType,period:{code:runs[0].period_code,startDate:runs[0].start_date,endDate:runs[0].end_date},payrollRunId:dto.payrollRunId,totals,employeeCount:items.length,employees:items};
+      const sourceItems=await m.query('SELECT calculation_snapshot AS snapshot FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2 ORDER BY id',[tenantId,dto.payrollRunId]);
+      const round=(n:number)=>Math.round((n+Number.EPSILON)*100)/100;
+      const employees=sourceItems.map((row:any)=>{
+        const snap=row.snapshot??{};
+        const statutory=snap.statutory??{};
+        let lines:Array<{code:string;side:'employee'|'employer';amount:number}>=[];
+        if(dto.authority==='KRA') lines=[{code:'PAYE',side:'employee',amount:Number(statutory.paye??0)}];
+        else if(dto.authority==='NSSF') lines=[{code:'NSSF',side:'employee',amount:Number(statutory.nssf??0)},{code:'NSSF_EMPLOYER',side:'employer',amount:Number(statutory.employerNssf??0)}];
+        else if(dto.authority==='SHA') lines=[{code:'SHIF',side:'employee',amount:Number(statutory.shif??0)}];
+        else if(dto.authority==='HOUSING_LEVY') lines=[{code:'AHL',side:'employee',amount:Number(statutory.housingLevy??0)},{code:'AHL_EMPLOYER',side:'employer',amount:Number(statutory.employerHousingLevy??0)}];
+        else if(dto.authority==='NITA') lines=[{code:'NITA',side:'employer',amount:Number(statutory.nita??0)}];
+        else lines=(Array.isArray(statutory.lines)?statutory.lines:[]).map((line:any)=>({code:String(line.code),side:line.side==='employer'?'employer':'employee',amount:Number(line.amount??0)}));
+        return {worker:snap.worker??{},grossEarnings:Number(snap.earnings?.grossPay??snap.earnings?.amount??0),netPay:Number(snap.netPay??0),taxableIncome:Number(statutory.taxableIncome??0),lines};
+      });
+      const totals={
+        employeeCount:employees.length,
+        grossEarnings:round(employees.reduce((sum:any,e:any)=>sum+e.grossEarnings,0)),
+        employeeStatutoryAmount:round(employees.reduce((sum:any,e:any)=>sum+e.lines.filter((l:any)=>l.side==='employee').reduce((n:number,l:any)=>n+l.amount,0),0)),
+        employerStatutoryAmount:round(employees.reduce((sum:any,e:any)=>sum+e.lines.filter((l:any)=>l.side==='employer').reduce((n:number,l:any)=>n+l.amount,0),0)),
+        netPay:round(employees.reduce((sum:any,e:any)=>sum+e.netPay,0)),
+      };
+      const snapshot={authority:dto.authority,filingType:dto.filingType,period:{code:runs[0].period_code,startDate:runs[0].start_date,endDate:runs[0].end_date},payrollRunId:dto.payrollRunId,totals,employeeCount:employees.length,employees};
       const rows=await m.query(`
         INSERT INTO statutory_filing_records
           (tenant_id,payroll_period_id,payroll_run_id,authority,filing_type,reference_period,due_date,status,currency,totals,report_snapshot,preparation_notes,prepared_by,prepared_at)
