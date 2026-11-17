@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, feature/**]
   pull_request:
-    branches: [main]
+    branches: [main, feat/attendance-correction-workflow]
 
 concurrency:
   group: jengaflow-ci-${{ github.ref }}
