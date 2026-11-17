@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsObject, IsOptional, IsString, Length, MaxLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsObject, IsOptional, IsString, Length, MaxLength } from 'class-validator';
 
 const categories = ['tax','employee_deduction','employer_contribution','tax_relief','allowable_deduction','levy'];
 export class SubmitRuleReviewDto {
@@ -49,4 +49,9 @@ export class SubmitFilingDto {
 }
 export class FilingRejectionDto {
   @IsString() @Length(10,2000) reason!: string;
+}
+
+export class FilingAuthorityResponseDto {
+  @IsBoolean() accepted!: boolean;
+  @IsOptional() @IsString() @MaxLength(2000) reason?: string;
 }
