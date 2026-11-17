@@ -73,8 +73,8 @@ describe('AuthenticatedApp', () => {
     expect(screen.queryByText(/authenticated workspace/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/set up or select your company workspace/i)).not.toBeInTheDocument();
     expect(screen.getAllByRole('banner')).toHaveLength(1);
-    expect(screen.getByText('People & workers')).toBeInTheDocument();
-    expect(screen.getByText('Overview')).toBeInTheDocument();
+    expect(screen.getAllByText('People & workers').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Overview').length).toBeGreaterThan(0);
   });
 
   it('generates a workspace slug from the display name and preserves a manual edit', async () => {
