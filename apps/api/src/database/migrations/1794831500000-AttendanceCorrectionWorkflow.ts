@@ -5,6 +5,8 @@ export class AttendanceCorrectionWorkflow1794831500000 implements MigrationInter
 
   async up(q: QueryRunner): Promise<void> {
     await q.query(`
+      ALTER TABLE attendance_records
+        ADD CONSTRAINT attendance_records_tenant_id_id_key UNIQUE (tenant_id,id);
       CREATE TABLE attendance_correction_requests (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
@@ -36,6 +38,6 @@ export class AttendanceCorrectionWorkflow1794831500000 implements MigrationInter
   }
 
   async down(q: QueryRunner): Promise<void> {
-    await q.query('DROP TABLE IF EXISTS attendance_correction_requests CASCADE;');
+    await q.query('DROP TABLE IF EXISTS attendance_correction_requests CASCADE; ALTER TABLE attendance_records DROP CONSTRAINT IF EXISTS attendance_records_tenant_id_id_key;');
   }
 }
