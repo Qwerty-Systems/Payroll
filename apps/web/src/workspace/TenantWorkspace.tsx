@@ -323,6 +323,21 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     finally { setBusy(false); }
   }
 
+  async function permanentlyDeleteEmployee(employeeId: string) {
+    const employee = data.workers?.find(row => row.id === employeeId);
+    const employeeLabel = [employee?.firstName, employee?.lastName].filter(Boolean).join(' ') || 'this employee';
+    if (!window.confirm(`Permanently delete ${employeeLabel}? This is allowed only when no contracts, attendance, payroll, documents or assignments depend on the record. This action cannot be undone.`)) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await request(`tenant/workers/${employeeId}/permanent`, { method: 'DELETE' });
+      setSelectedWorker('');
+      setNotice('Employee permanently deleted. The deletion event remains in the audit log.');
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Employee could not be permanently deleted. Linked history may need to be retained.');
+    } finally { setBusy(false); }
+  }
+
   async function attendanceAction(id: string, action: 'submit' | 'approve') {
     setBusy(true); setError(''); setNotice('');
     try {
@@ -595,12 +610,12 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                 {selectedRun && <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ mt: 2 }}><Typography variant="body2">Selected run: {selectedRun}</Typography><Button variant="outlined" size="small" onClick={() => void calculateRun()} disabled={busy}>Calculate preview</Button></Stack>}
                 {(data.run ?? []).map(run => <Alert key={String(run.id)} severity="warning" sx={{ mt: 2 }}>Run status: {label(run.status)} · Totals and warnings: {JSON.stringify(run.totals ?? {})} {JSON.stringify(run.warnings ?? [])}</Alert>)}
               </Box> : <TableContainer sx={{ overflowX: 'auto' }}><Table size="medium"><TableHead><TableRow>
-                {(section === 'workers' ? ['Worker no.','Name','Phone','Email','Status','Select'] :
+                {(section === 'workers' ? ['Employee no.','Name','Phone','Email','Status','Actions'] :
                   section === 'projects' ? ['Code','Project','Client','Status','Select'] :
                   ['Date','Worker ID','Project ID','Minutes','Status','Actions']).map(x => <TableCell key={x} sx={{ bgcolor: '#F8FAF8', color: '#66756A', fontWeight: 800, fontSize: '.72rem', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>{x}</TableCell>)}
               </TableRow></TableHead><TableBody>
                 {filteredRows.map(row => <TableRow key={String(row.id ?? JSON.stringify(row))} hover>
-                  {section === 'workers' && <><TableCell>{label(row.workerNumber)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.firstName)} {label(row.lastName)}</Typography></TableCell><TableCell>{label(row.phone)}</TableCell><TableCell>{label(row.email)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Button size="small" variant={selectedWorker === row.id ? 'contained' : 'text'} onClick={() => setSelectedWorker(String(row.id))}>{selectedWorker === row.id ? 'Selected' : 'View'}</Button></TableCell></>}
+                  {section === 'workers' && <><TableCell>{label(row.workerNumber)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.firstName)} {label(row.lastName)}</Typography></TableCell><TableCell>{label(row.phone)}</TableCell><TableCell>{label(row.email)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Stack direction="row" spacing={.5}><Button size="small" variant={selectedWorker === row.id ? 'contained' : 'text'} onClick={() => setSelectedWorker(String(row.id))}>{selectedWorker === row.id ? 'Selected' : 'View'}</Button><Button size="small" color="error" disabled={busy} onClick={() => void permanentlyDeleteEmployee(String(row.id))}>Delete</Button></Stack></TableCell></>}
                   {section === 'projects' && <><TableCell>{label(row.projectCode)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.name)}</Typography></TableCell><TableCell>{label(row.clientName)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Button size="small" variant={selectedProject === row.id ? 'contained' : 'text'} onClick={() => setSelectedProject(String(row.id))}>{selectedProject === row.id ? 'Selected' : 'View sites'}</Button></TableCell></>}
                   {section === 'attendance' && <><TableCell>{label(row.workDate)}</TableCell><TableCell>{label(row.workerId)}</TableCell><TableCell>{label(row.projectId)}</TableCell><TableCell>{label(row.minutesWorked)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'approved' ? 'success' : row.status === 'submitted' ? 'warning' : 'default'} /></TableCell><TableCell>{row.status === 'draft' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'submit')}>Submit</Button> : row.status === 'submitted' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'approve')}>Approve</Button> : '—'}</TableCell></>}
                 </TableRow>)}
