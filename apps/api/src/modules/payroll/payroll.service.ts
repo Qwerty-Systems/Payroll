@@ -33,7 +33,11 @@ export class PayrollService {
       const periods = await m.query("SELECT id,code,status,start_date,end_date FROM payroll_periods WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[tenantId,periodId]);
       if (!periods.length) throw new NotFoundException('Payroll period not found.');
       if (periods[0].status !== 'open') throw new ConflictException('Only an open payroll period can receive a new run.');
-      const assignments = await m.query("SELECT a.rule_set_id FROM tenant_statutory_assignments a JOIN statutory_rule_sets s ON s.id=a.rule_set_id WHERE a.tenant_id=$1 AND a.effective_from <= $2::date AND (a.effective_to IS NULL OR a.effective_to >= $3::date) AND s.status='published' ORDER BY a.effective_from DESC LIMIT 1",[tenantId,periods[0].end_date,periods[0].start_date]);
+      const assignments = await m.query("SELECT a.rule_set_id FROM tenant_statutory_assignments a JOIN statutory_rule_sets s ON s.id=a.rule_set_id
+        JOIN tenant_statutory_rule_reviews cr ON cr.tenant_id=a.tenant_id AND cr.rule_set_id=a.rule_set_id AND cr.status='approved'
+          AND cr.effective_from <= $2::date AND (cr.effective_to IS NULL OR cr.effective_to >= $3::date)
+        WHERE a.tenant_id=$1 AND a.effective_from <= $2::date AND (a.effective_to IS NULL OR a.effective_to >= $3::date)
+          AND s.status='published' ORDER BY a.effective_from DESC,cr.reviewed_at DESC LIMIT 1",[tenantId,periods[0].end_date,periods[0].start_date]);
       if (!assignments.length) throw new ConflictException('No published Kenya statutory ruleset is assigned for this payroll period.');
       const next = await m.query('SELECT COALESCE(MAX(run_number),0)+1 AS run_number FROM payroll_runs WHERE tenant_id=$1 AND period_id=$2',[tenantId,periodId]);
       const rows = await m.query("INSERT INTO payroll_runs (tenant_id,period_id,run_number,status,engine_version,ruleset_id,created_by) VALUES ($1,$2,$3,'draft',$4,$5,$6) RETURNING id,period_id AS \"periodId\",run_number AS \"runNumber\",status,engine_version AS \"engineVersion\",ruleset_id AS \"rulesetId\",created_at AS \"createdAt\"",[tenantId,periodId,next[0].run_number,ENGINE_VERSION,assignments[0].rule_set_id,actorId]);
@@ -48,10 +52,14 @@ export class PayrollService {
       if (!runs.length) throw new NotFoundException('Payroll run not found.');
       const run = runs[0];
       if (!['draft','rejected'].includes(run.status)) throw new ConflictException('Only a draft or rejected payroll run can be recalculated.');
-      const rulesetRows = await m.query('SELECT id,compliance_approved_at FROM statutory_rule_sets WHERE id=$1',[run.ruleset_id]);
-      if (!rulesetRows.length) throw new ConflictException('The payroll run statutory ruleset is missing.');
+      const rulesetRows = await m.query("SELECT s.id FROM statutory_rule_sets s WHERE s.id=$1 AND EXISTS (SELECT 1 FROM tenant_statutory_rule_reviews cr WHERE cr.tenant_id=$2 AND cr.rule_set_id=s.id AND cr.status='approved' AND cr.effective_from <= $3::date AND (cr.effective_to IS NULL OR cr.effective_to >= $4::date))",[run.ruleset_id,tenantId,run.end_date,run.start_date]);
+      if (!rulesetRows.length) throw new ConflictException('The statutory ruleset has not been reviewed and approved for this company and payroll period.');
       const rawRules = await m.query('SELECT code,calculation_method,configuration FROM statutory_rules WHERE rule_set_id=$1 AND effective_from <= $2::date AND (effective_to IS NULL OR effective_to >= $3::date)',[run.ruleset_id,run.end_date,run.start_date]);
-      const rules = rawRules.map((r: any) => ({ code:r.code, calculation_method:r.calculation_method, configuration:r.configuration })) as StatutoryRule[];
+      const tenantOverrides = await m.query('SELECT rule_code AS code,calculation_method,configuration FROM tenant_statutory_rule_overrides WHERE tenant_id=$1 AND rule_set_id=$2 AND status=\'approved\' AND effective_from <= $3::date AND (effective_to IS NULL OR effective_to >= $4::date)',[tenantId,run.ruleset_id,run.end_date,run.start_date]);
+      const mergedRules = new Map<string,StatutoryRule>();
+      for (const rule of rawRules) mergedRules.set(rule.code,{code:rule.code,calculation_method:rule.calculation_method,configuration:rule.configuration});
+      for (const rule of tenantOverrides) mergedRules.set(rule.code,{code:rule.code,calculation_method:rule.calculation_method,configuration:rule.configuration});
+      const rules = [...mergedRules.values()];
       const workers = await m.query("SELECT w.id AS worker_id,w.worker_number,w.first_name,w.middle_name,w.last_name,w.email,c.id AS contract_id,c.engagement_type,c.pay_basis,c.rate_amount::numeric AS rate_amount,c.currency,c.effective_from::text AS effective_from,c.effective_to::text AS effective_to,c.terms,(SELECT count(DISTINCT a.work_date)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS approved_days,(SELECT COALESCE(sum(a.minutes_worked),0)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS approved_minutes,(SELECT COALESCE(sum(o.quantity),0)::numeric FROM worker_output_entries o WHERE o.tenant_id=w.tenant_id AND o.worker_id=w.id AND o.status='approved' AND o.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date)) AND o.unit_code = ANY(ARRAY(SELECT jsonb_array_elements_text(COALESCE(c.terms->'unitCodes','[]'::jsonb))))) AS approved_units,(SELECT count(*)::int FROM worker_contracts c2 WHERE c2.tenant_id=w.tenant_id AND c2.worker_id=w.id AND c2.effective_from <= $3::date AND (c2.effective_to IS NULL OR c2.effective_to >= $2::date)) AS overlapping_contracts FROM workers w JOIN worker_contracts c ON c.tenant_id=w.tenant_id AND c.worker_id=w.id AND c.effective_from <= $3::date AND (c.effective_to IS NULL OR c.effective_to >= $2::date) WHERE w.tenant_id=$1 AND w.status='active' ORDER BY w.worker_number",[tenantId,run.start_date,run.end_date]);
       if (!workers.length) throw new ConflictException('No active workers with contracts overlap this payroll period.');
       const attendanceWindow = (alias: string) => "BETWEEN GREATEST($2::date,"+alias+".effective_from) AND LEAST($3::date,COALESCE("+alias+".effective_to,$3::date))";
@@ -151,7 +159,11 @@ export class PayrollService {
 
   async transitionRun(tenantId: string, actorId: string, runId: string, action: 'submit'|'approve'|'finalize') {
     return this.tenantDb.run(tenantId,async m=>{
-      const rows=await m.query('SELECT r.*,p.code AS period_code,s.compliance_approved_at FROM payroll_runs r JOIN payroll_periods p ON p.tenant_id=r.tenant_id AND p.id=r.period_id LEFT JOIN statutory_rule_sets s ON s.id=r.ruleset_id WHERE r.tenant_id=$1 AND r.id=$2 FOR UPDATE OF r',[tenantId,runId]);
+      const rows=await m.query('SELECT r.*,p.code AS period_code,
+        EXISTS(SELECT 1 FROM tenant_statutory_rule_reviews cr WHERE cr.tenant_id=r.tenant_id AND cr.rule_set_id=r.ruleset_id
+          AND cr.status='approved' AND cr.effective_from <= p.end_date AND (cr.effective_to IS NULL OR cr.effective_to >= p.start_date)) AS tenant_compliance_approved
+        FROM payroll_runs r JOIN payroll_periods p ON p.tenant_id=r.tenant_id AND p.id=r.period_id
+        WHERE r.tenant_id=$1 AND r.id=$2 FOR UPDATE OF r',[tenantId,runId]);
       if(!rows.length) throw new NotFoundException('Payroll run not found.');
       const run=rows[0];
       if(action==='submit') {
@@ -163,7 +175,7 @@ export class PayrollService {
         await m.query("UPDATE payroll_runs SET status='approved',approved_by=$3,approved_at=now() WHERE tenant_id=$1 AND id=$2",[tenantId,runId,actorId]);
       } else {
         if(run.status!=='approved') throw new ConflictException('Only an approved payroll run can be finalized.');
-        if(!run.compliance_approved_at) throw new ConflictException('The statutory ruleset has not received platform compliance approval. Payroll finalization is blocked.');
+        if(!run.tenant_compliance_approved) throw new ConflictException('The statutory ruleset has not been reviewed and approved for this company and payroll period. Payroll finalization is blocked.');
         const warnings=Array.isArray(run.warnings)?run.warnings:JSON.parse(run.warnings ?? '[]');
         const blocking=blockingWarnings(warnings);
         if(blocking.length) throw new ConflictException({message:'Payroll has unresolved blocking warnings.',warnings:blocking});
