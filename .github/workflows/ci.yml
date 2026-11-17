@@ -62,3 +62,9 @@ jobs:
         run: pnpm build
       - name: Test
         run: pnpm test
+      - name: Validate backup scripts
+        run: bash -n docker/backup/backup.sh docker/backup/entrypoint.sh docker/backup/restore-verify.sh
+      - name: Install Chromium for browser tests
+        run: pnpm --filter @jengaflow/web exec playwright install --with-deps chromium
+      - name: Browser E2E
+        run: pnpm --filter @jengaflow/web test:e2e
