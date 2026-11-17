@@ -33,7 +33,7 @@ export AWS_ACCESS_KEY_ID="$SEAWEEDFS_ACCESS_KEY"
 export AWS_SECRET_ACCESS_KEY="$SEAWEEDFS_SECRET_KEY"
 export AWS_DEFAULT_REGION="${S3_REGION:-us-east-1}"
 export AWS_EC2_METADATA_DISABLED=true
-sha256sum "$file" > "$file.sha256"
+(cd "$tmp" && sha256sum "$(basename "$file")" > "$(basename "$file").sha256")
 aws --endpoint-url "$aws_endpoint" s3 cp "$file" "s3://$SEAWEEDFS_BUCKET/backups/postgres/$(basename "$file")" --only-show-errors
 aws --endpoint-url "$aws_endpoint" s3 cp "$file.sha256" "s3://$SEAWEEDFS_BUCKET/backups/postgres/$(basename "$file").sha256" --only-show-errors
 retention_days="${BACKUP_RETENTION_DAYS:-35}"
