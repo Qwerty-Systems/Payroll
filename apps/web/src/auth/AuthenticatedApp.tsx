@@ -81,9 +81,35 @@ export default function AuthenticatedApp() {
   if (!isAuthenticated) return <LoadingScreen message="Redirecting to secure sign-in…" />;
 
   const identity = apiState.status === 'ready' ? apiState.identity : undefined;
+  // A workspace membership is authoritative evidence that onboarding is complete,
+  // even if an older API response omits or misreports the provisioned flag.
+  const hasWorkspace = Boolean(identity?.provisioned || (identity?.memberships?.length ?? 0) > 0);
+  if (hasWorkspace) {
+    return <TenantWorkspace
+      memberships={identity?.memberships ?? []}
+      userName={user?.name}
+      userPicture={user?.picture}
+      apiBaseUrl={auth0Config.apiBaseUrl}
+      getToken={async () => {
+        const token = await getAccessTokenSilently({ authorizationParams: { audience: auth0Config.audience, scope: 'openid profile email' } });
+        if (!token) throw new Error('The identity provider did not return an API access token.');
+        return token;
+      }}
+      onSignOut={() => void logout({ logoutParams: { returnTo: window.location.origin } })}
+    />;
+  }
   return <Box sx={{ minHeight: '100vh', bgcolor: '#F7F5EF', color: '#17372B' }}>
-    <Box sx={{ bgcolor: '#17372B', color: 'white', py: 2 }}><Container maxWidth="lg"><Stack direction="row" alignItems="center" justifyContent="space-between"><Stack direction="row" alignItems="center" spacing={1.5}><Avatar sx={{ bgcolor: '#D6A84F', color: '#17372B' }}><ConstructionRounded /></Avatar><Box><Typography fontWeight={900}>JengaFlow</Typography><Typography variant="caption" sx={{ color: 'rgba(255,255,255,.65)' }}>QWERTY SYSTEMS WORKSPACE</Typography></Box></Stack><Button color="inherit" startIcon={<LogoutRounded />} onClick={() => void logout({ logoutParams: { returnTo: window.location.origin } })}>Sign out</Button></Stack></Container></Box>
-    <Container maxWidth="md" sx={{ py: { xs: 4, md: 7 } }}>
+    <Container maxWidth="md" sx={{ py: { xs: 3, md: 5 } }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 4 }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Avatar sx={{ bgcolor: '#D6A84F', color: '#17372B' }}><ConstructionRounded /></Avatar>
+          <Box>
+            <Typography fontWeight={900} color="#17372B">JengaFlow</Typography>
+            <Typography variant="caption" color="text.secondary">BY QWERTY SYSTEMS</Typography>
+          </Box>
+        </Stack>
+        <Button color="inherit" startIcon={<LogoutRounded />} onClick={() => void logout({ logoutParams: { returnTo: window.location.origin } })}>Sign out</Button>
+      </Stack>
       <Typography variant="overline" sx={{ color: '#2F6B4F', fontWeight: 800, letterSpacing: '.14em' }}>AUTHENTICATED WORKSPACE</Typography>
       <Typography variant="h3" fontWeight={900} sx={{ mt: 1, fontSize: { xs: '2rem', md: '2.7rem' } }}>Welcome{user?.name ? `, ${user.name.split(' ')[0]}` : ''}</Typography>
       <Typography color="text.secondary" sx={{ mt: 1, mb: 4 }}>Your identity has been verified. Set up or select your company workspace to continue.</Typography>
@@ -107,14 +133,7 @@ export default function AuthenticatedApp() {
           <Button type="submit" variant="contained" disabled={submitting || !company.legalName.trim() || !company.displayName.trim() || company.slug.length < 3} sx={{ py: 1.4, bgcolor: '#17372B', '&:hover': { bgcolor: '#2F6B4F' } }}>{submitting ? 'Creating workspace…' : 'Create company workspace'}</Button>
         </Stack>
       </Paper>}
-      {identity?.provisioned && <TenantWorkspace
-        memberships={identity.memberships ?? []}
-        userName={user?.name}
-        userPicture={user?.picture}
-        apiBaseUrl={auth0Config.apiBaseUrl}
-        getToken={async () => { const token = await getAccessTokenSilently({ authorizationParams: { audience: auth0Config.audience, scope: 'openid profile email' } }); if (!token) throw new Error('The identity provider did not return an API access token.'); return token; }}
-        onSignOut={() => void logout({ logoutParams: { returnTo: window.location.origin } })}
-      />}
+
     </Container>
   </Box>;
 }
