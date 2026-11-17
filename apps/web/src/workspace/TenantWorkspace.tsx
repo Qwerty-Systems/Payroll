@@ -32,6 +32,7 @@ import SyncReviewDialog from './SyncReviewDialog';
 import ComplianceWorkspace from './ComplianceWorkspace';
 import OrganizationWorkspace from './OrganizationWorkspace';
 import WorkforceTimeWorkspace from './WorkforceTimeWorkspace';
+import PayrollWorkspace from './PayrollWorkspace';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
@@ -654,72 +655,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
             </Box>
           </Paper></Stack> : section === 'time-management' ? <WorkforceTimeWorkspace workers={(data.workers ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} request={request} /> : section === 'compliance' ? <ComplianceWorkspace role={membership?.role ?? 'viewer'} periods={data.periods ?? []} request={request} /> : section === 'organization' ? <OrganizationWorkspace request={request} workers={(data.workers ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} projects={(data.projects ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} sites={(data.sites ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} /> : section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> :
             <Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
-              {section === 'payroll' ? <Box sx={{ p: { xs: 1.5, md: 2.5 } }}>
-                <TableContainer><Table size="small"><TableHead><TableRow>{['Code','Period','Start','End','Status','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
-                  {(data.periods ?? []).filter(row => !searchQuery || JSON.stringify(row).toLowerCase().includes(searchQuery.toLowerCase())).map(row => <TableRow key={String(row.id)} hover><TableCell>{label(row.code)}</TableCell><TableCell>{label(row.name)}</TableCell><TableCell>{label(row.startDate)}</TableCell><TableCell>{label(row.endDate)}</TableCell><TableCell><Chip size="small" label={label(row.status)} /></TableCell><TableCell><Button size="small" onClick={() => void createRun(String(row.id))} disabled={busy}>Create run</Button></TableCell></TableRow>)}
-                  {!data.periods?.length && <TableRow><TableCell colSpan={6} sx={{ py: 4, textAlign: 'center' }}>No payroll periods yet. Create one to prepare a calculation preview.</TableCell></TableRow>}
-                </TableBody></Table></TableContainer>
-                {selectedRun && <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ mt: 2 }}><Typography variant="body2">Selected run: {selectedRun}</Typography><Button variant="outlined" size="small" onClick={() => void calculateRun()} disabled={busy}>Calculate preview</Button></Stack>}
-                {(data.run ?? []).map(run => {
-                  const totals = (run.totals ?? {}) as Record<string, unknown>;
-                  const items = asRows(run.items);
-                  const warnings = Array.isArray(run.warnings) ? run.warnings.map(String) : [];
-                  return <Box key={String(run.id)} sx={{ mt: 2.5 }}>
-                    <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1} sx={{ mb: 1.5 }}>
-                      <Box><Typography fontWeight={850}>Payroll calculation preview</Typography><Typography variant="caption" color="text.secondary">Run {label(run.runNumber)} · {label(run.status)} · Engine {label(run.engineVersion)}</Typography></Box>
-                      <Chip size="small" color={warnings.length ? 'warning' : 'success'} label={warnings.length ? warnings.length + ' review warning(s)' : 'No calculation warnings'} />
-                    </Stack>
-                    <Grid container spacing={1.2} sx={{ mb: 2 }}>
-                      {[
-                        ['Employees', totals.workerCount], ['Gross earnings', totals.grossEarnings], ['Employee deductions', totals.employeeDeductions],
-                        ['Employer contributions', totals.employerContributions], ['Net pay', totals.netPay], ['Total employer cost', totals.employerCost],
-                      ].map(([title, value]) => <Grid size={{ xs: 6, md: 4, xl: 2 }} key={String(title)}>
-                        <Paper variant="outlined" sx={{ p: 1.5, borderColor: '#E6EBE5', borderRadius: 2 }}>
-                          <Typography variant="caption" color="text.secondary">{String(title)}</Typography>
-                          <Typography fontWeight={850} sx={{ mt: .4 }}>{value == null ? '—' : title === 'Employees' ? label(value) : 'KES ' + Number(value).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Typography>
-                        </Paper>
-                      </Grid>)}
-                    </Grid>
-                    {warnings.length > 0 && <Alert severity="warning" sx={{ mb: 1.5 }}><Typography fontWeight={800} sx={{ mb: .5 }}>Items requiring review</Typography>{warnings.map((warning, index) => <Typography key={index} variant="body2">{warning}</Typography>)}</Alert>}
-                    <TableContainer component={Paper} variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 2 }}>
-                      <Table size="small"><TableHead><TableRow>{['Employee','Basic salary','Employee statutory deductions','Employer contributions','Other deductions','Net pay'].map(title => <TableCell key={title}>{title}</TableCell>)}</TableRow></TableHead>
-                        <TableBody>
-                          {items.map(item => {
-                            const snapshot = (item.snapshot ?? {}) as Record<string, any>;
-                            const person = snapshot.worker ?? {};
-                            const earnings = snapshot.earnings ?? {};
-                            const statutory = snapshot.statutory ?? {};
-                            const statutoryLines = Array.isArray(statutory.lines) ? statutory.lines as Array<{code:string;amount:number;side:'employee'|'employer'}> : [];
-                            const employeeLines = statutoryLines.filter(line => line.side === 'employee');
-                            const employerLines = statutoryLines.filter(line => line.side === 'employer');
-                            const deductions = snapshot.otherDeductions ?? {};
-                            const money = (value: unknown) => 'KES ' + Number(value ?? 0).toLocaleString('en-KE',{minimumFractionDigits:2,maximumFractionDigits:2});
-                            return <TableRow key={String(item.id)}>
-                              <TableCell><Typography fontWeight={750}>{[person.firstName,person.middleName,person.lastName].filter(Boolean).join(' ') || label(person.workerNumber)}</Typography><Typography variant="caption" color="text.secondary">{label(person.workerNumber)}</Typography></TableCell>
-                              <TableCell>{money(earnings.amount ?? item.earnings)}</TableCell>
-                              <TableCell>
-                                <Typography fontWeight={800}>{money(statutory.employeeStatutoryDeductions)}</Typography>
-                                {employeeLines.map(line => <Typography key={line.code} variant="caption" color="text.secondary" display="block">{line.code.replaceAll('_',' ')} · {money(line.amount)}</Typography>)}
-                              </TableCell>
-                              <TableCell>
-                                <Typography fontWeight={800}>{money(statutory.employerContributions)}</Typography>
-                                {employerLines.map(line => <Typography key={line.code} variant="caption" color="text.secondary" display="block">{line.code.replaceAll('_',' ')} · {money(line.amount)}</Typography>)}
-                              </TableCell>
-                              <TableCell>
-                                <Typography fontWeight={800}>{money(deductions.total)}</Typography>
-                                {(Array.isArray(deductions.lines) ? deductions.lines : []).map((line: {code:string;amount:number}) => <Typography key={line.code} variant="caption" color="text.secondary" display="block">{line.code} · {money(line.amount)}</Typography>)}
-                              </TableCell>
-                              <TableCell><Typography fontWeight={850}>{money(item.netPay)}</Typography></TableCell>
-                            </TableRow>;
-                          })}
-                          {!items.length && <TableRow><TableCell colSpan={6} sx={{ py: 3, textAlign: 'center' }}>No employee calculation lines were returned for this run.</TableCell></TableRow>}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>This is a preview only. It does not issue payslips, finalize payroll or initiate payments.</Typography>
-                  </Box>;
-                })}
-              </Box> : <TableContainer sx={{ overflowX: 'auto' }}><Table size="medium"><TableHead><TableRow>
+              {section === 'payroll' ? <PayrollWorkspace request={request} onRefresh={refresh} /> : <TableContainer sx={{ overflowX: 'auto' }}><Table size="medium"><TableHead><TableRow>
                 {(section === 'workers' ? ['Employee no.','Name','Phone','Email','Status','Actions'] :
                   section === 'projects' ? ['Code','Project','Client','Status','Select'] :
                   ['Date','Employee ID','Project ID','Minutes','Status','Actions']).map(x => <TableCell key={x} sx={{ bgcolor: '#F8FAF8', color: '#66756A', fontWeight: 800, fontSize: '.72rem', letterSpacing: '.04em', whiteSpace: 'nowrap' }}>{x}</TableCell>)}
