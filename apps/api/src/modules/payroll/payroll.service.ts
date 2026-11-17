@@ -383,6 +383,59 @@ export class PayrollService {
     });
   }
 
+
+  listPaymentBatches(tenantId: string, runId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const run = await m.query('SELECT id FROM payroll_runs WHERE tenant_id=$1 AND id=$2',[tenantId,runId]);
+      if (!run.length) throw new NotFoundException('Payroll run not found.');
+      return m.query(`
+        SELECT b.id,b.status,b.payment_method AS "paymentMethod",b.currency,
+          b.total_amount AS "totalAmount",b.created_at AS "createdAt",
+          b.approved_at AS "approvedAt",count(i.id)::int AS "itemCount",
+          count(i.id) FILTER (WHERE i.status='paid')::int AS "paidCount",
+          COALESCE(sum(i.amount) FILTER (WHERE i.status='paid'),0)::numeric AS "paidAmount"
+        FROM payroll_payment_batches b
+        LEFT JOIN payroll_payment_batch_items i ON i.tenant_id=b.tenant_id AND i.batch_id=b.id
+        WHERE b.tenant_id=$1 AND b.payroll_run_id=$2
+        GROUP BY b.id ORDER BY b.created_at DESC
+      `,[tenantId,runId]);
+    });
+  }
+
+  getPaymentBatch(tenantId: string, batchId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const batches = await m.query(`
+        SELECT id,payroll_run_id AS "payrollRunId",status,payment_method AS "paymentMethod",
+          currency,total_amount AS "totalAmount",created_at AS "createdAt",
+          approved_at AS "approvedAt"
+        FROM payroll_payment_batches WHERE tenant_id=$1 AND id=$2
+      `,[tenantId,batchId]);
+      if (!batches.length) throw new NotFoundException('Payment batch not found.');
+      const items = await m.query(`
+        SELECT i.id,i.worker_id AS "workerId",w.worker_number AS "workerNumber",
+          concat_ws(' ',w.first_name,w.last_name) AS "workerName",
+          i.amount,i.status,i.provider_reference AS "providerReference",i.paid_at AS "paidAt"
+        FROM payroll_payment_batch_items i
+        JOIN workers w ON w.tenant_id=i.tenant_id AND w.id=i.worker_id
+        WHERE i.tenant_id=$1 AND i.batch_id=$2 ORDER BY w.worker_number
+      `,[tenantId,batchId]);
+      return {...batches[0],items};
+    });
+  }
+
+  cancelPaymentBatch(tenantId: string, actorId: string, batchId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const batches = await m.query('SELECT id,status FROM payroll_payment_batches WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,batchId]);
+      if (!batches.length) throw new NotFoundException('Payment batch not found.');
+      if (!['draft','approved'].includes(batches[0].status)) throw new ConflictException('Only draft or approved payment batches can be cancelled.');
+      const paid = await m.query("SELECT count(*)::int AS count FROM payroll_payment_batch_items WHERE tenant_id=$1 AND batch_id=$2 AND status IN ('paid','processing')",[tenantId,batchId]);
+      if (Number(paid[0].count)>0) throw new ConflictException('A payment batch with processing or confirmed payments cannot be cancelled.');
+      const updated = await m.query("UPDATE payroll_payment_batches SET status='cancelled' WHERE tenant_id=$1 AND id=$2 RETURNING id,status",[tenantId,batchId]);
+      await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'payroll.payment_batch.cancelled','payment_batch',$3,$4::jsonb)",[tenantId,actorId,batchId,JSON.stringify({from:batches[0].status})]);
+      return updated[0];
+    });
+  }
+
   createPaymentBatch(tenantId: string, actorId: string, runId: string, paymentMethod: 'bank_transfer'|'mpesa'|'manual') {
     return this.tenantDb.run(tenantId, async m => {
       const runs = await m.query("SELECT id,status FROM payroll_runs WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[tenantId,runId]);
