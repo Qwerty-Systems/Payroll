@@ -172,8 +172,8 @@ export class ComplianceService {
         const overlap=await m.query(`
           SELECT id FROM tenant_statutory_rule_overrides
           WHERE tenant_id=$1 AND rule_set_id=$2 AND rule_code=$3
-            AND daterange(effective_from,COALESCE(effective_to,'infinity'::date),'[]')
-              && daterange($4::date,COALESCE($5::date,'infinity'::date),'[]')
+            AND daterange(effective_from,effective_to,'[]')
+              && daterange($4::date,$5::date,'[]')
           LIMIT 1
         `,[tenantId,change.rule_set_id,change.rule_code,change.effective_from,change.effective_to]);
         if(overlap.length) throw new ConflictException('An approved rule override already overlaps these effective dates. Amend the existing effective-dated schedule instead of creating a conflicting version.');
