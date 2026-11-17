@@ -163,7 +163,7 @@ export class PayrollService {
         EXISTS(SELECT 1 FROM tenant_statutory_rule_reviews cr WHERE cr.tenant_id=r.tenant_id AND cr.rule_set_id=r.ruleset_id
           AND cr.status='approved' AND cr.effective_from <= p.end_date AND (cr.effective_to IS NULL OR cr.effective_to >= p.start_date)) AS tenant_compliance_approved
         FROM payroll_runs r JOIN payroll_periods p ON p.tenant_id=r.tenant_id AND p.id=r.period_id
-        WHERE r.tenant_id=$1 AND r.id=$2 FOR UPDATE OF r,[tenantId,runId]);
+        WHERE r.tenant_id=$1 AND r.id=$2 FOR UPDATE OF r`,[tenantId,runId]);
       if(!rows.length) throw new NotFoundException('Payroll run not found.');
       const run=rows[0];
       if(action==='submit') {
