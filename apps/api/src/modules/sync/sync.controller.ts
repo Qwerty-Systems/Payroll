@@ -43,6 +43,10 @@ export class SyncController {
     return this.sync.pullAttendance(req.tenant.id, cursor);
   }
 
+  @Get('reference-data')
+  @TenantPermissions('attendance.read')
+  pullReferenceData(@Req() req:TenantRequest){return this.sync.pullReferenceData(req.tenant.id);}
+
   @Get('conflicts')
   @TenantPermissions('attendance.approve')
   listConflicts(@Req() req: TenantRequest) {
