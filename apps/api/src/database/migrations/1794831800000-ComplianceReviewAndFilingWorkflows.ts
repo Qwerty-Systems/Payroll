@@ -157,6 +157,8 @@ export class ComplianceReviewAndFilingWorkflows1794831800000 implements Migratio
 
   async down(q: QueryRunner): Promise<void> {
     await q.query(`
+      DROP TRIGGER IF EXISTS compliance_audit_immutable ON audit_events;
+      DROP FUNCTION IF EXISTS prevent_compliance_audit_mutation();
       DROP TABLE IF EXISTS statutory_filing_records;
       ALTER TABLE tenant_statutory_rule_overrides
         DROP COLUMN IF EXISTS verified_on,
