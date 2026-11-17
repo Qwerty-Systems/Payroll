@@ -61,6 +61,8 @@ jobs:
         working-directory: apps/api
         run: pnpm exec typeorm -d dist/database/data-source.js migration:run
       - name: Verify required payroll and compliance schema
+        env:
+          PGPASSWORD: postgres
         run: |
           psql -h 127.0.0.1 -U postgres jengaflow -v ON_ERROR_STOP=1 -c "DO \$\$ BEGIN
             IF to_regclass('public.worker_pay_grades') IS NULL THEN RAISE EXCEPTION 'worker_pay_grades migration is missing'; END IF;
