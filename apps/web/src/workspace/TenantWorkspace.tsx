@@ -24,7 +24,7 @@ import AssignmentTurnedInRounded from '@mui/icons-material/AssignmentTurnedInRou
 import AccountBalanceWalletRounded from '@mui/icons-material/AccountBalanceWalletRounded';
 import TenantAdministration from './TenantAdministration';
 import CloudSyncRounded from '@mui/icons-material/CloudSyncRounded';
-import { synchronizeOfflineAttendance } from '../offline/offline-api';
+import { downloadOfflineReferenceData, queueOfflineAttendance, synchronizeOfflineAttendance } from '../offline/offline-api';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
@@ -62,6 +62,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [syncing, setSyncing] = useState(false);
+  const [downloadingReferenceData, setDownloadingReferenceData] = useState(false);
+  const [referenceDataMessage, setReferenceDataMessage] = useState('');
   const [syncMessage, setSyncMessage] = useState('');
   const isMobile = useMediaQuery('(max-width:1199px)');
   const [contracts, setContracts] = useState<RowData[]>([]);
@@ -180,6 +182,14 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     }
   }
 
+
+  async function downloadReferenceData(){
+    setDownloadingReferenceData(true);setError('');setReferenceDataMessage('');
+    try{const snapshot=await downloadOfflineReferenceData(tenantId,request);const counts=['workers','projects','sites','shifts','payGrades'].map(k=>`${k}: ${Array.isArray(snapshot[k])?(snapshot[k] as unknown[]).length:0}`).join(' · ');setReferenceDataMessage('Offline reference data saved — '+counts);}
+    catch(cause){setError(cause instanceof Error?cause.message:'Unable to download offline reference data.');}
+    finally{setDownloadingReferenceData(false);}
+  }
+
   async function syncOfflineQueue() {
     setSyncing(true); setSyncMessage(''); setError('');
     try {
@@ -252,11 +262,14 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
         }) });
         setNotice('Site created.');
       } else if (dialog === 'attendance') {
-        await request('tenant/attendance', { method: 'POST', body: JSON.stringify({
-          workerId: selectedWorker, projectId: selectedProject,
-          siteId: forms.siteId, workDate: forms.workDate, minutesWorked: Number(forms.minutesWorked), source: 'web',
-        }) });
-        setNotice('Attendance record captured as a draft. Submit it for approval.');
+        const attendancePayload = { workerId: selectedWorker, projectId: selectedProject, siteId: forms.siteId, workDate: forms.workDate, minutesWorked: Number(forms.minutesWorked), source: 'web' };
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const queued = await queueOfflineAttendance(tenantId, attendancePayload);
+          setNotice('Attendance saved to this device and queued for synchronization. Command ' + queued.id + '.');
+        } else {
+          await request('tenant/attendance', { method: 'POST', body: JSON.stringify(attendancePayload) });
+          setNotice('Attendance record captured as a draft. Submit it for approval.');
+        }
       } else if (dialog === 'shift') {
         const shift = await request<RowData>('tenant/attendance/shifts', { method: 'POST', body: JSON.stringify({ code: forms.shiftCode, name: forms.shiftName, startTime: forms.shiftStart, endTime: forms.shiftEnd, breakMinutes: Number(forms.shiftBreak), graceMinutes: Number(forms.shiftGrace) }) });
         if (selectedWorker) await request('tenant/attendance/shift-assignments', { method: 'POST', body: JSON.stringify({ workerId: selectedWorker, shiftId: shift.id, effectiveFrom: dateToday() }) });
@@ -555,10 +568,11 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
               {section === 'workers' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('worker')}>Add worker</Button>}
               {section === 'pay-grades' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('payGrade')}>Create pay grade</Button>}
               {section === 'projects' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('project')}>Add project</Button>}
-              {section === 'attendance' && <><Button variant="contained" startIcon={<AddRounded />} disabled={!selectedWorker || !selectedProject} onClick={() => setDialog('attendance')}>Capture</Button><Button variant="outlined" onClick={() => setDialog('shift')}>New shift</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('leave')}>Request leave</Button><Button variant="outlined" disabled={!['owner','admin','hr_manager'].includes(membership?.role ?? '')} onClick={() => setDialog('leavePolicy')}>Leave policy</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('overtime')}>Request overtime</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('timesheet')}>Generate timesheet</Button></>}
+              {section === 'attendance' && <><Button variant="outlined" disabled={downloadingReferenceData} onClick={() => void downloadReferenceData()}>{downloadingReferenceData ? 'Downloading…' : 'Download offline data'}</Button><Button variant="contained" startIcon={<AddRounded />} disabled={!selectedWorker || !selectedProject} onClick={() => setDialog('attendance')}>Capture</Button><Button variant="outlined" onClick={() => setDialog('shift')}>New shift</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('leave')}>Request leave</Button><Button variant="outlined" disabled={!['owner','admin','hr_manager'].includes(membership?.role ?? '')} onClick={() => setDialog('leavePolicy')}>Leave policy</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('overtime')}>Request overtime</Button><Button variant="outlined" disabled={!selectedWorker} onClick={() => setDialog('timesheet')}>Generate timesheet</Button></>}
               {section === 'payroll' && <Button variant="contained" startIcon={<AddRounded />} onClick={() => setDialog('period')}>New period</Button>}
             </Stack>
           </Stack>
+          {referenceDataMessage && <Alert severity="success" sx={{ mb: 2 }}>{referenceDataMessage}</Alert>}
           {loading && <Box sx={{ mb: 2 }}><Typography variant="caption" color="text.secondary">Refreshing workspace data…</Typography></Box>}
           {section !== 'organization' && section !== 'people' && <TextField fullWidth size="small" placeholder={`Search ${pageTitle[section].toLowerCase()}…`} value={searchQuery} onChange={event => setSearchQuery(event.target.value)}
             InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ color: '#87948A' }} /></InputAdornment> }}
