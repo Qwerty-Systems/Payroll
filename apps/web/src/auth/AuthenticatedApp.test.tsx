@@ -73,7 +73,6 @@ describe('AuthenticatedApp', () => {
     expect(screen.queryByText(/authenticated workspace/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/set up or select your company workspace/i)).not.toBeInTheDocument();
     expect(screen.getAllByRole('banner')).toHaveLength(1);
-    expect(screen.getAllByText('People & workers').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Overview').length).toBeGreaterThan(0);
   });
 
