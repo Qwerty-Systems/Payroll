@@ -3,7 +3,7 @@ import { IsIn, IsString, MinLength } from 'class-validator';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
-import { CreateAttendanceDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdatePayGradeDto, UpdatePayGradeStatusDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto } from './operations.dto';
+import { CreateAttendanceDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto, CreateProjectDto, CreateSiteDto, CreateWorkerDto, CreateWorkerContractDto, EndWorkerContractDto, CreateWorkerOutputDto, RejectWorkerOutputDto, CreatePayGradeDto, UpdateAllowanceTypeDto, UpdateDeductionTypeDto, UpdatePayGradeDto, UpdatePayGradeStatusDto, UpdateProjectDto, UpdateSiteDto, UpdateWorkerDto } from './operations.dto';
 import { OperationsService } from './operations.service';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
@@ -30,6 +30,9 @@ export class OperationsController {
   @Post('sites') @TenantPermissions('projects.manage') createSite(@Req() req:TenantRequest,@Body() dto:CreateSiteDto) { return this.operations.createSite(req.tenant.id,dto); }
 
   @Get('pay-grades') @TenantPermissions('workers.read') payGrades(@Req() req:TenantRequest) { return this.operations.listPayGrades(req.tenant.id); }
+  @Get('pay-components') @TenantPermissions('payroll.read') payComponents(@Req() req:TenantRequest) { return this.operations.listPayComponents(req.tenant.id); }
+  @Patch('pay-components/allowances/:id') @TenantPermissions('payroll.calculate') updateAllowanceType(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateAllowanceTypeDto) { return this.operations.updateAllowanceType(req.tenant.id,req.tenant.userId,id,dto); }
+  @Patch('pay-components/deductions/:id') @TenantPermissions('payroll.calculate') updateDeductionType(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdateDeductionTypeDto) { return this.operations.updateDeductionType(req.tenant.id,req.tenant.userId,id,dto); }
   @Post('pay-grades') @TenantPermissions('workers.manage') createPayGrade(@Req() req:TenantRequest,@Body() dto:CreatePayGradeDto) { return this.operations.createPayGrade(req.tenant.id,req.tenant.userId,dto); }
   @Patch('pay-grades/:id') @TenantPermissions('workers.manage') editPayGrade(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdatePayGradeDto) { return this.operations.updatePayGrade(req.tenant.id,req.tenant.userId,id,dto); }
   @Patch('pay-grades/:id/status') @TenantPermissions('workers.manage') updatePayGrade(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:UpdatePayGradeStatusDto) { return this.operations.setPayGradeStatus(req.tenant.id,id,dto.status); }
