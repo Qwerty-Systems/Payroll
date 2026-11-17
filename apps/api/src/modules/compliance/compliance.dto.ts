@@ -30,7 +30,7 @@ export class UpdateRuleChangeDto {
   @IsOptional() @IsDateString() effectiveFrom?: string;
   @IsOptional() @IsDateString() effectiveTo?: string;
   @IsOptional() @IsString() @Length(2,240) sourceTitle?: string;
-  @IsOptional() @IsString() @Length(8,2000) sourceUrl?: string;
+  @IsOptional() @IsUrl({ require_protocol: true }) @Length(8,2000) sourceUrl?: string;
   @IsOptional() @IsDateString() verifiedOn?: string;
   @IsOptional() @IsString() @Length(10,2000) reason?: string;
 }
