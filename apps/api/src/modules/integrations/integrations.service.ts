@@ -109,7 +109,7 @@ export class IntegrationsService {
     const key = process.env.DARAJA_SANDBOX_CONSUMER_KEY;
     const secret = process.env.DARAJA_SANDBOX_CONSUMER_SECRET;
     if (!key || !secret) throw new BadRequestException('Sandbox credentials are not configured in deployment secrets.');
-    const result = await this.tenantDb.run(tenantId, async manager => {
+    await this.tenantDb.run(tenantId, async manager => {
       const rows = await manager.query('SELECT enabled,environment FROM tenant_integration_settings WHERE tenant_id=$1 AND provider=$2',[tenantId,'daraja']);
       if (!rows.length) throw new NotFoundException('Configure Daraja sandbox settings before testing.');
       if (rows[0].environment !== 'sandbox') throw new BadRequestException('Only sandbox connection tests are supported.');
