@@ -18,6 +18,7 @@ import { WorkerDocumentsModule } from './workers/worker-documents.module';
 import { ComplianceModule } from './compliance/compliance.module';
 import { WorkforceTimeModule } from './workforce-time/workforce-time.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
     ComplianceModule,
     WorkforceTimeModule,
     IntegrationsModule,
+    BillingModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
