@@ -5,9 +5,9 @@ type Transaction={id:string;reference:string;date:string;amount:number;currency:
 type Run={id:string;runNumber?:number;periodName?:string;status:string};
 type PaidItem={id:string;batchId:string;workerName:string;amount:number;providerReference?:string;status:string;currency?:string};
 function parseCsv(text:string):Record<string,string>[] {
- const rows=text.trim().split(/\r?\n/);if(rows.length<2)return [];
+ const rows=text.trim().split(/\r?\n/);if(rows.length<2)return [];const headerLine=rows[0];if(!headerLine)return [];
  const parse=(line:string)=>{const out:string[]=[];let cell='',quoted=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){if(quoted&&line[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(ch===','&&!quoted){out.push(cell);cell='';}else cell+=ch;}out.push(cell);return out;};
- const headers=parse(rows[0]).map(h=>h.trim().toLowerCase().replace(/\s+/g,''));
+ const headers=parse(headerLine).map(h=>h.trim().toLowerCase().replace(/\s+/g,''));
  return rows.slice(1).filter(x=>x.trim()).map(line=>{const cells=parse(line);return Object.fromEntries(headers.map((h,i)=>[h,cells[i]??'']));});
 }
 export default function PayrollBankReconciliationWorkspace({request}:{request:Req}){
