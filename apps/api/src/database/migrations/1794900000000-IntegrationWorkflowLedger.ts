@@ -22,8 +22,10 @@ export class IntegrationWorkflowLedger1794900000000 implements MigrationInterfac
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
         UNIQUE(tenant_id,provider,idempotency_key)
-      );
-      CREATE INDEX IF NOT EXISTS integration_transactions_status_idx ON integration_transactions(tenant_id,status,created_at);
+      )
+    `);
+    await q.query('CREATE INDEX IF NOT EXISTS integration_transactions_status_idx ON integration_transactions(tenant_id,status,created_at)');
+    await q.query(`
       CREATE TABLE IF NOT EXISTS integration_delivery_jobs (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
@@ -39,8 +41,10 @@ export class IntegrationWorkflowLedger1794900000000 implements MigrationInterfac
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now(),
         UNIQUE(tenant_id,job_type,idempotency_key)
-      );
-      CREATE INDEX IF NOT EXISTS integration_delivery_jobs_ready_idx ON integration_delivery_jobs(status,available_at);
+      )
+    `);
+    await q.query('CREATE INDEX IF NOT EXISTS integration_delivery_jobs_ready_idx ON integration_delivery_jobs(status,available_at)');
+    await q.query(`
       CREATE TABLE IF NOT EXISTS integration_reconciliation_items (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
@@ -55,15 +59,14 @@ export class IntegrationWorkflowLedger1794900000000 implements MigrationInterfac
         resolved_at timestamptz,
         created_at timestamptz NOT NULL DEFAULT now(),
         UNIQUE(tenant_id,reconciliation_type,internal_reference,external_reference)
-      );
-      `);
-      for (const table of ['integration_transactions','integration_delivery_jobs','integration_reconciliation_items']) {
-        await q.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
-        await q.query(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
-        await q.query(`CREATE POLICY tenant_isolation ON ${table} USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)`);
-        await q.query(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='jengaflow_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON ${table} TO jengaflow_app; END IF; IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='jf_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON ${table} TO jf_app; END IF; END $$`);
-      }
+      )
     `);
+    for (const table of ['integration_transactions', 'integration_delivery_jobs', 'integration_reconciliation_items']) {
+      await q.query('ALTER TABLE ' + table + ' ENABLE ROW LEVEL SECURITY');
+      await q.query('ALTER TABLE ' + table + ' FORCE ROW LEVEL SECURITY');
+      await q.query('CREATE POLICY tenant_isolation ON ' + table + ' USING (tenant_id = nullif(current_setting(\'app.tenant_id\', true), \'\')::uuid) WITH CHECK (tenant_id = nullif(current_setting(\'app.tenant_id\', true), \'\')::uuid)');
+      await q.query(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='jengaflow_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON ${table} TO jengaflow_app; END IF; IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='jf_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON ${table} TO jf_app; END IF; END $$`);
+    }
   }
 
   async down(q: QueryRunner): Promise<void> {
