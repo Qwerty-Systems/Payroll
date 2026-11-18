@@ -101,7 +101,7 @@ export class BillingCatalogService {
       const entries=Object.entries(dto).filter(([key,value])=>fields[key]&&value!==undefined);
       if(!entries.length)return current;
       const set=entries.map(([key],i)=>`${fields[key]}=$${i+3}${['currentPeriodStart','currentPeriodEnd','nextBillingDate'].includes(key)?'::date':''}`).join(',');
-      const values=entries.map(([key,value])=>value);
+      const values=entries.map(([,value])=>value);
       const rows=await manager.query(`UPDATE tenant_billing_subscriptions SET ${set},cancelled_at=CASE WHEN ${dto.status==='cancelled'?'true':'false'} THEN now() ELSE cancelled_at END,updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status,current_period_start::text AS "currentPeriodStart",current_period_end::text AS "currentPeriodEnd",next_billing_date::text AS "nextBillingDate",cancel_at_period_end AS "cancelAtPeriodEnd",cancelled_at AS "cancelledAt",notes`,[tenantId,id,...values]);
       await this.audit(manager,tenantId,actor,'billing.subscription.updated','billing_subscription',id,{before:current.status,after:dto.status??current.status,fields:entries.map(([key])=>key)});
       return rows[0];
