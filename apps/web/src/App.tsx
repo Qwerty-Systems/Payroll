@@ -12,9 +12,18 @@ import InsightsRounded from '@mui/icons-material/InsightsRounded';
 import PhoneIphoneRounded from '@mui/icons-material/PhoneIphoneRounded';
 import SyncRounded from '@mui/icons-material/SyncRounded';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
-import SignInPage from './auth/SignInPage';
-import AuthenticatedApp from './auth/AuthenticatedApp';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+
+const SignInPage = lazy(() => import('./auth/SignInPage'));
+const AuthenticatedApp = lazy(() => import('./auth/AuthenticatedApp'));
+
+
+function RouteLoadingFallback() {
+  return <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', bgcolor: '#F7F5EF', color: '#17372B' }}>
+    <Typography color="text.secondary">Loading JengaFlow…</Typography>
+  </Box>;
+}
+
 
 const features = [
   { icon: <Groups2Rounded />, title: 'Your whole workforce', text: 'Keep worker profiles, contracts, pay rates and site assignments together.' },
@@ -227,7 +236,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', syncPath);
   }, []);
 
-  if (pathname === '/signin' || pathname === '/auth/callback') return <SignInPage />;
-  if (pathname === '/app' || pathname.startsWith('/app/')) return <AuthenticatedApp />;
+  if (pathname === '/signin' || pathname === '/auth/callback') return <Suspense fallback={<RouteLoadingFallback />}><SignInPage /></Suspense>;
+  if (pathname === '/app' || pathname.startsWith('/app/')) return <Suspense fallback={<RouteLoadingFallback />}><AuthenticatedApp /></Suspense>;
   return <LandingPage />;
 }
