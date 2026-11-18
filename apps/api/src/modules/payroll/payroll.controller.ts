@@ -5,6 +5,8 @@ import { TenantPermissions } from '../auth/tenant-access.decorator';
 import { ConfirmPayrollPaymentDto, CreatePayrollPeriodDto, CreatePayrollRunDto, PayrollPaymentBatchDto, ReviewPayrollRunDto, TransitionPayrollPeriodDto, UpdatePayrollPeriodDto, UpdatePayrollRunDto } from './payroll.dto';
 import { PayrollService } from './payroll.service';
 import { PayrollPostFinalizationService } from './payroll-post-finalization.service';
+import { PayrollBankReconciliationService } from './payroll-bank-reconciliation.service';
+import { ImportBankStatementDto, MatchBankTransactionDto } from './bank-reconciliation.dto';
 import { CreatePayrollCorrectionDto, PayrollCorrectionReviewDto, PaymentFailureDto } from './payroll-post-finalization.dto';
 
 type TenantRequest = Request & { tenant: { id: string; userId: string } };
@@ -12,7 +14,7 @@ type TenantRequest = Request & { tenant: { id: string; userId: string } };
 @ApiBearerAuth()
 @Controller('payroll')
 export class PayrollController {
-  constructor(private readonly payroll: PayrollService, private readonly postFinalization: PayrollPostFinalizationService) {}
+  constructor(private readonly payroll: PayrollService, private readonly postFinalization: PayrollPostFinalizationService, private readonly bankReconciliation: PayrollBankReconciliationService) {}
 
   @Get('periods') @TenantPermissions('payroll.read') listPeriods(@Req() req:TenantRequest) { return this.payroll.listPeriods(req.tenant.id); }
   @Get('periods/:id') @TenantPermissions('payroll.read') getPeriod(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.payroll.getPeriod(req.tenant.id,id); }
@@ -52,4 +54,7 @@ export class PayrollController {
   @Get('payslips/:id/print') @TenantPermissions('payslips.read') @Header('Content-Type','text/html; charset=utf-8') printPayslip(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string) { return this.postFinalization.payslipHtml(req.tenant.id,id); }
   @Post('payment-batches/:id/items/:itemId/fail') @TenantPermissions('payroll.finalize') failPayment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Param('itemId',ParseUUIDPipe) itemId:string,@Body() dto:PaymentFailureDto) { return this.postFinalization.markPaymentFailed(req.tenant.id,req.tenant.userId,id,itemId,dto.reason); }
   @Post('payment-batches/:id/items/:itemId/reverse') @TenantPermissions('payroll.finalize') reversePayment(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Param('itemId',ParseUUIDPipe) itemId:string,@Body() dto:PaymentFailureDto) { return this.postFinalization.reversePayment(req.tenant.id,req.tenant.userId,id,itemId,dto.reason); }
+  @Get('bank-reconciliation/transactions') @TenantPermissions('payroll.read') listBankTransactions(@Req() req:TenantRequest,@Query('status') status?:string){return this.bankReconciliation.list(req.tenant.id,status);}
+  @Post('bank-reconciliation/import') @TenantPermissions('payroll.finalize') importBankTransactions(@Req() req:TenantRequest,@Body() dto:ImportBankStatementDto){return this.bankReconciliation.importTransactions(req.tenant.id,req.tenant.userId,dto.transactions);}
+  @Post('bank-reconciliation/transactions/:id/match') @TenantPermissions('payroll.finalize') matchBankTransaction(@Req() req:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() dto:MatchBankTransactionDto){return this.bankReconciliation.match(req.tenant.id,req.tenant.userId,id,dto.paymentItemId);}
 }
