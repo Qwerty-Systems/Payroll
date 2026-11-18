@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
 import {
-  CreateLeaveRequestDto, CreateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
+  CreateLeaveRequestDto, CreateLeaveTypeDto, UpdateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
   CreateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
 } from './workforce-time.dto';
@@ -47,6 +47,12 @@ export class WorkforceTimeController {
   @TenantPermissions('attendance.approve')
   createLeaveType(@Req() req: TenantRequest, @Body() dto: CreateLeaveTypeDto) {
     return this.service.createLeaveType(req.tenant.id, req.tenant.userId, dto);
+  }
+
+  @Patch('leave-types/:id')
+  @TenantPermissions('attendance.approve')
+  updateLeaveType(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateLeaveTypeDto) {
+    return this.service.updateLeaveType(req.tenant.id, req.tenant.userId, id, dto);
   }
 
   @Get('leave-balances')

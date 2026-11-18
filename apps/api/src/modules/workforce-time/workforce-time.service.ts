@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
 import { EntityManager } from 'typeorm';
 import {
-  CreateLeaveRequestDto, CreateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
+  CreateLeaveRequestDto, CreateLeaveTypeDto, UpdateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
   CreateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
 } from './workforce-time.dto';
@@ -77,6 +77,26 @@ export class WorkforceTimeService {
           carry_forward_limit_days AS "carryForwardLimitDays",requires_approval AS "requiresApproval",is_paid AS "isPaid",status
       `,[tenantId,dto.code.trim().toUpperCase(),dto.name.trim(),dto.annualEntitlementDays,dto.carryForwardLimitDays??0,dto.requiresApproval??true,dto.isPaid??true]);
       await this.audit(m,tenantId,actorId,'leave.type.created','leave_type',rows[0].id,rows[0]);
+      return rows[0];
+    });
+  }
+
+  updateLeaveType(tenantId: string, actorId: string, id: string, dto: UpdateLeaveTypeDto) {
+    return this.tenantDb.run(tenantId, async m => {
+      const found = await m.query('SELECT * FROM leave_types WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId, id]);
+      if (!found.length) throw new NotFoundException('Leave type not found.');
+      const before = found[0];
+      const rows = await m.query(`
+        UPDATE leave_types SET name=$3,annual_entitlement_days=$4,carry_forward_limit_days=$5,
+          requires_approval=$6,is_paid=$7,status=$8,updated_at=now()
+        WHERE tenant_id=$1 AND id=$2
+        RETURNING id,code,name,annual_entitlement_days AS "annualEntitlementDays",
+          carry_forward_limit_days AS "carryForwardLimitDays",requires_approval AS "requiresApproval",
+          is_paid AS "isPaid",status
+      `, [tenantId,id,dto.name?.trim()??before.name,dto.annualEntitlementDays??before.annual_entitlement_days,
+        dto.carryForwardLimitDays??before.carry_forward_limit_days,dto.requiresApproval??before.requires_approval,
+        dto.isPaid??before.is_paid,dto.status??before.status]);
+      await this.audit(m,tenantId,actorId,'leave.type.updated','leave_type',id,{before,after:rows[0]});
       return rows[0];
     });
   }

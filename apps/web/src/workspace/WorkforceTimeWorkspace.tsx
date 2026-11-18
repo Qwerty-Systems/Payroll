@@ -30,6 +30,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [notice, setNotice] = useState('');
   const [shift, setShift] = useState({ code: '', name: '', startTime: '08:00', endTime: '17:00', breakMinutes: '60' });
   const [leaveType, setLeaveType] = useState({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0' });
+  const [editingLeaveType, setEditingLeaveType] = useState<string | null>(null);
   const [balance, setBalance] = useState({ workerId: '', leaveTypeId: '', leaveYear: String(new Date().getFullYear()), openingDays: '0', accruedDays: '0', adjustmentDays: '0' });
   const [leave, setLeave] = useState({ workerId: '', leaveTypeId: '', startDate: today(), endDate: today(), requestedDays: '1', reason: '' });
   const [overtime, setOvertime] = useState({ workerId: '', workDate: today(), requestedMinutes: '60', reason: '', projectId: '', siteId: '' });
@@ -126,12 +127,22 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
             <TextField size="small" type="number" label="Annual days" value={leaveType.annualEntitlementDays} onChange={e => setLeaveType(v => ({ ...v, annualEntitlementDays: e.target.value }))} />
             <TextField size="small" type="number" label="Carry-forward cap" value={leaveType.carryForwardLimitDays} onChange={e => setLeaveType(v => ({ ...v, carryForwardLimitDays: e.target.value }))} />
             <Button variant="contained" disabled={busy || !leaveType.code || !leaveType.name} onClick={() => void perform(async () => {
-              await request('tenant/leave-types', json('POST', { ...leaveType, annualEntitlementDays: Number(leaveType.annualEntitlementDays), carryForwardLimitDays: Number(leaveType.carryForwardLimitDays) }));
+              if (editingLeaveType) {
+                await request(`tenant/leave-types/${editingLeaveType}`, json('PATCH', { name: leaveType.name, annualEntitlementDays: Number(leaveType.annualEntitlementDays), carryForwardLimitDays: Number(leaveType.carryForwardLimitDays) }));
+                setEditingLeaveType(null);
+              } else {
+                await request('tenant/leave-types', json('POST', { ...leaveType, annualEntitlementDays: Number(leaveType.annualEntitlementDays), carryForwardLimitDays: Number(leaveType.carryForwardLimitDays) }));
+              }
               setLeaveType({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0' });
-            }, 'Leave type created.')}>Add type</Button>
+            }, editingLeaveType ? 'Leave type updated.' : 'Leave type created.')}>{editingLeaveType ? 'Save changes' : 'Add type'}</Button>
+            {editingLeaveType && <Button disabled={busy} onClick={() => { setEditingLeaveType(null); setLeaveType({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0' }); }}>Cancel</Button>}
           </Stack>
+          <Table size="small"><TableHead><TableRow>{['Code','Leave type','Annual days','Carry forward','Paid','Approval','Status','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
+            {leaveTypes.map(t => <TableRow key={String(t.id)}><TableCell>{text(t.code)}</TableCell><TableCell>{text(t.name)}</TableCell><TableCell>{text(t.annualEntitlementDays)}</TableCell><TableCell>{text(t.carryForwardLimitDays)}</TableCell><TableCell>{t.isPaid === false ? 'Unpaid' : 'Paid'}</TableCell><TableCell>{t.requiresApproval === false ? 'No' : 'Yes'}</TableCell><TableCell><Chip size="small" label={text(t.status)} /></TableCell><TableCell><Stack direction="row" spacing={0.5}><Button size="small" disabled={busy || t.status !== 'active'} onClick={() => { setEditingLeaveType(String(t.id)); setLeaveType({ code: String(t.code ?? ''), name: String(t.name ?? ''), annualEntitlementDays: String(t.annualEntitlementDays ?? 21), carryForwardLimitDays: String(t.carryForwardLimitDays ?? 0) }); }}>Edit</Button><Button size="small" color={t.status === 'active' ? 'warning' : 'success'} disabled={busy} onClick={() => void perform(() => request(`tenant/leave-types/${t.id}`, json('PATCH', { status: t.status === 'active' ? 'inactive' : 'active' })), t.status === 'active' ? 'Leave type deactivated.' : 'Leave type reactivated.')}>{t.status === 'active' ? 'Deactivate' : 'Reactivate'}</Button></Stack></TableCell></TableRow>)}
+            {!leaveTypes.length && <TableRow><TableCell colSpan={8}>No leave types configured.</TableCell></TableRow>}
+          </TableBody></Table>
           <Divider />
-          <Typography fontWeight={700}>Set employee leave balance</Typography>
+                    <Typography fontWeight={700}>Set employee leave balance</Typography>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
             {workerSelect(balance.workerId, v => setBalance(s => ({ ...s, workerId: v })), 'Employee')}
             <TextField select size="small" label="Leave type" value={balance.leaveTypeId} onChange={e => setBalance(v => ({ ...v, leaveTypeId: e.target.value }))} sx={{ minWidth: 180 }}>
