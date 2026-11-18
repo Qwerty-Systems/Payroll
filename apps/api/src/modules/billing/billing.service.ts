@@ -49,4 +49,11 @@ import {BadRequestException,Injectable,NotFoundException} from '@nestjs/common';
    return {summary,aging,paymentTotals};
   });
  }
+ async printableDocument(t:string,id:string){
+  return this.db.run(t,async m=>{
+   const rows=await m.query(`SELECT id,document_type AS "documentType",document_number AS "documentNumber",status,customer_name AS "customerName",customer_email AS "customerEmail",issue_date::text AS "issueDate",due_date::text AS "dueDate",currency,items,subtotal,tax_total AS "taxTotal",total,notes FROM tenant_billing_documents WHERE tenant_id=$1 AND id=$2`,[t,id]);
+   if(!rows[0])throw new NotFoundException('Billing document not found.');
+   return rows[0];
+  });
+ }
 }
