@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import PayrollBankReconciliationWorkspace from './PayrollBankReconciliationWorkspace';
 import {
   Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent,
   DialogTitle, Divider, Grid, MenuItem, Paper, Stack, Table, TableBody, TableCell,
@@ -46,7 +47,7 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const [notice,setNotice]=useState('');
-  const [tab,setTab]=useState<'periods'|'runs'|'payslips'>('periods');
+  const [tab,setTab]=useState<'periods'|'runs'|'payslips'|'bank-reconciliation'>('periods');
 
   const refresh=useCallback(async()=>{
     setError('');
@@ -229,9 +230,11 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
         <Button variant={tab==='periods'?'contained':'text'} onClick={()=>setTab('periods')}>Pay periods</Button>
         <Button variant={tab==='runs'?'contained':'text'} onClick={()=>setTab('runs')}>Payroll runs</Button>
         <Button variant={tab==='payslips'?'contained':'text'} onClick={()=>setTab('payslips')}>Payslips</Button>
+        <Button variant={tab==='bank-reconciliation'?'contained':'text'} onClick={()=>setTab('bank-reconciliation')}>Bank reconciliation</Button>
       </Stack>
       <Divider sx={{mt:1}}/>
       <CardContent>
+        {tab==='bank-reconciliation'&&<PayrollBankReconciliationWorkspace request={request}/ >}
         {tab==='periods'&&<Stack spacing={2}>
           <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{sm:'center'}}>
             <Box><Typography fontWeight={800}>Payroll periods</Typography><Typography variant="caption" color="text.secondary">Periods are one calendar month. Edit/delete is available before payroll runs are created.</Typography></Box>
