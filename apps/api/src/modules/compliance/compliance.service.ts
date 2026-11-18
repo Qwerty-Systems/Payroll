@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
-import { CreateFilingDto, CreateRuleChangeDto, FilingRejectionDto, ReviewDecisionDto, SubmitFilingDto, SubmitRuleReviewDto, UpdateRuleChangeDto } from './compliance.dto';
+import { CreateFilingDto, CreateRuleChangeDto, FilingRejectionDto, ReviewDecisionDto, SubmitFilingDto, SubmitRuleReviewDto, UpdateOvertimePolicyDto, UpdateRuleChangeDto } from './compliance.dto';
 
 @Injectable()
 export class ComplianceService {
@@ -41,6 +41,31 @@ export class ComplianceService {
           (SELECT count(*)::int FROM tenant_allowance_types WHERE tenant_id=$1 AND is_enabled=true) AS "allowanceTemplateCount"
       `,[tenantId]);
       return { settings:settings[0]??null,assignment:assignment[0]??null,counts:counts[0]??{} };
+    });
+  }
+
+  getOvertimePolicy(tenantId: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT overtime_policy AS "overtimePolicy",standard_hours_per_day AS "standardHoursPerDay",standard_days_per_month AS "standardDaysPerMonth" FROM tenant_payroll_settings WHERE tenant_id=$1',[tenantId]);
+      if (!rows.length) throw new NotFoundException('Payroll setup has not been initialized for this tenant.');
+      return rows[0];
+    });
+  }
+
+  async updateOvertimePolicy(tenantId: string, actorId: string, dto: UpdateOvertimePolicyDto) {
+    if (dto.multiplier === undefined && dto.attendanceIncludesOvertime === undefined) {
+      throw new BadRequestException('Provide a multiplier and/or attendanceIncludesOvertime.');
+    }
+    return this.tenantDb.run(tenantId, async m => {
+      const patch: Record<string, unknown> = {};
+      if (dto.multiplier !== undefined) patch.multiplier = dto.multiplier;
+      if (dto.attendanceIncludesOvertime !== undefined) patch.attendanceIncludesOvertime = dto.attendanceIncludesOvertime;
+      // Merge so existing policy keys are preserved. The CTE makes the driver return plain rows
+      // (a bare UPDATE ... RETURNING comes back from TypeORM as [rows, affectedCount]).
+      const rows = await m.query('WITH u AS (UPDATE tenant_payroll_settings SET overtime_policy=overtime_policy || $2::jsonb,updated_at=now() WHERE tenant_id=$1 RETURNING overtime_policy) SELECT overtime_policy AS "overtimePolicy" FROM u',[tenantId,JSON.stringify(patch)]);
+      if (!rows.length) throw new NotFoundException('Payroll setup has not been initialized for this tenant.');
+      await this.audit(m,tenantId,actorId,'payroll.overtime_policy.updated','tenant_payroll_settings',tenantId,patch);
+      return rows[0];
     });
   }
 

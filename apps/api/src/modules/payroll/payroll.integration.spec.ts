@@ -13,6 +13,9 @@ import { DataSource } from 'typeorm';
 import { Pool } from 'pg';
 import { ConflictException } from '@nestjs/common';
 import { PayrollService } from './payroll.service';
+import { blockingWarnings } from './adjustments';
+import { ComplianceService } from '../compliance/compliance.service';
+import { PayrollPostFinalizationService } from './payroll-post-finalization.service';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
 import { TenantStatutoryService } from '../../database/tenant-statutory.service';
 import { calculateKenyaMonthlyPayroll, type StatutoryRule } from './kenya-payroll-calculator';
@@ -141,5 +144,73 @@ suite('Payroll flow against PostgreSQL (RLS enforced)', () => {
     await service.transitionRun(tenantId, creator, runId, 'submit');
     await service.transitionRun(tenantId, approver, runId, 'approve');
     await expect(service.transitionRun(tenantId, finalizer, runId, 'finalize')).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  describe('approved overtime', () => {
+    const approveOvertime = (date: string, minutes: number) => q(
+      "INSERT INTO overtime_requests (tenant_id,worker_id,work_date,requested_minutes,approved_minutes,reason,status,reviewed_by,reviewed_at) VALUES ($1,$2,$3,$4,$4,'Site deadline','approved',$5,now())",
+      [tenantId, workerId, date, minutes, approver]);
+    let unpaidGross = 0;
+
+    it('does not pay approved overtime until the tenant configures a multiplier, and blocks finalization', async () => {
+      await approveOvertime('2027-03-10', 240);
+      const runId = await newRun('2027-03', '2027-03-01', '2027-03-31');
+      const calc: any = await service.calculateRun(tenantId, creator, runId);
+      expect(blockingWarnings(calc.warnings)).toContain('W001:OVERTIME_POLICY_MULTIPLIER_NOT_CONFIGURED');
+      unpaidGross = calc.totals.grossEarnings;
+      const [snap] = await q('SELECT calculation_snapshot AS s FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2', [tenantId, runId]);
+      expect(snap.s.overtime).toMatchObject({ approvedMinutes: 240, amount: 0 });
+    });
+
+    it('pays configured overtime into gross and the statutory base, stamping the engine version', async () => {
+      await q("UPDATE tenant_payroll_settings SET overtime_policy=overtime_policy || '{\"multiplier\":1.5}'::jsonb WHERE tenant_id=$1", [tenantId]);
+      await approveOvertime('2027-04-10', 240);
+      const runId = await newRun('2027-04', '2027-04-01', '2027-04-30');
+      const calc: any = await service.calculateRun(tenantId, creator, runId);
+      // 100,000 / (26 days * 8 h) = 480.7692/h; 4 h * 1.5 = 2,884.62
+      expect(calc.totals.grossEarnings).toBeCloseTo(unpaidGross + 2884.62, 2);
+      expect(blockingWarnings(calc.warnings).filter((w: string) => w.includes('OVERTIME_POLICY'))).toEqual([]);
+      const [item] = await q('SELECT calculation_snapshot AS s FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2', [tenantId, runId]);
+      expect(item.s.earnings.overtimeAmount).toBe(2884.62);
+      expect(item.s.overtime).toMatchObject({ hours: 4, multiplier: 1.5, amount: 2884.62 });
+      expect(item.s.statutory.gross).toBeCloseTo(100000 + 2884.62 + 10000, 2); // basic + overtime + taxable allowance
+      const [run] = await q('SELECT engine_version FROM payroll_runs WHERE tenant_id=$1 AND id=$2', [tenantId, runId]);
+      expect(run.engine_version).toBe('jengaflow-ke-0.4.0');
+    });
+
+    it('updates the overtime policy via real jsonb merge, preserving existing keys, with an audit row', async () => {
+      const compliance = new ComplianceService(new TenantTransactionService(ds));
+      const before: any = await compliance.getOvertimePolicy(tenantId);
+      const updated: any = await compliance.updateOvertimePolicy(tenantId, creator, { attendanceIncludesOvertime: true });
+      expect(updated.overtimePolicy).toMatchObject({ ...before.overtimePolicy, attendanceIncludesOvertime: true });
+      expect(updated.overtimePolicy.multiplier).toBe(1.5); // untouched by a partial patch
+      const audit = await q("SELECT metadata FROM audit_events WHERE tenant_id=$1 AND action='payroll.overtime_policy.updated'", [tenantId]);
+      expect(audit).toHaveLength(1);
+      await compliance.updateOvertimePolicy(tenantId, creator, { attendanceIncludesOvertime: false });
+    });
+
+    it('flags timesheet overtime that has no approved request, without paying it', async () => {
+      const ts = (await q("INSERT INTO timesheets (tenant_id,worker_id,period_start,period_end,status,submitted_at,reviewed_at) VALUES ($1,$2,'2027-05-01','2027-05-31','approved',now(),now()) RETURNING id", [tenantId, workerId]))[0].id;
+      await q("INSERT INTO timesheet_lines (tenant_id,timesheet_id,work_date,minutes_worked,overtime_minutes) VALUES ($1,$2,'2027-05-12',600,120)", [tenantId, ts]);
+      const runId = await newRun('2027-05', '2027-05-01', '2027-05-31');
+      const calc: any = await service.calculateRun(tenantId, creator, runId);
+      expect(calc.warnings).toContain('W001:TIMESHEET_OVERTIME_EXCEEDS_APPROVED_REQUESTS');
+      expect(calc.totals.grossEarnings).toBeCloseTo(unpaidGross, 2);
+    });
+
+    it('prints the overtime line on a finalized payslip', async () => {
+      // Clean slate: earlier tests left an unreviewable hours-based allowance that blocks finalization.
+      await q('DELETE FROM worker_allowance_assignments WHERE tenant_id=$1', [tenantId]);
+      await assignAllowance('TRANSPORT', 10000);
+      await approveOvertime('2027-06-10', 120);
+      const runId = await newRun('2027-06', '2027-06-01', '2027-06-30');
+      const calc: any = await service.calculateRun(tenantId, creator, runId);
+      expect(blockingWarnings(calc.warnings)).toEqual([]);
+      await finalize(runId);
+      const [{ id }] = (await service.listPayslips(tenantId, runId)) as any[];
+      const html = await new PayrollPostFinalizationService(new TenantTransactionService(ds)).payslipHtml(tenantId, id);
+      expect(html).toContain('Overtime (2 h)');
+      expect(html).toContain('1,442.31'); // 100,000 * 120 * 1.5 / (60*8*26)
+    });
   });
 });

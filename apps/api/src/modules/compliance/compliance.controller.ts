@@ -4,7 +4,7 @@ import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
 import {
   CreateFilingDto, CreateRuleChangeDto, FilingAuthorityResponseDto, FilingRejectionDto,
-  ReviewDecisionDto, SubmitFilingDto, SubmitRuleReviewDto, UpdateRuleChangeDto,
+  ReviewDecisionDto, SubmitFilingDto, SubmitRuleReviewDto, UpdateOvertimePolicyDto, UpdateRuleChangeDto,
 } from './compliance.dto';
 import { ComplianceService } from './compliance.service';
 
@@ -18,6 +18,16 @@ export class ComplianceController {
   @Get('setup')
   @TenantPermissions('compliance.read')
   getTenantSetup(@Req() req:TenantRequest) { return this.compliance.getTenantSetup(req.tenant.id); }
+
+  @Get('overtime-policy')
+  @TenantPermissions('compliance.read')
+  getOvertimePolicy(@Req() req:TenantRequest) { return this.compliance.getOvertimePolicy(req.tenant.id); }
+
+  @Patch('overtime-policy')
+  @TenantPermissions('compliance.manage')
+  updateOvertimePolicy(@Req() req:TenantRequest,@Body() dto:UpdateOvertimePolicyDto) {
+    return this.compliance.updateOvertimePolicy(req.tenant.id,req.tenant.userId,dto);
+  }
 
   @Post('setup/initialize')
   @TenantPermissions('compliance.manage')

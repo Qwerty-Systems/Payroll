@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsIn, IsObject, IsOptional, IsString, IsUrl, IsUUID, Length, MaxLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsNumber, IsObject, IsOptional, IsString, IsUrl, IsUUID, Length, Max, MaxLength, Min } from 'class-validator';
 
 const categories = ['tax','employee_deduction','employer_contribution','tax_relief','allowable_deduction','levy'];
 export class SubmitRuleReviewDto {
@@ -54,4 +54,11 @@ export class FilingRejectionDto {
 export class FilingAuthorityResponseDto {
   @IsBoolean() accepted!: boolean;
   @IsOptional() @IsString() @MaxLength(2000) reason?: string;
+}
+
+export class UpdateOvertimePolicyDto {
+  /** Pay multiplier for approved overtime, e.g. 1.5. Tenant-configured; never assumed by the engine. */
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(1) @Max(4) multiplier?: number;
+  /** Hourly-paid workers: attendance minutes already include overtime, so only the premium is added. */
+  @IsOptional() @IsBoolean() attendanceIncludesOvertime?: boolean;
 }

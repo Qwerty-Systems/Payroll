@@ -5,9 +5,10 @@ import { TenantTransactionService } from '../../database/tenant-transaction.serv
 import { calculateKenyaMonthlyPayroll, type StatutoryRule } from './kenya-payroll-calculator';
 import { CreatePayrollPeriodDto, UpdatePayrollPeriodDto, UpdatePayrollRunDto } from './payroll.dto';
 import { calculateContractEarnings } from './contract-earnings';
+import { calculateOvertimePay, timesheetOvertimeReviewWarnings, type OvertimePolicy } from './overtime';
 import { blockingWarnings, calculateAllowances, calculateOtherDeductions, type AllowanceAssignmentInput, type DeductionAssignmentInput } from './adjustments';
 
-const ENGINE_VERSION = 'jengaflow-ke-0.3.0';
+const ENGINE_VERSION = 'jengaflow-ke-0.4.0';
 const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 @Injectable()
@@ -214,8 +215,15 @@ export class PayrollService {
       for (const rule of rawRules) mergedRules.set(rule.code,{code:rule.code,calculation_method:rule.calculation_method,configuration:rule.configuration});
       for (const rule of tenantOverrides) mergedRules.set(rule.code,{code:rule.code,calculation_method:rule.calculation_method,configuration:rule.configuration});
       const rules = [...mergedRules.values()];
-      const workers = await m.query("SELECT w.id AS worker_id,w.worker_number,w.first_name,w.middle_name,w.last_name,w.email,c.id AS contract_id,c.engagement_type,c.pay_basis,c.rate_amount::numeric AS rate_amount,c.currency,c.effective_from::text AS effective_from,c.effective_to::text AS effective_to,c.terms,(SELECT count(DISTINCT a.work_date)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS approved_days,(SELECT COALESCE(sum(a.minutes_worked),0)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS approved_minutes,(SELECT COALESCE(sum(o.quantity),0)::numeric FROM worker_output_entries o WHERE o.tenant_id=w.tenant_id AND o.worker_id=w.id AND o.status='approved' AND o.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date)) AND o.unit_code = ANY(ARRAY(SELECT jsonb_array_elements_text(COALESCE(c.terms->'unitCodes','[]'::jsonb))))) AS approved_units,(SELECT count(*)::int FROM worker_contracts c2 WHERE c2.tenant_id=w.tenant_id AND c2.worker_id=w.id AND c2.effective_from <= $3::date AND (c2.effective_to IS NULL OR c2.effective_to >= $2::date)) AS overlapping_contracts FROM workers w JOIN worker_contracts c ON c.tenant_id=w.tenant_id AND c.worker_id=w.id AND c.effective_from <= $3::date AND (c.effective_to IS NULL OR c.effective_to >= $2::date) WHERE w.tenant_id=$1 AND w.status='active' ORDER BY w.worker_number",[tenantId,run.start_date,run.end_date]);
+      const workers = await m.query("SELECT w.id AS worker_id,w.worker_number,w.first_name,w.middle_name,w.last_name,w.email,c.id AS contract_id,c.engagement_type,c.pay_basis,c.rate_amount::numeric AS rate_amount,c.currency,c.effective_from::text AS effective_from,c.effective_to::text AS effective_to,c.terms,(SELECT count(DISTINCT a.work_date)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS approved_days,(SELECT COALESCE(sum(a.minutes_worked),0)::int FROM attendance_records a WHERE a.tenant_id=w.tenant_id AND a.worker_id=w.id AND a.status='approved' AND a.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS approved_minutes,(SELECT COALESCE(sum(o.quantity),0)::numeric FROM worker_output_entries o WHERE o.tenant_id=w.tenant_id AND o.worker_id=w.id AND o.status='approved' AND o.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date)) AND o.unit_code = ANY(ARRAY(SELECT jsonb_array_elements_text(COALESCE(c.terms->'unitCodes','[]'::jsonb))))) AS approved_units,(SELECT COALESCE(sum(ot.approved_minutes),0)::int FROM overtime_requests ot WHERE ot.tenant_id=w.tenant_id AND ot.worker_id=w.id AND ot.status='approved' AND ot.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date))) AS overtime_approved_minutes,(SELECT count(*)::int FROM (SELECT l.work_date,sum(l.overtime_minutes) AS ts_minutes FROM timesheet_lines l JOIN timesheets t ON t.tenant_id=l.tenant_id AND t.id=l.timesheet_id WHERE l.tenant_id=w.tenant_id AND t.worker_id=w.id AND t.status='approved' AND l.overtime_minutes>0 AND l.work_date BETWEEN GREATEST($2::date,c.effective_from) AND LEAST($3::date,COALESCE(c.effective_to,$3::date)) GROUP BY l.work_date) x WHERE x.ts_minutes > COALESCE((SELECT sum(o2.approved_minutes) FROM overtime_requests o2 WHERE o2.tenant_id=w.tenant_id AND o2.worker_id=w.id AND o2.status='approved' AND o2.work_date=x.work_date),0)) AS overtime_unreconciled_dates,(SELECT count(*)::int FROM worker_contracts c2 WHERE c2.tenant_id=w.tenant_id AND c2.worker_id=w.id AND c2.effective_from <= $3::date AND (c2.effective_to IS NULL OR c2.effective_to >= $2::date)) AS overlapping_contracts FROM workers w JOIN worker_contracts c ON c.tenant_id=w.tenant_id AND c.worker_id=w.id AND c.effective_from <= $3::date AND (c.effective_to IS NULL OR c.effective_to >= $2::date) WHERE w.tenant_id=$1 AND w.status='active' ORDER BY w.worker_number",[tenantId,run.start_date,run.end_date]);
       if (!workers.length) throw new ConflictException('No active workers with contracts overlap this payroll period.');
+      const settingsRows = await m.query('SELECT standard_hours_per_day::numeric AS hours_per_day,standard_days_per_month::numeric AS days_per_month,overtime_policy FROM tenant_payroll_settings WHERE tenant_id=$1',[tenantId]);
+      const standardHoursPerDay = Number(settingsRows[0]?.hours_per_day ?? 8);
+      const standardDaysPerMonth = Number(settingsRows[0]?.days_per_month ?? 26);
+      const overtimePolicy: OvertimePolicy = {
+        multiplier: settingsRows[0]?.overtime_policy?.multiplier ?? null,
+        attendanceIncludesOvertime: settingsRows[0]?.overtime_policy?.attendanceIncludesOvertime === true,
+      };
       const attendanceWindow = (alias: string) => "BETWEEN GREATEST($2::date,"+alias+".effective_from) AND LEAST($3::date,COALESCE("+alias+".effective_to,$3::date))";
       const allowanceRows = await m.query(
         "SELECT a.id AS assignment_id,a.worker_id,a.allowance_type_id AS type_id,t.code,t.name,t.calculation_method AS method,t.tax_treatment,t.configuration,t.is_enabled AS type_enabled,t.effective_from::text AS type_effective_from,t.effective_to::text AS type_effective_to,a.amount::numeric AS amount,a.effective_from::text AS effective_from,a.effective_to::text AS effective_to,"
@@ -259,6 +267,14 @@ export class PayrollService {
           approvedUnits: Number(worker.approved_units),
         });
         const basicEarnings = earningsResult.amount;
+        const overtime = calculateOvertimePay({
+          payBasis: worker.pay_basis,
+          rate,
+          approvedMinutes: Number(worker.overtime_approved_minutes ?? 0),
+          policy: overtimePolicy,
+          standardHoursPerDay,
+          standardDaysPerMonth,
+        });
         const allowanceList = allowancesByWorker.get(worker.worker_id) ?? [];
         const seenAllowanceTypes = new Set<string>();
         const duplicateAllowanceWarnings: string[] = [];
@@ -267,8 +283,9 @@ export class PayrollService {
           seenAllowanceTypes.add(a.typeId);
         }
         const allowances = calculateAllowances({ periodStart:String(run.start_date), periodEnd:String(run.end_date), basicEarnings, assignments: allowanceList });
-        const grossPay = round(basicEarnings + allowances.total);
-        const statutoryBase = round(basicEarnings + allowances.taxableTotal);
+        const grossPay = round(basicEarnings + overtime.amount + allowances.total);
+        // Overtime is ordinary taxable employment income, so it joins the statutory base.
+        const statutoryBase = round(basicEarnings + overtime.amount + allowances.taxableTotal);
         const otherDeductions = calculateOtherDeductions({ periodStart:String(run.start_date), periodEnd:String(run.end_date), basicEarnings, grossEarnings: grossPay, assignments: deductionsByWorker.get(worker.worker_id) ?? [] });
         const contractorNeedsReview = ['subcontractor','independent_contractor'].includes(worker.engagement_type);
         // Do not apply employee PAYE/SHIF/NSSF deductions to a service contractor by default.
@@ -287,12 +304,13 @@ export class PayrollService {
           ? ['WORKER_CLASSIFICATION_REQUIRES_STATUTORY_REVIEW']
           : [];
         warnings.push(...earningsResult.warnings.map(w => worker.worker_number+':'+w));
+        warnings.push(...[...overtime.warnings,...timesheetOvertimeReviewWarnings(Number(worker.overtime_unreconciled_dates ?? 0))].map(w => worker.worker_number+':'+w));
         warnings.push(...classificationWarnings.map(w => worker.worker_number+':'+w));
         warnings.push(...allowances.warnings.map(w => worker.worker_number+':'+w));
         warnings.push(...duplicateAllowanceWarnings.map(w => worker.worker_number+':'+w));
         warnings.push(...otherDeductions.warnings.map(w => worker.worker_number+':'+w));
         if (netPay < 0 && !statutory.warnings.includes('NET_PAY_NEGATIVE')) warnings.push(worker.worker_number+':NET_PAY_NEGATIVE');
-        const snapshot = { worker:{id:worker.worker_id,workerNumber:worker.worker_number,firstName:worker.first_name,middleName:worker.middle_name,lastName:worker.last_name,email:worker.email},contract:{id:worker.contract_id,engagementType:worker.engagement_type,payBasis:worker.pay_basis,rate,currency:worker.currency},period:{startDate:run.start_date,endDate:run.end_date},attendance:{approvedDays:Number(worker.approved_days),approvedMinutes:Number(worker.approved_minutes)},earnings:{quantity:earningsResult.quantity,unit:earningsResult.unit,rate,amount:basicEarnings,allowancesTotal:allowances.total,grossPay},allowances:{lines:allowances.lines,taxableTotal:allowances.taxableTotal,nonTaxableTotal:allowances.nonTaxableTotal,total:allowances.total},otherDeductions:{lines:otherDeductions.lines,total:otherDeductions.total},classificationWarnings,statutory,netPay,engineVersion:ENGINE_VERSION };
+        const snapshot = { worker:{id:worker.worker_id,workerNumber:worker.worker_number,firstName:worker.first_name,middleName:worker.middle_name,lastName:worker.last_name,email:worker.email},contract:{id:worker.contract_id,engagementType:worker.engagement_type,payBasis:worker.pay_basis,rate,currency:worker.currency},period:{startDate:run.start_date,endDate:run.end_date},attendance:{approvedDays:Number(worker.approved_days),approvedMinutes:Number(worker.approved_minutes)},earnings:{quantity:earningsResult.quantity,unit:earningsResult.unit,rate,amount:basicEarnings,overtimeAmount:overtime.amount,allowancesTotal:allowances.total,grossPay},overtime:{approvedMinutes:Number(worker.overtime_approved_minutes ?? 0),hours:overtime.hours,baseHourlyRate:overtime.baseHourlyRate,multiplier:overtime.multiplier,premiumOnly:overtime.premiumOnly,amount:overtime.amount},allowances:{lines:allowances.lines,taxableTotal:allowances.taxableTotal,nonTaxableTotal:allowances.nonTaxableTotal,total:allowances.total},otherDeductions:{lines:otherDeductions.lines,total:otherDeductions.total},classificationWarnings,statutory,netPay,engineVersion:ENGINE_VERSION };
         itemSnapshots.push({workerId:worker.worker_id,earnings:grossPay,employeeDeductions,employerContributions:statutory.employerContributions,netPay,snapshot});
         warnings.push(...statutory.warnings.map(w => worker.worker_number+':'+w));
       }
@@ -304,7 +322,7 @@ export class PayrollService {
       }
       const totals={workerCount:itemSnapshots.length,grossEarnings:totalEarnings,employeeDeductions:totalEmployeeDeductions,employerContributions:totalEmployerContributions,netPay:totalNet,employerCost:round(totalEarnings+totalEmployerContributions)};
       const inputHash=createHash('sha256').update(JSON.stringify(itemSnapshots)).digest('hex');
-      await m.query("UPDATE payroll_runs SET status='calculated',totals=$3::jsonb,warnings=$4::jsonb,input_hash=$5,calculated_at=now(),submitted_by=NULL,approved_by=NULL,finalized_by=NULL,submitted_at=NULL,approved_at=NULL,finalized_at=NULL WHERE tenant_id=$1 AND id=$2",[tenantId,runId,JSON.stringify(totals),JSON.stringify(warnings),inputHash]);
+      await m.query("UPDATE payroll_runs SET status='calculated',totals=$3::jsonb,warnings=$4::jsonb,input_hash=$5,engine_version=$6,calculated_at=now(),submitted_by=NULL,approved_by=NULL,finalized_by=NULL,submitted_at=NULL,approved_at=NULL,finalized_at=NULL WHERE tenant_id=$1 AND id=$2",[tenantId,runId,JSON.stringify(totals),JSON.stringify(warnings),inputHash,ENGINE_VERSION]);
       await m.query("INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,'payroll.run.calculated','payroll_run',$3,$4::jsonb)",[tenantId,actorId,runId,JSON.stringify({totals,warnings,inputHash,engineVersion:ENGINE_VERSION})]);
       return {runId,status:'calculated',totals,warnings,inputHash};
     });

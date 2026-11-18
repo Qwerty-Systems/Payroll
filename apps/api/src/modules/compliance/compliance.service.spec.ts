@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ComplianceService } from './compliance.service';
 
 describe('ComplianceService', () => {
@@ -67,5 +67,44 @@ describe('ComplianceService', () => {
       externalReference:'KRA-REF-001',submissionChannel:'iTax',
     })).rejects.toBeInstanceOf(ConflictException);
     expect(query.mock.calls[0][0]).toContain('reviewed_by IS DISTINCT FROM');
+  });
+});
+
+describe('ComplianceService overtime policy', () => {
+  const tenantId='123e4567-e89b-42d3-a456-426614174000';
+  const actorId='123e4567-e89b-42d3-a456-426614174001';
+  function service(query:jest.Mock) {
+    const tenantDb={run:jest.fn(async (_tenant:string,work:(manager:{query:jest.Mock})=>Promise<unknown>)=>work({query}))};
+    return new ComplianceService(tenantDb as never);
+  }
+
+  it('merges the patch into the stored policy (preserving other keys) and audits the change',async()=>{
+    const query=jest.fn()
+      .mockResolvedValueOnce([{overtimePolicy:{requiresApproval:true,multiplier:1.5}}])
+      .mockResolvedValueOnce([]);
+    await expect(service(query).updateOvertimePolicy(tenantId,actorId,{multiplier:1.5}))
+      .resolves.toMatchObject({overtimePolicy:{requiresApproval:true,multiplier:1.5}});
+    expect(query.mock.calls[0][0]).toContain('overtime_policy || $2::jsonb');
+    expect(JSON.parse(query.mock.calls[0][1][1])).toEqual({multiplier:1.5});
+    expect(query.mock.calls[1][1][2]).toBe('payroll.overtime_policy.updated');
+  });
+
+  it('only writes the fields that were supplied',async()=>{
+    const query=jest.fn().mockResolvedValueOnce([{overtimePolicy:{}}]).mockResolvedValueOnce([]);
+    await service(query).updateOvertimePolicy(tenantId,actorId,{attendanceIncludesOvertime:true});
+    expect(JSON.parse(query.mock.calls[0][1][1])).toEqual({attendanceIncludesOvertime:true});
+  });
+
+  it('rejects an empty update without touching the database',async()=>{
+    const query=jest.fn();
+    await expect(service(query).updateOvertimePolicy(tenantId,actorId,{})).rejects.toBeInstanceOf(BadRequestException);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('reports a missing payroll setup instead of silently succeeding',async()=>{
+    const query=jest.fn().mockResolvedValueOnce([]);
+    await expect(service(query).updateOvertimePolicy(tenantId,actorId,{multiplier:2})).rejects.toBeInstanceOf(NotFoundException);
+    expect(query).toHaveBeenCalledTimes(1); // no audit row for a change that did not happen
+    await expect(service(jest.fn().mockResolvedValueOnce([])).getOvertimePolicy(tenantId)).rejects.toBeInstanceOf(NotFoundException);
   });
 });

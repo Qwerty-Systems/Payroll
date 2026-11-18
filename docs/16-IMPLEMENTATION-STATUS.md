@@ -86,3 +86,14 @@ Worker documents are stored in private object storage with tenant-scoped metadat
 - The tenant workspace includes a Time Management area for shifts, leave, overtime and timesheet operations.
 - Leave balances are intentionally tenant-maintained; the system does not infer legal accrual rules. Approved overtime and timesheet values are not automatically added to payroll until the applicable pay policy and approval mapping are configured and reviewed.
 - Remaining: worker-to-shift roster assignments, shift-based attendance calculations, payroll integration for approved overtime/timesheets, leave-type edit/deactivation UI, richer timesheet editing UI, and browser end-to-end coverage.
+
+
+## Overtime in payroll (engine jengaflow-ke-0.4.0)
+- Approved overtime requests inside a worker's contract window are paid as a separate earning, added to gross pay and to the statutory base (overtime is ordinary taxable income).
+- The multiplier is tenant policy and is never assumed. Set it with `PATCH /api/v1/compliance/overtime-policy` (`{ "multiplier": 1.5 }`, allowed range 1 to 4; requires `compliance.manage`); read it with `GET` (requires `compliance.read`). Updates merge into `tenant_payroll_settings.overtime_policy`, preserve other keys and write an audit event.
+- Base hourly rate: hourly contracts use the rate; daily contracts divide by `standard_hours_per_day`; monthly contracts divide by `standard_days_per_month x standard_hours_per_day`. Weekly and per-unit contracts have no unambiguous hourly equivalent and are not paid.
+- `attendanceIncludesOvertime: true` (hourly workers only) pays just the premium (`multiplier - 1`), for tenants whose approved attendance minutes already contain the overtime hours.
+- Blocking warnings (finalization refused): `OVERTIME_POLICY_MULTIPLIER_NOT_CONFIGURED`, `OVERTIME_BASE_RATE_UNSUPPORTED_FOR_PAY_BASIS`. Approved overtime in those cases is unpaid rather than guessed.
+- Approved timesheet `overtime_minutes` are not paid. If a timesheet claims more overtime on a date than approved requests allow, the run gets the review warning `TIMESHEET_OVERTIME_EXCEEDS_APPROVED_REQUESTS`.
+- Recalculating a draft or rejected run now also stamps the current `engine_version` on the run.
+- Still open: leave/shift roster assignment, weekly-rate overtime divisors, different multipliers for rest days and public holidays, and a web UI for the overtime policy.
