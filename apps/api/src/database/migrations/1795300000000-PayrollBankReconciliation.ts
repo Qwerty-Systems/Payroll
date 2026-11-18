@@ -20,7 +20,7 @@ export class PayrollBankReconciliation1795300000000 implements MigrationInterfac
    UNIQUE(tenant_id,id),
    UNIQUE(tenant_id,transaction_reference),
    FOREIGN KEY(tenant_id,matched_payment_item_id) REFERENCES payroll_payment_batch_items(tenant_id,id) ON DELETE RESTRICT,
-   CHECK((match_status='unmatched' AND matched_payment_item_id IS NULL AND matched_at IS NULL) OR (match_status='matched' AND matched_payment_item_id IS NOT NULL AND matched_at IS NOT NULL)
+   CHECK((match_status='unmatched' AND matched_payment_item_id IS NULL AND matched_at IS NULL) OR (match_status='matched' AND matched_payment_item_id IS NOT NULL AND matched_at IS NOT NULL))
   )`);
   await q.query('CREATE UNIQUE INDEX payroll_bank_match_payment_unique_idx ON payroll_bank_transactions(tenant_id,matched_payment_item_id) WHERE matched_payment_item_id IS NOT NULL');
   await q.query('CREATE INDEX payroll_bank_transactions_lookup_idx ON payroll_bank_transactions(tenant_id,transaction_date DESC,match_status)');
