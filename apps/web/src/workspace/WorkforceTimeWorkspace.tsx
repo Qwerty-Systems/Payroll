@@ -30,7 +30,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [notice, setNotice] = useState('');
   const [shift, setShift] = useState({ code: '', name: '', startTime: '08:00', endTime: '17:00', breakMinutes: '60' });
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
-  const [leaveType, setLeaveType] = useState({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0' });
+  const [leaveType, setLeaveType] = useState({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0', requiresApproval: true, isPaid: true });
   const [balance, setBalance] = useState({ workerId: '', leaveTypeId: '', leaveYear: String(new Date().getFullYear()), openingDays: '0', accruedDays: '0', adjustmentDays: '0' });
   const [leave, setLeave] = useState({ workerId: '', leaveTypeId: '', startDate: today(), endDate: today(), requestedDays: '1', reason: '' });
   const [overtime, setOvertime] = useState({ workerId: '', workDate: today(), requestedMinutes: '60', reason: '', projectId: '', siteId: '' });
@@ -130,9 +130,11 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
             <TextField size="small" label="Name" value={leaveType.name} onChange={e => setLeaveType(v => ({ ...v, name: e.target.value }))} />
             <TextField size="small" type="number" label="Annual days" value={leaveType.annualEntitlementDays} onChange={e => setLeaveType(v => ({ ...v, annualEntitlementDays: e.target.value }))} />
             <TextField size="small" type="number" label="Carry-forward cap" value={leaveType.carryForwardLimitDays} onChange={e => setLeaveType(v => ({ ...v, carryForwardLimitDays: e.target.value }))} />
+            <TextField select size="small" label="Approval required" value={String(leaveType.requiresApproval)} onChange={e => setLeaveType(v => ({ ...v, requiresApproval: e.target.value === 'true' }))} sx={{ minWidth: 150 }}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField>
+            <TextField select size="small" label="Paid leave" value={String(leaveType.isPaid)} onChange={e => setLeaveType(v => ({ ...v, isPaid: e.target.value === 'true' }))} sx={{ minWidth: 130 }}><MenuItem value="true">Paid</MenuItem><MenuItem value="false">Unpaid</MenuItem></TextField>
             <Button variant="contained" disabled={busy || !leaveType.code || !leaveType.name} onClick={() => void perform(async () => {
               await request('tenant/leave-types', json('POST', { ...leaveType, annualEntitlementDays: Number(leaveType.annualEntitlementDays), carryForwardLimitDays: Number(leaveType.carryForwardLimitDays) }));
-              setLeaveType({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0' });
+              setLeaveType({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0', requiresApproval: true, isPaid: true });
             }, 'Leave type created.')}>Add type</Button>
           </Stack>
           <Divider />
