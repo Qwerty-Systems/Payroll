@@ -157,7 +157,7 @@ export class IntegrationsService {
     return this.tenantDb.run(tenantId, manager => manager.query(`
       SELECT id,job_type AS "jobType",status,attempts,max_attempts AS "maxAttempts",available_at AS "availableAt",last_error AS "lastError",provider_reference AS "providerReference",created_at AS "createdAt",updated_at AS "updatedAt"
       FROM integration_delivery_jobs WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 250
-    ,[tenantId]));
+    `, [tenantId]));
   }
 
   async createReconciliationItem(tenantId: string, actorId: string, dto: { reconciliationType: 'payout'|'accounting'; internalReference: string; externalReference?: string; internalAmount?: number; externalAmount?: number; details?: Record<string, unknown> }) {
@@ -178,7 +178,7 @@ export class IntegrationsService {
     return this.tenantDb.run(tenantId, manager => manager.query(`
       SELECT id,reconciliation_type AS "reconciliationType",internal_reference AS "internalReference",external_reference AS "externalReference",status,internal_amount AS "internalAmount",external_amount AS "externalAmount",details,created_at AS "createdAt"
       FROM integration_reconciliation_items WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 500
-    ,[tenantId]));
+    `, [tenantId]));
   }
 
   async testDarajaSandbox(tenantId: string) {
