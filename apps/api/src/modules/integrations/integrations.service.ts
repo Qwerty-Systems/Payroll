@@ -61,6 +61,7 @@ export class IntegrationsService {
           last_tested_at=NULL,last_test_message=NULL,updated_at=now()
         RETURNING provider,enabled,environment,settings,connection_status AS "connectionStatus",updated_at AS "updatedAt"
       `, [tenantId,dto.provider,dto.enabled,dto.environment,JSON.stringify(settings)]);
+      await manager.query('INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)', [tenantId,actorId,'integration.settings.updated','integration',dto.provider,JSON.stringify({provider:dto.provider,enabled:dto.enabled,environment:dto.environment,settingKeys:Object.keys(settings)})]);
       return rows[0];
     });
   }
@@ -99,6 +100,7 @@ export class IntegrationsService {
           cost_center_code AS "costCenterCode",effective_from::text AS "effectiveFrom",
           effective_to::text AS "effectiveTo",updated_at AS "updatedAt"
       `,[tenantId,dto.componentCode,dto.componentLabel,dto.debitAccountCode,dto.creditAccountCode,dto.costCenterCode||null,dto.effectiveFrom,dto.effectiveTo||null,actorId]);
+      await manager.query('INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)', [tenantId,actorId,'accounting.mapping.saved','account_mapping',rows[0].id,JSON.stringify({componentCode:dto.componentCode,effectiveFrom:dto.effectiveFrom})]);
       return rows[0];
     });
   }
