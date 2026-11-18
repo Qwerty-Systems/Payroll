@@ -148,7 +148,7 @@ export default function BillingWorkspace({ request }: { request: Request }) {
           {d.status!=='void' && d.status!=='paid' && <Button size="small" color="inherit" onClick={()=>void changeStatus(d,'void')} disabled={busy}>Void</Button>}
           <Button size="small" onClick={()=>void openPayments(d)}>Payments</Button>
         </Stack></TableCell></TableRow>)}
-        {!filtered.length && (<TableRow><TableCell colSpan={7} align="center"><Typography fontWeight={750}>{loading ? 'Loading billing records…' : 'No billing documents yet'}</Typography><Typography variant="body2" color="text.secondary">{loading ? '' : 'Create a quotation or invoice to get started.'}</Typography></TableCell></TableRow>)}
+        {!filtered.length && <TableRow><TableCell colSpan={7} align="center"><Box sx={{py:5}}><Typography fontWeight={750}>{loading?'Loading billing records…':'No billing documents yet'}</Typography><Typography variant="body2" color="text.secondary">{loading?'':'Create a quotation or invoice to get started.'}</Typography></Box></TableCell></TableRow>}
       </TableBody></Table></TableContainer>
     </Paper>
     <Dialog open={createOpen} onClose={()=>!busy&&setCreateOpen(false)} fullWidth maxWidth="md"><DialogTitle>Create billing document</DialogTitle><DialogContent><Grid container spacing={1.5} sx={{pt:1}}>
