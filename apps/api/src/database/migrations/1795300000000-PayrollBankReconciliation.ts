@@ -27,7 +27,7 @@ export class PayrollBankReconciliation1795300000000 implements MigrationInterfac
   await q.query('ALTER TABLE payroll_bank_transactions ENABLE ROW LEVEL SECURITY');
   await q.query('ALTER TABLE payroll_bank_transactions FORCE ROW LEVEL SECURITY');
   await q.query(`CREATE POLICY tenant_isolation ON payroll_bank_transactions USING(tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid) WITH CHECK(tenant_id=nullif(current_setting('app.tenant_id',true),'')::uuid)`);
-  await q.query(`DO $$ BEGIN IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='jengaflow_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON payroll_bank_transactions,payroll_payment_batch_items TO jengaflow_app; END IF; IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='jf_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON payroll_bank_transactions,payroll_payment_batch_items TO jf_app; END IF; END; $;`);
+  await q.query(`DO $$ BEGIN IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='jengaflow_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON payroll_bank_transactions,payroll_payment_batch_items TO jengaflow_app; END IF; IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='jf_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON payroll_bank_transactions,payroll_payment_batch_items TO jf_app; END IF; END $;`);
  }
  async down(q:QueryRunner):Promise<void>{
   await q.query('DROP TABLE IF EXISTS payroll_bank_transactions CASCADE');
