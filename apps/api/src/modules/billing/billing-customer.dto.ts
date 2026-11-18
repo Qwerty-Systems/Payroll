@@ -1,5 +1,4 @@
-import { IsArray, IsDateString, IsEmail, IsIn, IsNumber, IsObject, IsOptional, IsString, Length, Min, Max, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsArray, IsDateString, IsEmail, IsIn, IsNumber, IsObject, IsOptional, IsString, Length, Min, Max } from 'class-validator';
 
 export class CreateBillingCustomerDto {
   @IsString() @Length(1,180) name!: string;
