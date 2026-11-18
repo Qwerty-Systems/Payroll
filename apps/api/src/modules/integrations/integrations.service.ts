@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
 import type { IntegrationProvider, UpdateIntegrationSettingsDto } from './integrations.dto';
 
@@ -114,9 +114,15 @@ export class IntegrationsService {
       const rows = await manager.query(`
         INSERT INTO integration_transactions (tenant_id,provider,idempotency_key,transaction_type,status,amount,currency,recipient_reference,request_metadata,created_by)
         VALUES($1,'daraja',$2,$3,'created',$4,$5,$6,$7::jsonb,$8)
-        ON CONFLICT(tenant_id,provider,idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key
+        ON CONFLICT(tenant_id,provider,idempotency_key) DO NOTHING
         RETURNING id,provider,idempotency_key AS "idempotencyKey",transaction_type AS "transactionType",status,amount,currency,recipient_reference AS "recipientReference",provider_reference AS "providerReference",created_at AS "createdAt"
       `,[tenantId,dto.idempotencyKey,dto.transactionType||'payroll_payout',dto.amount,dto.currency||'KES',dto.recipientReference,JSON.stringify(dto.metadata||{}),actorId]);
+      if (!rows.length) {
+        const existing = await manager.query('SELECT amount,currency,recipient_reference AS "recipientReference" FROM integration_transactions WHERE tenant_id=$1 AND provider=$2 AND idempotency_key=$3',[tenantId,'daraja',dto.idempotencyKey]);
+        if (!existing.length || Number(existing[0].amount) !== dto.amount || existing[0].currency !== (dto.currency||'KES') || existing[0].recipientReference !== dto.recipientReference) throw new ConflictException('Idempotency key already exists with a different payout payload.');
+        return existing[0];
+      }
+      await manager.query('INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)',[tenantId,actorId,'payout.intent.created','integration_transaction',rows[0].id,JSON.stringify({amount:dto.amount,currency:dto.currency||'KES',provider:'daraja'})]);
       return rows[0];
     });
   }
@@ -128,7 +134,7 @@ export class IntegrationsService {
     `,[tenantId]));
   }
 
-  async queueDelivery(tenantId: string, dto: { jobType: 'payslip_email'|'accounting_sync'; idempotencyKey: string; payload: Record<string, unknown> }) {
+  async queueDelivery(tenantId: string, actorId: string, dto: { jobType: 'payslip_email'|'accounting_sync'; idempotencyKey: string; payload: Record<string, unknown> }) {
     if (!dto.idempotencyKey.trim()) throw new BadRequestException('Idempotency key is required.');
     if (dto.jobType === 'payslip_email') {
       if (typeof dto.payload.storageKey !== 'string' || !dto.payload.storageKey.trim() || typeof dto.payload.email !== 'string' || !dto.payload.email.includes('@')) {
@@ -139,9 +145,11 @@ export class IntegrationsService {
     const rows = await this.tenantDb.run(tenantId, manager => manager.query(`
       INSERT INTO integration_delivery_jobs (tenant_id,job_type,idempotency_key,payload,status)
       VALUES($1,$2,$3,$4::jsonb,'queued')
-      ON CONFLICT(tenant_id,job_type,idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key
+      ON CONFLICT(tenant_id,job_type,idempotency_key) DO NOTHING
       RETURNING id,job_type AS "jobType",status,attempts,available_at AS "availableAt",created_at AS "createdAt"
     `,[tenantId,dto.jobType,dto.idempotencyKey,JSON.stringify(dto.payload)]));
+    if (!rows.length) return this.tenantDb.run(tenantId, manager => manager.query('SELECT id,job_type AS "jobType",status,attempts,available_at AS "availableAt",created_at AS "createdAt" FROM integration_delivery_jobs WHERE tenant_id=$1 AND job_type=$2 AND idempotency_key=$3',[tenantId,dto.jobType,dto.idempotencyKey]).then(existing => existing[0]));
+    await this.tenantDb.run(tenantId, async manager => manager.query('INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)',[tenantId,actorId,'integration.delivery.queued','integration_delivery_job',rows[0].id,JSON.stringify({jobType:dto.jobType})]));
     return rows[0];
   }
 
@@ -152,7 +160,7 @@ export class IntegrationsService {
     ,[tenantId]));
   }
 
-  async createReconciliationItem(tenantId: string, dto: { reconciliationType: 'payout'|'accounting'; internalReference: string; externalReference?: string; internalAmount?: number; externalAmount?: number; details?: Record<string, unknown> }) {
+  async createReconciliationItem(tenantId: string, actorId: string, dto: { reconciliationType: 'payout'|'accounting'; internalReference: string; externalReference?: string; internalAmount?: number; externalAmount?: number; details?: Record<string, unknown> }) {
     const status = dto.internalAmount !== undefined && dto.externalAmount !== undefined
       ? (Math.round(dto.internalAmount*100) === Math.round(dto.externalAmount*100) ? 'matched' : 'amount_mismatch')
       : dto.externalReference ? 'unmatched' : 'missing_external';
@@ -162,6 +170,7 @@ export class IntegrationsService {
       ON CONFLICT(tenant_id,reconciliation_type,internal_reference,external_reference) DO UPDATE SET status=EXCLUDED.status,internal_amount=EXCLUDED.internal_amount,external_amount=EXCLUDED.external_amount,details=EXCLUDED.details
       RETURNING id,reconciliation_type AS "reconciliationType",internal_reference AS "internalReference",external_reference AS "externalReference",status,internal_amount AS "internalAmount",external_amount AS "externalAmount",details,created_at AS "createdAt"
     `,[tenantId,dto.reconciliationType,dto.internalReference,dto.externalReference||null,status,dto.internalAmount??null,dto.externalAmount??null,JSON.stringify(dto.details||{})]));
+    await this.tenantDb.run(tenantId, async manager => manager.query('INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)',[tenantId,actorId,'integration.reconciliation.recorded','integration_reconciliation',rows[0].id,JSON.stringify({reconciliationType:dto.reconciliationType,status})]));
     return rows[0];
   }
 
