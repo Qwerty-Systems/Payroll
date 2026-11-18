@@ -70,7 +70,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [selectedComponentType, setSelectedComponentType] = useState<'allowance' | 'deduction'>('allowance');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [employeeStatusFilter, setEmployeeStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [employeeStatusFilter, setEmployeeStatusFilter] = useState<'all' | 'active' | 'inactive' | 'suspended' | 'archived'>('all');
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [queueCounts, setQueueCounts] = useState({ pending: 0, syncing: 0, conflict: 0, failed: 0, rejected: 0 });
@@ -381,7 +381,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     section === 'people' ? data.members : section === 'organization' ? data.branches : []) ?? [];
   const filteredRows = currentRows.filter(row => {
     const matchesSearch = !searchQuery.trim() || JSON.stringify(row).toLowerCase().includes(searchQuery.trim().toLowerCase());
-    const matchesEmployeeStatus = section !== 'workers' || employeeStatusFilter === 'all' || String(row.status ?? '').toLowerCase() === employeeStatusFilter;
+    const status = String(row.status ?? '').toLowerCase();
+    const matchesEmployeeStatus = section !== 'workers' || employeeStatusFilter === 'all' || (employeeStatusFilter === 'inactive' ? status !== 'active' : status === employeeStatusFilter);
     return matchesSearch && matchesEmployeeStatus;
   });
   const navItems = [
@@ -607,8 +608,8 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
             <TextField fullWidth size="small" placeholder={`Search ${pageTitle[section].toLowerCase()}…`} value={searchQuery} onChange={event => setSearchQuery(event.target.value)}
               InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ color: '#87948A' }} /></InputAdornment> }}
               sx={{ maxWidth: section === 'workers' ? 620 : 520, '& .MuiOutlinedInput-root': { bgcolor: '#FFFFFF', borderRadius: 2 } }} />
-            {section === 'workers' && <TextField select size="small" label="Employee status" value={employeeStatusFilter} onChange={event => setEmployeeStatusFilter(event.target.value as 'all' | 'active' | 'inactive')} sx={{ minWidth: 170, '& .MuiOutlinedInput-root': { bgcolor: '#FFFFFF', borderRadius: 2 } }}>
-              <MenuItem value="all">All employees</MenuItem><MenuItem value="active">Active</MenuItem><MenuItem value="inactive">Inactive</MenuItem>
+            {section === 'workers' && <TextField select size="small" label="Employee status" value={employeeStatusFilter} onChange={event => setEmployeeStatusFilter(event.target.value as 'all' | 'active' | 'inactive' | 'suspended' | 'archived')} sx={{ minWidth: 170, '& .MuiOutlinedInput-root': { bgcolor: '#FFFFFF', borderRadius: 2 } }}>
+              <MenuItem value="all">All employees</MenuItem><MenuItem value="active">Active</MenuItem><MenuItem value="inactive">Inactive (all)</MenuItem><MenuItem value="suspended">Suspended</MenuItem><MenuItem value="archived">Archived</MenuItem>
             </TextField>}
           </Stack>}
           {section === 'workers' && <Grid container spacing={1.5} sx={{ mb: 2.5 }}>
@@ -655,7 +656,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                   {section === 'projects' && <><TableCell>{label(row.projectCode)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.name)}</Typography></TableCell><TableCell>{label(row.clientName)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Button size="small" variant={selectedProject === row.id ? 'contained' : 'text'} onClick={() => setSelectedProject(String(row.id))}>{selectedProject === row.id ? 'Selected' : 'View sites'}</Button></TableCell></>}
                   {section === 'attendance' && <><TableCell>{label(row.workDate)}</TableCell><TableCell>{label(row.workerId)}</TableCell><TableCell>{label(row.projectId)}</TableCell><TableCell>{label(row.minutesWorked)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'approved' ? 'success' : row.status === 'submitted' ? 'warning' : 'default'} /></TableCell><TableCell>{row.status === 'draft' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'submit')}>Submit</Button> : row.status === 'submitted' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'approve')}>Approve</Button> : '—'}</TableCell></>}
                 </TableRow>)}
-                {!filteredRows.length && <TableRow><TableCell colSpan={6} sx={{ py: 5, textAlign: 'center' }}>
+                {!filteredRows.length && <TableRow><TableCell colSpan={section === 'workers' ? 4 : 6} sx={{ py: 5, textAlign: 'center' }}>
                   <Typography fontWeight={800}>{searchQuery ? 'No matching records' : 'Nothing here yet'}</Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mt: .5 }}>{searchQuery ? 'Try another search term.' : 'When you add records, they will appear here.'}</Typography>
                 </TableCell></TableRow>}
