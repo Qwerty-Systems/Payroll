@@ -13,13 +13,16 @@ const providers = [
 
 export default function IntegrationsWorkspace({request}:Props) {
  const [rows,setRows]=useState<Row[]>([]);
+ const [mappingRows,setMappingRows]=useState<Row[]>([]);
+ const [mappingForm,setMappingForm]=useState({componentCode:'',componentLabel:'',debitAccountCode:'',creditAccountCode:'',costCenterCode:'',effectiveFrom:new Date().toISOString().slice(0,10),effectiveTo:''});
  const [forms,setForms]=useState<Record<string,Record<string,string>>>({});
  const [enabled,setEnabled]=useState<Record<string,boolean>>({});
  const [busy,setBusy]=useState('');
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
  const refresh=useCallback(async()=>{
-   const result=await request<Row[]>('integrations/settings');
+   const [result,mappings]=await Promise.all([request<Row[]>('integrations/settings'),request<Row[]>('integrations/accounting/mappings')]);
+   setMappingRows(Array.isArray(mappings)?mappings:[]);
    const loaded=Array.isArray(result)?result:[];
    setRows(loaded);
    const formState:Record<string,Record<string,string>>={};
@@ -36,6 +39,12 @@ export default function IntegrationsWorkspace({request}:Props) {
      await request('integrations/settings',{method:'POST',body:JSON.stringify({provider,enabled:Boolean(enabled[provider]),environment:'sandbox',settings:forms[provider]??{}})});
      await refresh();setNotice(provider+' settings saved in sandbox mode.');
    }catch(e){setError(e instanceof Error?e.message:'Unable to save integration settings.');}
+   finally{setBusy('');}
+ }
+ async function saveMapping(){
+   setBusy('mapping');setError('');setNotice('');
+   try{await request('integrations/accounting/mappings',{method:'POST',body:JSON.stringify(mappingForm)});await refresh();setNotice('Accounting mapping saved.');}
+   catch(e){setError(e instanceof Error?e.message:'Unable to save mapping.');}
    finally{setBusy('');}
  }
  async function testDaraja(){
@@ -78,5 +87,31 @@ export default function IntegrationsWorkspace({request}:Props) {
     </Grid>
    })}
   </Grid>
+  <Card variant="outlined" sx={{borderRadius:3,borderColor:'#E2E9E2'}}>
+   <CardContent sx={{p:2.5}}>
+    <Stack spacing={1.5}>
+     <Typography variant="h6" fontWeight={850}>Tenant accounting mappings</Typography>
+     <Typography variant="body2" color="text.secondary">Map each payroll component to debit and credit accounts. External accounting sync remains disabled.</Typography>
+     <Grid container spacing={1.5}>
+      {[
+       ['componentCode','Component code'],['componentLabel','Component label'],['debitAccountCode','Debit account'],['creditAccountCode','Credit account'],['costCenterCode','Cost centre (optional)'],
+      ].map(([key,label])=><Grid item xs={12} sm={6} md={4} key={key}><TextField size="small" fullWidth label={label} value={mappingForm[key as keyof typeof mappingForm]} onChange={e=>setMappingForm(prev=>({...prev,[key]:e.target.value}))}/></Grid>)}
+      <Grid item xs={12} sm={6} md={3}><TextField size="small" type="date" label="Effective from" InputLabelProps={{shrink:true}} value={mappingForm.effectiveFrom} onChange={e=>setMappingForm(prev=>({...prev,effectiveFrom:e.target.value}))} fullWidth/></Grid>
+      <Grid item xs={12} sm={6} md={3}><TextField size="small" type="date" label="Effective to (optional)" InputLabelProps={{shrink:true}} value={mappingForm.effectiveTo} onChange={e=>setMappingForm(prev=>({...prev,effectiveTo:e.target.value}))} fullWidth/></Grid>
+     </Grid>
+     <Button variant="contained" disabled={busy!==''} onClick={()=>void saveMapping()}>{busy==='mapping'?'Saving…':'Save account mapping'}</Button>
+     <Divider/>
+     {mappingRows.length===0?<Typography variant="body2" color="text.secondary">No mappings configured yet.</Typography>:
+      <Stack spacing={1}>
+       {mappingRows.map(row=><Card key={row.id} variant="outlined" sx={{borderRadius:2,p:1.5}}>
+        <Stack direction={{xs:'column',sm:'row'}} spacing={1} justifyContent="space-between">
+         <Stack><Typography fontWeight={800}>{row.componentCode} · {row.componentLabel}</Typography><Typography variant="caption" color="text.secondary">Effective {row.effectiveFrom}{row.effectiveTo?' to '+row.effectiveTo:''}</Typography></Stack>
+         <Stack><Typography variant="body2">Debit: {row.debitAccountCode}</Typography><Typography variant="body2">Credit: {row.creditAccountCode}</Typography>{row.costCenterCode&&<Typography variant="caption">Cost centre: {row.costCenterCode}</Typography>}</Stack>
+        </Stack>
+       </Card>)}
+      </Stack>}
+    </Stack>
+   </CardContent>
+  </Card>
  </Stack>;
 }
