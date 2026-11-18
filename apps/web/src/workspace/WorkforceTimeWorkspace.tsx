@@ -29,7 +29,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [shift, setShift] = useState({ code: '', name: '', startTime: '08:00', endTime: '17:00', breakMinutes: '60' });
-  const [leaveType, setLeaveType] = useState({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0' });
+  const [leaveType, setLeaveType] = useState({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0', requiresApproval: true, isPaid: true });
   const [balance, setBalance] = useState({ workerId: '', leaveTypeId: '', leaveYear: String(new Date().getFullYear()), openingDays: '0', accruedDays: '0', adjustmentDays: '0' });
   const [leave, setLeave] = useState({ workerId: '', leaveTypeId: '', startDate: today(), endDate: today(), requestedDays: '1', reason: '' });
   const [overtime, setOvertime] = useState({ workerId: '', workDate: today(), requestedMinutes: '60', reason: '', projectId: '', siteId: '' });
@@ -125,9 +125,11 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
             <TextField size="small" label="Name" value={leaveType.name} onChange={e => setLeaveType(v => ({ ...v, name: e.target.value }))} />
             <TextField size="small" type="number" label="Annual days" value={leaveType.annualEntitlementDays} onChange={e => setLeaveType(v => ({ ...v, annualEntitlementDays: e.target.value }))} />
             <TextField size="small" type="number" label="Carry-forward cap" value={leaveType.carryForwardLimitDays} onChange={e => setLeaveType(v => ({ ...v, carryForwardLimitDays: e.target.value }))} />
+            <TextField select size="small" label="Approval required" value={String(leaveType.requiresApproval)} onChange={e => setLeaveType(v => ({ ...v, requiresApproval: e.target.value === 'true' }))} sx={{ minWidth: 150 }}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField>
+            <TextField select size="small" label="Paid leave" value={String(leaveType.isPaid)} onChange={e => setLeaveType(v => ({ ...v, isPaid: e.target.value === 'true' }))} sx={{ minWidth: 130 }}><MenuItem value="true">Paid</MenuItem><MenuItem value="false">Unpaid</MenuItem></TextField>
             <Button variant="contained" disabled={busy || !leaveType.code || !leaveType.name} onClick={() => void perform(async () => {
               await request('tenant/leave-types', json('POST', { ...leaveType, annualEntitlementDays: Number(leaveType.annualEntitlementDays), carryForwardLimitDays: Number(leaveType.carryForwardLimitDays) }));
-              setLeaveType({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0' });
+              setLeaveType({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0', requiresApproval: true, isPaid: true });
             }, 'Leave type created.')}>Add type</Button>
           </Stack>
           <Divider />
@@ -163,7 +165,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
             }, 'Leave request submitted.')}>Submit</Button>
           </Stack>
           <Table size="small"><TableHead><TableRow>{['Employee','Type','Dates','Days','Status','Review'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
-            <TableBody>{leaveRequests.map(r => <TableRow key={String(r.id)}><TableCell>{text(r.workerName)}</TableCell><TableCell>{text(r.leaveType)}</TableCell><TableCell>{text(r.startDate)} – {text(r.endDate)}</TableCell><TableCell>{text(r.requestedDays)}</TableCell><TableCell><Chip size="small" label={text(r.status)} /></TableCell><TableCell>{r.status === 'pending' && <Stack direction="row"><Button size="small" disabled={busy} onClick={() => void perform(() => request(`tenant/leave-requests/${r.id}/approve`, json('POST', { reason: 'Approved after review.' })), 'Leave approved.')}>Approve</Button><Button size="small" color="error" disabled={busy} onClick={() => void perform(() => request(`tenant/leave-requests/${r.id}/reject`, json('POST', { reason: 'Not approved.' })), 'Leave rejected.')}>Reject</Button></Stack>}</TableCell></TableRow>)}
+            <TableBody>{leaveRequests.map(r => <TableRow key={String(r.id)}><TableCell>{text(r.workerName)}</TableCell><TableCell>{text(r.leaveType)}</TableCell><TableCell>{text(r.startDate)} – {text(r.endDate)}</TableCell><TableCell>{text(r.requestedDays)}</TableCell><TableCell><Chip size="small" label={text(r.status)} /></TableCell><TableCell>{r.status === 'pending' && <Stack direction="row" spacing={0.5} flexWrap="wrap"><Button size="small" disabled={busy} onClick={() => void perform(() => request(`tenant/leave-requests/${r.id}/approve`, json('POST', { reason: 'Approved after review.' })), 'Leave approved.')}>Approve</Button><Button size="small" color="error" disabled={busy} onClick={() => void perform(() => request(`tenant/leave-requests/${r.id}/reject`, json('POST', { reason: 'Not approved.' })), 'Leave rejected.')}>Reject</Button><Button size="small" color="inherit" disabled={busy} onClick={() => void perform(() => request(`tenant/leave-requests/${r.id}/cancel`, json('POST')), 'Pending leave request cancelled.')}>Cancel</Button></Stack>}</TableCell></TableRow>)}
               {!leaveRequests.length && <TableRow><TableCell colSpan={6}>No leave requests.</TableCell></TableRow>}</TableBody>
           </Table>
         </Stack>}
