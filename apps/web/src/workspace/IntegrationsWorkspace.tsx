@@ -59,7 +59,7 @@ export default function IntegrationsWorkspace({request}:Props) {
   <Grid container spacing={2}>
    {providers.map(provider=>{
     const status=rows.find(row=>row.provider===provider.id);
-    return <Grid item xs={12} lg={6} key={provider.id}>
+    return <Grid size={{ xs: 12, lg: 6 }} key={provider.id}>
      <Card variant="outlined" sx={{height:'100%',borderRadius:3,borderColor:'#E2E9E2'}}>
       <CardContent sx={{p:2.5}}>
        <Stack spacing={1.5}>
@@ -94,10 +94,10 @@ export default function IntegrationsWorkspace({request}:Props) {
      <Typography variant="body2" color="text.secondary">Map each payroll component to debit and credit accounts. External accounting sync remains disabled.</Typography>
      <Grid container spacing={1.5}>
       {[
-       ['componentCode','Component code'],['componentLabel','Component label'],['debitAccountCode','Debit account'],['creditAccountCode','Credit account'],['costCenterCode','Cost centre (optional)'],
-      ].map(([key,label])=><Grid item xs={12} sm={6} md={4} key={key}><TextField size="small" fullWidth label={label} value={mappingForm[key as keyof typeof mappingForm]} onChange={e=>setMappingForm(prev=>({...prev,[key]:e.target.value}))}/></Grid>)}
-      <Grid item xs={12} sm={6} md={3}><TextField size="small" type="date" label="Effective from" InputLabelProps={{shrink:true}} value={mappingForm.effectiveFrom} onChange={e=>setMappingForm(prev=>({...prev,effectiveFrom:e.target.value}))} fullWidth/></Grid>
-      <Grid item xs={12} sm={6} md={3}><TextField size="small" type="date" label="Effective to (optional)" InputLabelProps={{shrink:true}} value={mappingForm.effectiveTo} onChange={e=>setMappingForm(prev=>({...prev,effectiveTo:e.target.value}))} fullWidth/></Grid>
+       ['componentCode','Component code'] as const, ['componentLabel','Component label'] as const, ['debitAccountCode','Debit account'] as const, ['creditAccountCode','Credit account'] as const, ['costCenterCode','Cost centre (optional)'] as const,
+      ].map(([key,label])=><Grid size={{ xs: 12, sm: 6, md: 4 }} key={key}><TextField size="small" fullWidth label={label} value={mappingForm[key as keyof typeof mappingForm]} onChange={e=>setMappingForm(prev=>({...prev,[key]:e.target.value}))}/></Grid>)}
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}><TextField size="small" type="date" label="Effective from" InputLabelProps={{shrink:true}} value={mappingForm.effectiveFrom} onChange={e=>setMappingForm(prev=>({...prev,effectiveFrom:e.target.value}))} fullWidth/></Grid>
+      <Grid size={{ xs: 12, sm: 6, md: 3 }}><TextField size="small" type="date" label="Effective to (optional)" InputLabelProps={{shrink:true}} value={mappingForm.effectiveTo} onChange={e=>setMappingForm(prev=>({...prev,effectiveTo:e.target.value}))} fullWidth/></Grid>
      </Grid>
      <Button variant="contained" disabled={busy!==''} onClick={()=>void saveMapping()}>{busy==='mapping'?'Saving…':'Save account mapping'}</Button>
      <Divider/>
