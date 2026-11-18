@@ -57,12 +57,12 @@ export class PayrollPostFinalizationControls1794832700000 implements MigrationIn
             EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id = nullif(current_setting(''app.tenant_id'', true), '''')::uuid) WITH CHECK (tenant_id = nullif(current_setting(''app.tenant_id'', true), '''')::uuid)',t);
           END IF;
         END LOOP;
-      END; $$;
+      END $$;
 
       DO $ BEGIN
         IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='jengaflow_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON payroll_corrections,payroll_correction_items TO jengaflow_app; END IF;
         IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='jf_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON payroll_corrections,payroll_correction_items TO jf_app; END IF;
-      END; $$;
+      END $$;
     `);
   }
 
