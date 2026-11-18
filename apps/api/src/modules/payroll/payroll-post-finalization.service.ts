@@ -191,7 +191,7 @@ export class PayrollPostFinalizationService {
         netPay+=Number(s.netPay??0);
       }
       const journal=[
-        {account:'Payroll expense',debit:Number(totals.grossEarnings??gross),credit:0},
+        {account:'Payroll expense',debit:gross,credit:0},
         {account:'Employer statutory contributions expense',debit:Math.max(0,employerContributions),credit:Math.max(0,-employerContributions)},
         {account:'Net salaries payable',debit:Math.max(0,-netPay),credit:Math.max(0,netPay)},
         {account:'Employee statutory and other deductions payable',debit:Math.max(0,-employeeDeductions),credit:Math.max(0,employeeDeductions)},
