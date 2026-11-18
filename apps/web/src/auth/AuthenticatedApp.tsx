@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { Alert, Avatar, Box, Button, CircularProgress, Container, Divider, Paper, Stack, TextField, Typography } from '@mui/material';
 import LogoutRounded from '@mui/icons-material/LogoutRounded';
@@ -7,7 +7,7 @@ import VerifiedUserRounded from '@mui/icons-material/VerifiedUserRounded';
 import ApiRounded from '@mui/icons-material/ApiRounded';
 import { auth0Config } from '../config';
 import { slugifyWorkspaceName } from './workspace-slug';
-import TenantWorkspace from '../workspace/TenantWorkspace';
+const TenantWorkspace = lazy(() => import('../workspace/TenantWorkspace'));
 
 type Membership = { tenantId: string; slug: string; displayName: string; legalName: string; tenantStatus: string; membershipId: string; role: string };
 type ApiIdentity = { auth0Subject?: string; email?: string | null; emailVerified?: boolean; name?: string | null; picture?: string | null; provisioned?: boolean; memberships?: Membership[]; identity?: { email?: string; name?: string } };
@@ -85,7 +85,7 @@ export default function AuthenticatedApp() {
   // even if an older API response omits or misreports the provisioned flag.
   const hasWorkspace = Boolean(identity?.provisioned || (identity?.memberships?.length ?? 0) > 0);
   if (hasWorkspace) {
-    return <TenantWorkspace
+    return <Suspense fallback={<LoadingScreen message="Loading your company workspace…" />}><TenantWorkspace
       memberships={identity?.memberships ?? []}
       userName={user?.name}
       userPicture={user?.picture}
@@ -96,7 +96,7 @@ export default function AuthenticatedApp() {
         return token;
       }}
       onSignOut={() => void logout({ logoutParams: { returnTo: window.location.origin } })}
-    />;
+    /></Suspense>;
   }
   return <Box sx={{ minHeight: '100vh', bgcolor: '#F7F5EF', color: '#17372B' }}>
     <Container maxWidth="md" sx={{ py: { xs: 3, md: 5 } }}>
