@@ -29,6 +29,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [shift, setShift] = useState({ code: '', name: '', startTime: '08:00', endTime: '17:00', breakMinutes: '60' });
+  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [leaveType, setLeaveType] = useState({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0' });
   const [balance, setBalance] = useState({ workerId: '', leaveTypeId: '', leaveYear: String(new Date().getFullYear()), openingDays: '0', accruedDays: '0', adjustmentDays: '0' });
   const [leave, setLeave] = useState({ workerId: '', leaveTypeId: '', startDate: today(), endDate: today(), requestedDays: '1', reason: '' });
@@ -107,13 +108,20 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
             <TextField size="small" type="time" label="Start" value={shift.startTime} onChange={e => setShift(v => ({ ...v, startTime: e.target.value }))} InputLabelProps={{ shrink: true }} />
             <TextField size="small" type="time" label="End" value={shift.endTime} onChange={e => setShift(v => ({ ...v, endTime: e.target.value }))} InputLabelProps={{ shrink: true }} />
             <TextField size="small" type="number" label="Break minutes" value={shift.breakMinutes} onChange={e => setShift(v => ({ ...v, breakMinutes: e.target.value }))} sx={{ width: 130 }} />
-            <Button variant="contained" disabled={busy || !shift.code || !shift.name} onClick={() => void perform(async () => {
-              await request('tenant/shifts', json('POST', { ...shift, breakMinutes: Number(shift.breakMinutes), crossesMidnight: shift.endTime <= shift.startTime }));
+            <Button variant="contained" disabled={busy || !shift.code.trim() || !shift.name.trim() || Number(shift.breakMinutes) < 0} onClick={() => void perform(async () => {
+              const payload = { ...shift, code: shift.code.trim().toUpperCase(), name: shift.name.trim(), breakMinutes: Number(shift.breakMinutes), crossesMidnight: shift.endTime <= shift.startTime };
+              if (editingShiftId) await request(`tenant/shifts/${editingShiftId}`, json('PATCH', payload));
+              else await request('tenant/shifts', json('POST', payload));
               setShift({ code: '', name: '', startTime: '08:00', endTime: '17:00', breakMinutes: '60' });
-            }, 'Shift saved.')}>Add shift</Button>
+              setEditingShiftId(null);
+            }, editingShiftId ? 'Shift updated.' : 'Shift saved.')}>{editingShiftId ? 'Save changes' : 'Add shift'}</Button>
+            {editingShiftId && <Button disabled={busy} color="inherit" onClick={() => { setEditingShiftId(null); setShift({ code: '', name: '', startTime: '08:00', endTime: '17:00', breakMinutes: '60' }); }}>Cancel edit</Button>}
           </Stack>
           <Table size="small"><TableHead><TableRow>{['Code','Shift','Start','End','Break','Status',''].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
-            <TableBody>{shifts.map(r => <TableRow key={String(r.id)}><TableCell>{text(r.code)}</TableCell><TableCell>{text(r.name)}</TableCell><TableCell>{text(r.startTime)}</TableCell><TableCell>{text(r.endTime)}</TableCell><TableCell>{text(r.breakMinutes)} min</TableCell><TableCell><Chip size="small" label={text(r.status)} /></TableCell><TableCell>{r.status === 'active' && <Button size="small" color="inherit" disabled={busy} onClick={() => void perform(() => request(`tenant/shifts/${r.id}`, json('DELETE')), 'Shift deactivated.')}>Deactivate</Button>}</TableCell></TableRow>)}
+            <TableBody>{shifts.map(r => <TableRow key={String(r.id)}><TableCell>{text(r.code)}</TableCell><TableCell>{text(r.name)}</TableCell><TableCell>{text(r.startTime)}</TableCell><TableCell>{text(r.endTime)}</TableCell><TableCell>{text(r.breakMinutes)} min</TableCell><TableCell><Chip size="small" label={text(r.status)} /></TableCell><TableCell><Stack direction="row" spacing={0.5}>
+              {r.status === 'active' && <Button size="small" disabled={busy} onClick={() => { setEditingShiftId(String(r.id)); setShift({ code: String(r.code ?? ''), name: String(r.name ?? ''), startTime: String(r.startTime ?? '08:00').slice(0,5), endTime: String(r.endTime ?? '17:00').slice(0,5), breakMinutes: String(r.breakMinutes ?? 0) }); }}>Edit</Button>}
+              {r.status === 'active' && <Button size="small" color="inherit" disabled={busy} onClick={() => void perform(() => request(`tenant/shifts/${r.id}`, json('DELETE')), 'Shift deactivated.')}>Deactivate</Button>}
+            </Stack></TableCell></TableRow>)}
               {!shifts.length && <TableRow><TableCell colSpan={7}>No shifts configured.</TableCell></TableRow>}</TableBody>
           </Table>
         </Stack>}
