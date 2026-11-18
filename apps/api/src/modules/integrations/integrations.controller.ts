@@ -55,7 +55,7 @@ export class IntegrationsController {
   @Post('delivery-jobs')
   @TenantPermissions('compliance.manage')
   queueDelivery(@Req() req: TenantRequest, @Body() dto: QueueIntegrationDeliveryDto) {
-    return this.integrations.queueDelivery(req.tenant.id, dto);
+    return this.integrations.queueDelivery(req.tenant.id, req.tenant.userId, dto);
   }
 
   @Get('delivery-jobs')
@@ -67,7 +67,7 @@ export class IntegrationsController {
   @Post('reconciliation')
   @TenantPermissions('compliance.manage')
   createReconciliationItem(@Req() req: TenantRequest, @Body() dto: CreateReconciliationItemDto) {
-    return this.integrations.createReconciliationItem(req.tenant.id, dto);
+    return this.integrations.createReconciliationItem(req.tenant.id, req.tenant.userId, dto);
   }
 
   @Get('reconciliation')
