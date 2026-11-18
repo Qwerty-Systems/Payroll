@@ -37,6 +37,9 @@ export default function BillingWorkspace({ request }: { request: Request }) {
   const [form, setForm] = useState({ documentType: 'invoice' as 'quote'|'invoice', documentNumber: '', customerName: '', customerEmail: '', issueDate: today(), dueDate: '', currency: 'KES', notes: '', description: '', quantity: '1', unitPrice: '0', taxRate: '0' });
   const [paymentForm, setPaymentForm] = useState({ paymentReference: '', amount: '', currency: 'KES', paymentDate: today(), paymentMethod: 'mpesa', notes: '' });
   const [busy, setBusy] = useState(false);
+  const [conversionDoc, setConversionDoc] = useState<BillingDoc|null>(null);
+  const [conversionForm, setConversionForm] = useState({invoiceNumber:'',dueDate:'',notes:''});
+  const [report, setReport] = useState<unknown|null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true); setError('');
@@ -85,6 +88,27 @@ export default function BillingWorkspace({ request }: { request: Request }) {
     try { const rows = await request<Payment[]>(`billing/documents/${doc.id}/payments`); setPayments(Array.isArray(rows) ? rows : []); }
     catch(e) { setError(e instanceof Error ? e.message : 'Payment history could not be loaded.'); }
   };
+  const convertQuote = async () => {
+    if (!conversionDoc) return;
+    setBusy(true); setError('');
+    try {
+      await request('billing/documents/'+conversionDoc.id+'/convert',{method:'POST',body:JSON.stringify({invoiceNumber:conversionForm.invoiceNumber.trim(),dueDate:conversionForm.dueDate||undefined,notes:conversionForm.notes||undefined})});
+      setConversionDoc(null); setConversionForm({invoiceNumber:'',dueDate:'',notes:''}); setNotice('Quotation converted to invoice.'); await refresh();
+    } catch(e) { setError(e instanceof Error?e.message:'Quote conversion failed.'); }
+    finally { setBusy(false); }
+  };
+  const processRecurring = async () => {
+    setBusy(true); setError('');
+    try { const result=await request<{processed:number;generated:number}>('billing/recurring/process',{method:'POST'}); setNotice('Recurring billing processed: '+result.generated+' invoice(s) generated from '+result.processed+' template(s).'); await refresh(); }
+    catch(e) { setError(e instanceof Error?e.message:'Recurring invoice processing failed.'); }
+    finally { setBusy(false); }
+  };
+  const loadReconciliation = async () => {
+    setBusy(true); setError('');
+    try { const data=await request<unknown>('billing/reports/reconciliation'); setReport(data); }
+    catch(e) { setError(e instanceof Error?e.message:'Reconciliation report could not be loaded.'); }
+    finally { setBusy(false); }
+  };
   const recordPayment = async () => {
     if (!paymentDoc) return;
     setBusy(true); setError('');
@@ -101,7 +125,7 @@ export default function BillingWorkspace({ request }: { request: Request }) {
   return <Stack spacing={2.5}>
     <Stack direction={{xs:'column',sm:'row'}} justifyContent="space-between" alignItems={{xs:'stretch',sm:'center'}} gap={1}>
       <Box><Typography variant="h5" fontWeight={850}>Billing</Typography><Typography color="text.secondary">Quotes, invoices and payment records for this company.</Typography></Box>
-      <Stack direction="row" gap={1}><Button variant="outlined" startIcon={<RefreshRounded />} onClick={()=>void refresh()} disabled={loading}>Refresh</Button><Button variant="contained" startIcon={<AddRounded />} onClick={()=>setCreateOpen(true)}>New document</Button></Stack>
+      <Stack direction="row" gap={1}><Button variant="outlined" startIcon={<RefreshRounded />} onClick={()=>void refresh()} disabled={loading}>Refresh</Button><Button variant="outlined" onClick={()=>void processRecurring()} disabled={busy}>Run recurring</Button><Button variant="outlined" onClick={()=>void loadReconciliation()} disabled={busy}>Reconciliation</Button><Button variant="contained" startIcon={<AddRounded />} onClick={()=>setCreateOpen(true)}>New document</Button></Stack>
     </Stack>
     {error && <Alert severity="error" onClose={()=>setError('')}>{error}</Alert>}
     {notice && <Alert severity="success" onClose={()=>setNotice('')}>{notice}</Alert>}
@@ -119,6 +143,7 @@ export default function BillingWorkspace({ request }: { request: Request }) {
           {d.documentType==='invoice' && ['sent','accepted'].includes(d.status) && <Button size="small" onClick={()=>{setPaymentDoc(d);setPaymentForm(current=>({...current,amount:String(Math.max(0,Number(d.total||0))),currency:d.currency||'KES'}));}}>Record payment</Button>}
           {d.documentType==='quote' && d.status==='draft' && <Button size="small" onClick={()=>void changeStatus(d,'sent')} disabled={busy}>Send</Button>}
           {d.documentType==='quote' && d.status==='sent' && <Button size="small" onClick={()=>void changeStatus(d,'accepted')} disabled={busy}>Accept</Button>}
+          {d.documentType==='quote' && d.status==='accepted' && <Button size="small" onClick={()=>{setConversionDoc(d);setConversionForm({invoiceNumber:'INV-'+d.documentNumber,dueDate:'',notes:d.notes||''});}}>Convert</Button>}
           {d.documentType==='invoice' && d.status==='draft' && <Button size="small" onClick={()=>void changeStatus(d,'sent')} disabled={busy}>Send</Button>}
           {d.status!=='void' && d.status!=='paid' && <Button size="small" color="inherit" onClick={()=>void changeStatus(d,'void')} disabled={busy}>Void</Button>}
           <Button size="small" onClick={()=>void openPayments(d)}>Payments</Button>
@@ -149,6 +174,8 @@ export default function BillingWorkspace({ request }: { request: Request }) {
       <Grid size={{xs:12,sm:4}}><TextField select fullWidth label="Method" value={paymentForm.paymentMethod} onChange={e=>setPaymentForm(f=>({...f,paymentMethod:e.target.value}))}>{['mpesa','bank_transfer','cash','card','other'].map(v=><MenuItem key={v} value={v}>{v}</MenuItem>)}</TextField></Grid>
       <Grid size={{xs:12}}><TextField fullWidth label="Notes" value={paymentForm.notes} onChange={e=>setPaymentForm(f=>({...f,notes:e.target.value}))}/></Grid>
     </Grid></DialogContent><DialogActions><Button onClick={()=>setPaymentDoc(null)} disabled={busy}>Cancel</Button><Button variant="contained" startIcon={<PaymentsRounded/>} onClick={()=>void recordPayment()} disabled={busy||!paymentForm.paymentReference.trim()||Number(paymentForm.amount)<=0}>Record payment</Button></DialogActions></Dialog>
+    <Dialog open={Boolean(conversionDoc)} onClose={()=>!busy&&setConversionDoc(null)} fullWidth maxWidth="sm"><DialogTitle>Convert quotation to invoice · {conversionDoc?.documentNumber}</DialogTitle><DialogContent><Stack spacing={1.5} sx={{pt:1}}><TextField fullWidth label="New invoice number" value={conversionForm.invoiceNumber} onChange={e=>setConversionForm(f=>({...f,invoiceNumber:e.target.value}))} required/><TextField fullWidth type="date" label="Due date" value={conversionForm.dueDate} onChange={e=>setConversionForm(f=>({...f,dueDate:e.target.value})) InputLabelProps={{shrink:true}}/><TextField fullWidth multiline minRows={2} label="Notes" value={conversionForm.notes} onChange={e=>setConversionForm(f=>({...f,notes:e.target.value}))}/></Stack></DialogContent><DialogActions><Button onClick={()=>setConversionDoc(null)} disabled={busy}>Cancel</Button><Button variant="contained" onClick={()=>void convertQuote()} disabled={busy||!conversionForm.invoiceNumber.trim()}>Convert</Button></DialogActions></Dialog>
+    <Dialog open={report!==null} onClose={()=>setReport(null)} fullWidth maxWidth="md"><DialogTitle>Payment reconciliation & aging report</DialogTitle><DialogContent><Typography variant="body2" color="text.secondary" sx={{mb:1}}>Summary grouped by currency, invoice aging and recorded payment totals.</Typography><Box component="pre" sx={{whiteSpace:'pre-wrap',wordBreak:'break-word',fontSize:12,bgcolor:'action.hover',p:2,borderRadius:2}}>{report===null?'':JSON.stringify(report,null,2)}</Box></DialogContent><DialogActions><Button onClick={()=>setReport(null)}>Close</Button></DialogActions></Dialog>
     <Dialog open={Boolean(paymentHistoryDoc)} onClose={()=>setPaymentHistoryDoc(null)} fullWidth maxWidth="md"><DialogTitle>Payment history · {paymentHistoryDoc?.documentNumber}</DialogTitle><DialogContent><TableContainer><Table size="small"><TableHead><TableRow>{['Reference','Date','Method','Amount','Notes'].map(h=><TableCell key={h}>{h}</TableCell>)}</TableRow></TableHead><TableBody>{payments.map(p=><TableRow key={p.id}><TableCell>{p.paymentReference}</TableCell><TableCell>{p.paymentDate}</TableCell><TableCell>{p.paymentMethod}</TableCell><TableCell>{money(p.amount,p.currency)}</TableCell><TableCell>{p.notes||'—'}</TableCell></TableRow>)}{!payments.length&&<TableRow><TableCell colSpan={5} align="center">No payments recorded.</TableCell></TableRow>}</TableBody></Table></TableContainer></DialogContent><DialogActions><Button onClick={()=>setPaymentHistoryDoc(null)}>Close</Button></DialogActions></Dialog>
   </Stack>;
 }
