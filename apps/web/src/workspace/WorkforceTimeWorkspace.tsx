@@ -35,6 +35,9 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [overtime, setOvertime] = useState({ workerId: '', workDate: today(), requestedMinutes: '60', reason: '', projectId: '', siteId: '' });
   const [timesheet, setTimesheet] = useState({ workerId: '', periodStart: today().slice(0, 8) + '01', periodEnd: today(), notes: '' });
   const [line, setLine] = useState({ workDate: today(), minutesWorked: '480', overtimeMinutes: '0', description: '', projectId: '', siteId: '', unitsCompleted: '' });
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  const resetLine = () => { setLine({ workDate: today(), minutesWorked: '480', overtimeMinutes: '0', description: '', projectId: '', siteId: '', unitsCompleted: '' }); setEditingLineId(null); };
+  const editLine = (r: Row) => { setEditingLineId(String(r.id)); setLine({ workDate: String(r.workDate ?? today()).slice(0, 10), minutesWorked: String(r.minutesWorked ?? 0), overtimeMinutes: String(r.overtimeMinutes ?? 0), description: String(r.description ?? ''), projectId: String(r.projectId ?? ''), siteId: String(r.siteId ?? ''), unitsCompleted: r.unitsCompleted == null ? '' : String(r.unitsCompleted) }); };
 
   const refresh = useCallback(async () => {
     setError('');
@@ -201,7 +204,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
           </Table>
           {timesheetDetail && <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
             <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1}>
-              <Box><Typography fontWeight={800}>Timesheet lines</Typography><Typography variant="caption" color="text.secondary">Status: {text(timesheetDetail.status)}</Typography></Box>
+              <Box><Typography fontWeight={800}>{editingLineId ? 'Edit timesheet line' : 'Timesheet lines'}</Typography><Typography variant="caption" color="text.secondary">Status: {text(timesheetDetail.status)}</Typography></Box>
               {['draft','rejected'].includes(String(timesheetDetail.status)) && <Button variant="outlined" disabled={busy} onClick={() => void perform(() => request(`tenant/timesheets/${selectedTimesheet}/submit`,json('POST')),'Timesheet submitted for approval.')}>Submit for approval</Button>}
             </Stack>
             {['draft','rejected'].includes(String(timesheetDetail.status)) && <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mt: 2 }}>
@@ -209,13 +212,16 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
               <TextField size="small" type="number" label="Minutes" value={line.minutesWorked} onChange={e => setLine(v => ({ ...v, minutesWorked: e.target.value }))} />
               <TextField size="small" type="number" label="Overtime minutes" value={line.overtimeMinutes} onChange={e => setLine(v => ({ ...v, overtimeMinutes: e.target.value }))} />
               <TextField size="small" label="Description" value={line.description} onChange={e => setLine(v => ({ ...v, description: e.target.value }))} />
-              <Button variant="contained" disabled={busy} onClick={() => void perform(async () => {
-                await request(`tenant/timesheets/${selectedTimesheet}/lines`,json('POST',{...line,minutesWorked:Number(line.minutesWorked),overtimeMinutes:Number(line.overtimeMinutes),projectId:line.projectId||undefined,siteId:line.siteId||undefined,unitsCompleted:line.unitsCompleted?Number(line.unitsCompleted):undefined}));
-                await openTimesheet(selectedTimesheet);
-              },'Timesheet line added.')}>Add line</Button>
+              <Button variant="contained" disabled={busy || !line.workDate || !Number.isFinite(Number(line.minutesWorked)) || Number(line.minutesWorked) < 0 || !Number.isFinite(Number(line.overtimeMinutes)) || Number(line.overtimeMinutes) < 0} onClick={() => void perform(async () => {
+                const payload = { ...line, minutesWorked: Number(line.minutesWorked), overtimeMinutes: Number(line.overtimeMinutes), projectId: line.projectId || undefined, siteId: line.siteId || undefined, unitsCompleted: line.unitsCompleted ? Number(line.unitsCompleted) : undefined };
+                if (editingLineId) await request(`tenant/timesheets/${selectedTimesheet}/lines/${editingLineId}`, json('PATCH', payload));
+                else await request(`tenant/timesheets/${selectedTimesheet}/lines`, json('POST', payload));
+                resetLine(); await openTimesheet(selectedTimesheet);
+              }, editingLineId ? 'Timesheet line updated.' : 'Timesheet line added.')}>{editingLineId ? 'Save changes' : 'Add line'}</Button>
+              {editingLineId && <Button disabled={busy} onClick={resetLine}>Cancel edit</Button>}
             </Stack>}
             <Table size="small" sx={{ mt: 2 }}><TableHead><TableRow>{['Date','Minutes','Overtime','Units','Description',''].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
-              <TableBody>{rows(timesheetDetail.lines).map(r => <TableRow key={String(r.id)}><TableCell>{text(r.workDate)}</TableCell><TableCell>{text(r.minutesWorked)}</TableCell><TableCell>{text(r.overtimeMinutes)}</TableCell><TableCell>{text(r.unitsCompleted)}</TableCell><TableCell>{text(r.description)}</TableCell><TableCell>{['draft','rejected'].includes(String(timesheetDetail.status)) && <Button size="small" color="error" onClick={() => void perform(async () => { await request(`tenant/timesheets/${selectedTimesheet}/lines/${r.id}`,json('DELETE')); await openTimesheet(selectedTimesheet); },'Timesheet line removed.')}>Remove</Button>}</TableCell></TableRow>)}
+              <TableBody>{rows(timesheetDetail.lines).map(r => <TableRow key={String(r.id)}><TableCell>{text(r.workDate)}</TableCell><TableCell>{text(r.minutesWorked)}</TableCell><TableCell>{text(r.overtimeMinutes)}</TableCell><TableCell>{text(r.unitsCompleted)}</TableCell><TableCell>{text(r.description)}</TableCell><TableCell>{['draft','rejected'].includes(String(timesheetDetail.status)) && <Stack direction="row" spacing={0.5}><Button size="small" disabled={busy} onClick={() => editLine(r)}>Edit</Button><Button size="small" color="error" disabled={busy || editingLineId === String(r.id)} onClick={() => void perform(async () => { await request(`tenant/timesheets/${selectedTimesheet}/lines/${r.id}`,json('DELETE')); await openTimesheet(selectedTimesheet); },'Timesheet line removed.')}>Remove</Button></Stack>}</TableCell></TableRow>)}
                 {!rows(timesheetDetail.lines).length && <TableRow><TableCell colSpan={6}>No lines have been added.</TableCell></TableRow>}</TableBody>
             </Table>
           </Box>}
