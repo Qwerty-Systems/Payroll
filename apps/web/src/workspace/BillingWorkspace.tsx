@@ -15,7 +15,7 @@ type BillingLine = { description: string; quantity: number; unitPrice: number; t
 type BillingDoc = {
   id: string; documentType: 'quote'|'invoice'; documentNumber: string; customerName: string;
   customerEmail?: string; issueDate?: string; dueDate?: string; currency: string; items: BillingLine[];
-  subtotal: number; taxAmount: number; total: number; status: string; notes?: string; recurringInterval?: string;
+  subtotal: number; taxTotal: number; total: number; status: string; notes?: string; recurringInterval?: string;
 };
 type Payment = { id: string; paymentReference: string; amount: number; currency: string; paymentDate: string; paymentMethod: string; notes?: string };
 
