@@ -8,6 +8,7 @@ import AddRounded from '@mui/icons-material/AddRounded';
 import RefreshRounded from '@mui/icons-material/RefreshRounded';
 import ReceiptLongRounded from '@mui/icons-material/ReceiptLongRounded';
 import PaymentsRounded from '@mui/icons-material/PaymentsRounded';
+import BillingCatalogWorkspace from './BillingCatalogWorkspace';
 
 type Request = <T,>(path: string, init?: RequestInit) => Promise<T>;
 type BillingLine = { description: string; quantity: number; unitPrice: number; taxRate: number };
@@ -104,6 +105,7 @@ export default function BillingWorkspace({ request }: { request: Request }) {
     </Stack>
     {error && <Alert severity="error" onClose={()=>setError('')}>{error}</Alert>}
     {notice && <Alert severity="success" onClose={()=>setNotice('')}>{notice}</Alert>}
+    <BillingCatalogWorkspace request={request} />
     <Grid container spacing={1.5}>
       {[['Invoices',totals.invoices],['Quotations',totals.quotes],['Outstanding',money(totals.unpaid)],['Paid invoices',money(totals.paid)]].map(([label,value])=><Grid size={{xs:12,sm:6,md:3}} key={String(label)}><Card variant="outlined" sx={{borderRadius:3}}><CardContent><Typography variant="caption" color="text.secondary">{label}</Typography><Typography variant="h5" fontWeight={850} sx={{mt:.5}}>{value}</Typography></CardContent></Card></Grid>)}
     </Grid>
