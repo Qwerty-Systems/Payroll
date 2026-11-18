@@ -11,7 +11,7 @@ import PaymentsRounded from '@mui/icons-material/PaymentsRounded';
 import BillingCatalogWorkspace from './BillingCatalogWorkspace';
 
 type Request = <T,>(path: string, init?: RequestInit) => Promise<T>;
-type BillingLine = { description: string; quantity: number; unitPrice: number; taxRate: number };
+type BillingLine = { description: string; quantity: number; unitPrice: number; taxRate: number; lineTax?: number; lineTotal?: number };
 type BillingDoc = {
   id: string; documentType: 'quote'|'invoice'; documentNumber: string; customerName: string;
   customerEmail?: string; issueDate?: string; dueDate?: string; currency: string; items: BillingLine[];
