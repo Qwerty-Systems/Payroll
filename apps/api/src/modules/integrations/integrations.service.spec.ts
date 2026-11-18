@@ -14,13 +14,13 @@ describe('IntegrationsService', () => {
   });
 
   it('saves only allowlisted non-secret settings', async () => {
-    tenantDb.run.mockImplementation(async (_tenant:string, work:any) => work({query:jest.fn().mockResolvedValue([{provider:'daraja',settings:{shortCode:'123456'}}])}));
+    const manager={query:jest.fn().mockResolvedValue([{provider:'daraja',settings:{shortCode:'123456'}}])};
+    tenantDb.run.mockImplementation(async (_tenant:string, work:any) => work(manager));
     await service.save('tenant','actor',{
       provider:'daraja',enabled:true,environment:'sandbox',
-      settings:{shortCode:'123456',consumerSecret:'dont-store',password:'dont-store',unknown:'drop'},
+      settings:{shortCode:'123456',consumerSecret:'do-not-store',password:'do-not-store',unknown:'drop'},
     } as any);
-    const queryArgs=tenantDb.run.mock.calls[0];
-    const manager=await queryArgs[1]({query:jest.fn()});
-    expect(manager.settings).toEqual({shortCode:'123456'});
+    const parameters=manager.query.mock.calls[0][1];
+    expect(JSON.parse(parameters[4])).toEqual({shortCode:'123456'});
   });
 });
