@@ -16,6 +16,15 @@ vi.mock('@auth0/auth0-react', () => ({ useAuth0: () => auth }));
 vi.mock('../config', () => ({
   auth0Config: { apiBaseUrl: 'https://api.example.test', audience: 'https://api.example.test' },
 }));
+vi.mock('../workspace/TenantWorkspace', () => ({
+  default: ({ memberships, userName }: { memberships: Array<{ displayName: string }>; userName?: string }) => (
+    <div role="banner">
+      <h1>Welcome back{userName ? `, ${userName.split(' ')[0]}` : ''}</h1>
+      <span>{memberships[0]?.displayName}</span>
+      <span>Overview</span>
+    </div>
+  ),
+}));
 
 describe('AuthenticatedApp', () => {
   beforeEach(() => {
