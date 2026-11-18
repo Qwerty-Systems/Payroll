@@ -65,6 +65,44 @@ export class IntegrationsService {
     });
   }
 
+  listAccountMappings(tenantId: string) {
+    return this.tenantDb.run(tenantId, manager => manager.query(`
+      SELECT id,component_code AS "componentCode",component_label AS "componentLabel",
+        debit_account_code AS "debitAccountCode",credit_account_code AS "creditAccountCode",
+        cost_center_code AS "costCenterCode",effective_from::text AS "effectiveFrom",
+        effective_to::text AS "effectiveTo",created_at AS "createdAt",updated_at AS "updatedAt"
+      FROM tenant_account_mappings WHERE tenant_id=$1 ORDER BY component_code,effective_from DESC
+    `,[tenantId]));
+  }
+
+  saveAccountMapping(tenantId: string, actorId: string, dto: {
+    componentCode: string; componentLabel: string; debitAccountCode: string;
+    creditAccountCode: string; costCenterCode?: string; effectiveFrom: string; effectiveTo?: string;
+  }) {
+    if (dto.effectiveTo && dto.effectiveTo < dto.effectiveFrom) {
+      throw new BadRequestException('Mapping end date must not be before its effective start date.');
+    }
+    return this.tenantDb.run(tenantId, async manager => {
+      const rows=await manager.query(`
+        INSERT INTO tenant_account_mappings
+          (tenant_id,component_code,component_label,debit_account_code,credit_account_code,
+           cost_center_code,effective_from,effective_to,created_by,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7::date,$8::date,$9,now())
+        ON CONFLICT(tenant_id,component_code,effective_from) DO UPDATE SET
+          component_label=EXCLUDED.component_label,
+          debit_account_code=EXCLUDED.debit_account_code,
+          credit_account_code=EXCLUDED.credit_account_code,
+          cost_center_code=EXCLUDED.cost_center_code,
+          effective_to=EXCLUDED.effective_to,updated_at=now()
+        RETURNING id,component_code AS "componentCode",component_label AS "componentLabel",
+          debit_account_code AS "debitAccountCode",credit_account_code AS "creditAccountCode",
+          cost_center_code AS "costCenterCode",effective_from::text AS "effectiveFrom",
+          effective_to::text AS "effectiveTo",updated_at AS "updatedAt"
+      `,[tenantId,dto.componentCode,dto.componentLabel,dto.debitAccountCode,dto.creditAccountCode,dto.costCenterCode||null,dto.effectiveFrom,dto.effectiveTo||null,actorId]);
+      return rows[0];
+    });
+  }
+
   async testDarajaSandbox(tenantId: string) {
     const key = process.env.DARAJA_SANDBOX_CONSUMER_KEY;
     const secret = process.env.DARAJA_SANDBOX_CONSUMER_SECRET;
