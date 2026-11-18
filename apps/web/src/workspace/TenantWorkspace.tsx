@@ -400,7 +400,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     { value: 'integrations' as Section, label: 'Integrations', icon: <SettingsRounded />, group: 'ADMINISTRATION' },
   ];
   const complianceReadableRoles = ['owner','admin','hr_manager','payroll_manager','accountant','viewer'];
-  const visibleNavItems = navItems.filter(item => (item.value !== 'compliance' && item.value !== 'integrations') || complianceReadableRoles.includes(membership?.role ?? '');
+  const visibleNavItems = navItems.filter(item => (item.value !== 'compliance' && item.value !== 'integrations') || complianceReadableRoles.includes(membership?.role ?? ''));
   const navGroups = ['WORKSPACE','FINANCE','COMPLIANCE','ADMINISTRATION'].filter(group => visibleNavItems.some(item => item.group === group));
   const pageTitle: Record<Section, string> = {
     overview: 'Overview', workers: 'Employees', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
