@@ -64,7 +64,7 @@ export class IntegrationWorkflowLedger1794900000000 implements MigrationInterfac
     for (const table of ['integration_transactions', 'integration_delivery_jobs', 'integration_reconciliation_items']) {
       await q.query('ALTER TABLE ' + table + ' ENABLE ROW LEVEL SECURITY');
       await q.query('ALTER TABLE ' + table + ' FORCE ROW LEVEL SECURITY');
-      await q.query('CREATE POLICY tenant_isolation ON ' + table + ' USING (tenant_id = nullif(current_setting(\'app.tenant_id\', true), \'\')::uuid) WITH CHECK (tenant_id = nullif(current_setting(\'app.tenant_id\', true), \'\')::uuid)');
+      await q.query(`CREATE POLICY tenant_isolation ON ${table} USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid) WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)`);
       await q.query(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='jengaflow_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON ${table} TO jengaflow_app; END IF; IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='jf_app') THEN GRANT SELECT,INSERT,UPDATE,DELETE ON ${table} TO jf_app; END IF; END $$`);
     }
   }
