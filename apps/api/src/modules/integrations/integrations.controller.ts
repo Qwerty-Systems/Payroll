@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
@@ -56,6 +56,12 @@ export class IntegrationsController {
   @TenantPermissions('compliance.manage')
   queueDelivery(@Req() req: TenantRequest, @Body() dto: QueueIntegrationDeliveryDto) {
     return this.integrations.queueDelivery(req.tenant.id, req.tenant.userId, dto);
+  }
+
+  @Post('delivery-jobs/:id/retry')
+  @TenantPermissions('compliance.manage')
+  retryDeliveryJob(@Req() req: TenantRequest, @Param('id') id: string) {
+    return this.integrations.retryDeliveryJob(req.tenant.id, req.tenant.userId, id);
   }
 
   @Get('delivery-jobs')
