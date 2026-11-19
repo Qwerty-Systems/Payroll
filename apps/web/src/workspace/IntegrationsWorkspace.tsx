@@ -14,6 +14,7 @@ const providers = [
 export default function IntegrationsWorkspace({request}:Props) {
  const [rows,setRows]=useState<Row[]>([]);
  const [mappingRows,setMappingRows]=useState<Row[]>([]);
+ const [deliveryJobs,setDeliveryJobs]=useState<Row[]>([]);
  const [mappingForm,setMappingForm]=useState({componentCode:'',componentLabel:'',debitAccountCode:'',creditAccountCode:'',costCenterCode:'',effectiveFrom:new Date().toISOString().slice(0,10),effectiveTo:''});
  const [forms,setForms]=useState<Record<string,Record<string,string>>>({});
  const [enabled,setEnabled]=useState<Record<string,boolean>>({});
@@ -21,8 +22,9 @@ export default function IntegrationsWorkspace({request}:Props) {
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
  const refresh=useCallback(async()=>{
-   const [result,mappings]=await Promise.all([request<Row[]>('integrations/settings'),request<Row[]>('integrations/accounting/mappings')]);
+   const [result,mappings,jobs]=await Promise.all([request<Row[]>('integrations/settings'),request<Row[]>('integrations/accounting/mappings'),request<Row[]>('integrations/delivery-jobs')]);
    setMappingRows(Array.isArray(mappings)?mappings:[]);
+   setDeliveryJobs(Array.isArray(jobs)?jobs:[]);
    const loaded=Array.isArray(result)?result:[];
    setRows(loaded);
    const formState:Record<string,Record<string,string>>={};
@@ -47,6 +49,14 @@ export default function IntegrationsWorkspace({request}:Props) {
    catch(e){setError(e instanceof Error?e.message:'Unable to save mapping.');}
    finally{setBusy('');}
  }
+ async function retryDeliveryJob(jobId:string){
+   setBusy('retry:'+jobId);setError('');setNotice('');
+   try{
+     await request('integrations/delivery-jobs/'+encodeURIComponent(jobId)+'/retry',{method:'POST'});
+     await refresh();setNotice('Delivery job requeued. It is eligible for processing; no delivery was executed by this action.');
+   }catch(e){setError(e instanceof Error?e.message:'Unable to retry delivery job.');}
+   finally{setBusy('');}
+ }
  async function testDaraja(){
    setBusy('daraja-test');setError('');setNotice('');
    try{const result=await request<Row>('integrations/daraja/test-sandbox',{method:'POST'});setNotice(String(result.message??'Sandbox test succeeded.'));await refresh();}
@@ -56,6 +66,34 @@ export default function IntegrationsWorkspace({request}:Props) {
  return <Stack spacing={2.5}>
   <Alert severity="info">Sandbox-only configuration. Credentials are provisioned through deployment secrets and are never entered or displayed here. Live transfers, payslip email and accounting synchronization are not enabled.</Alert>
   {error&&<Alert severity="error">{error}</Alert>}{notice&&<Alert severity="success">{notice}</Alert>}
+  <Card variant="outlined" sx={{borderRadius:3,borderColor:'#E2E9E2'}}>
+   <CardContent sx={{p:2.5}}>
+    <Stack spacing={1.5}>
+     <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
+      <Typography variant="h6" fontWeight={850}>Integration delivery queue</Typography>
+      <Button size="small" variant="outlined" onClick={()=>void refresh()} disabled={busy!==''}>Refresh jobs</Button>
+     </Stack>
+     <Typography variant="body2" color="text.secondary">Review queued and failed delivery jobs. Retrying only requeues a failed job; a worker must still process it.</Typography>
+     {deliveryJobs.length===0?<Typography variant="body2" color="text.secondary">No integration delivery jobs found.</Typography>:
+      <Stack spacing={1}>
+       {deliveryJobs.map(job=><Card key={job.id} variant="outlined" sx={{borderRadius:2,p:1.5}}>
+        <Stack direction={{xs:'column',sm:'row'}} spacing={1.5} alignItems={{xs:'stretch',sm:'center'}} justifyContent="space-between">
+         <Stack spacing={0.4}>
+          <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+           <Typography fontWeight={800}>{job.jobType}</Typography>
+           <Chip size="small" label={job.status} color={job.status==='succeeded'||job.status==='sent'?'success':job.status==='failed'||job.status==='dead_letter'?'error':'default'}/>
+          </Stack>
+          <Typography variant="caption" color="text.secondary">Attempts: {job.attempts}/{job.maxAttempts} · Created {job.createdAt?new Date(job.createdAt).toLocaleString():'—'}</Typography>
+          {job.lastError&&<Typography variant="caption" color="error.main">{job.lastError}</Typography>}
+         </Stack>
+         {(['failed','dead_letter'].includes(String(job.status))&&Number(job.attempts)<Number(job.maxAttempts))&&
+          <Button size="small" variant="outlined" disabled={busy!==''} onClick={()=>void retryDeliveryJob(String(job.id))}>{busy==='retry:'+job.id?'Requeueing…':'Retry job'}</Button>}
+        </Stack>
+       </Card>)}
+      </Stack>}
+    </Stack>
+   </CardContent>
+  </Card>
   <Grid container spacing={2}>
    {providers.map(provider=>{
     const status=rows.find(row=>row.provider===provider.id);

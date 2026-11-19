@@ -153,6 +153,37 @@ export class IntegrationsService {
     return rows[0];
   }
 
+  async retryDeliveryJob(tenantId: string, actorId: string, jobId: string) {
+    return this.tenantDb.run(tenantId, async manager => {
+      const rows = await manager.query(`
+        UPDATE integration_delivery_jobs
+        SET status='queued', available_at=now(), last_error=NULL, updated_at=now()
+        WHERE tenant_id=$1 AND id=$2 AND status IN ('failed','dead_letter')
+          AND attempts < max_attempts
+        RETURNING id,job_type AS "jobType",status,attempts,max_attempts AS "maxAttempts",
+          available_at AS "availableAt",updated_at AS "updatedAt"
+      `, [tenantId, jobId]);
+      if (!rows.length) {
+        const existing = await manager.query(
+          'SELECT id,status,attempts,max_attempts AS "maxAttempts" FROM integration_delivery_jobs WHERE tenant_id=$1 AND id=$2',
+          [tenantId, jobId],
+        );
+        if (!existing.length) throw new NotFoundException('Delivery job not found.');
+        throw new ConflictException(
+          existing[0].attempts >= existing[0].maxAttempts
+            ? 'Delivery job has reached its maximum retry attempts.'
+            : 'Only failed or dead-letter delivery jobs can be retried.',
+        );
+      }
+      await manager.query(
+        'INSERT INTO audit_events (tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)',
+        [tenantId, actorId, 'integration.delivery.retry_queued', 'integration_delivery_job', jobId,
+          JSON.stringify({ attempts: rows[0].attempts, maxAttempts: rows[0].maxAttempts })],
+      );
+      return rows[0];
+    });
+  }
+
   async listDeliveryJobs(tenantId: string) {
     return this.tenantDb.run(tenantId, manager => manager.query(`
       SELECT id,job_type AS "jobType",status,attempts,max_attempts AS "maxAttempts",available_at AS "availableAt",last_error AS "lastError",provider_reference AS "providerReference",created_at AS "createdAt",updated_at AS "updatedAt"
