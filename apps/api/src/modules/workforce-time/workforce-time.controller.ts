@@ -5,7 +5,7 @@ import { TenantPermissions } from '../auth/tenant-access.decorator';
 import {
   CreateLeaveRequestDto, CreateLeaveTypeDto, UpdateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
-  CreateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
+  CreateTimesheetDto, UpdateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
 } from './workforce-time.dto';
 import { WorkforceTimeService } from './workforce-time.service';
 
