@@ -180,7 +180,7 @@ export class SyncService {
   resolveConflict(tenantId: string, actorId: string, id: string, resolution: string, state: 'resolved' | 'discarded' = 'discarded') {
     return this.tenantDb.run(tenantId, async (m) => {
       const rows = await m.query(
-        "UPDATE sync_conflicts SET state='discarded',resolution=$3,resolved_by=$4,resolved_at=now() WHERE tenant_id=$1 AND id=$2 AND state='open' RETURNING id,command_id AS \"commandId\",state,resolution",
+        "UPDATE sync_conflicts SET state=$5,resolution=$3,resolved_by=$4,resolved_at=now() WHERE tenant_id=$1 AND id=$2 AND state='open' RETURNING id,command_id AS \"commandId\",state,resolution",
         [tenantId, id, resolution.trim(), actorId, state],
       );
       if (!rows.length) throw new NotFoundException('Open sync conflict not found.');
