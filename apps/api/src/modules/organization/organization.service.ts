@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
-import { EntityManager } from 'typeorm';
+import type { EntityManager } from 'typeorm';
 import { CreateBranchDto, CreateCostCentreDto, CreateDepartmentDto, CreateWorkerAssignmentDto, UpdateBranchDto, UpdateCostCentreDto, UpdateDepartmentDto, UpdateWorkerAssignmentDto } from './organization.dto';
 
 @Injectable()
@@ -39,7 +39,7 @@ export class OrganizationService {
     }
 
     if (assignment.siteId) {
-      const site = await manager.query("SELECT project_id FROM sites WHERE tenant_id=$1 AND id=$2 AND status='active'", [tenantId, assignment.siteId]);
+      const site = await manager.query("SELECT s.project_id FROM sites s JOIN projects p ON p.tenant_id=s.tenant_id AND p.id=s.project_id WHERE s.tenant_id=$1 AND s.id=$2 AND s.status='active' AND p.status='active'", [tenantId, assignment.siteId]);
       if (!site.length) throw new BadRequestException('The selected site is not active in this workspace.');
       if (assignment.projectId && site[0].project_id !== assignment.projectId) {
         throw new BadRequestException('The selected site does not belong to the selected project.');
