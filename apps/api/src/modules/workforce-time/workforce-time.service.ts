@@ -237,6 +237,19 @@ export class WorkforceTimeService {
     });
   }
 
+  cancelOvertimeRequest(tenantId: string, actorId: string, id: string) {
+    return this.tenantDb.run(tenantId, async m => {
+      const rows = await m.query('SELECT * FROM overtime_requests WHERE tenant_id=$1 AND id=$2 FOR UPDATE', [tenantId,id]);
+      if (!rows.length) throw new NotFoundException('Overtime request not found.');
+      const request = rows[0];
+      if (request.requested_by !== actorId) throw new BadRequestException('Only the requester can cancel this overtime request.');
+      if (request.status !== 'pending') throw new ConflictException('Only pending overtime requests can be cancelled.');
+      const result = await m.query(`UPDATE overtime_requests SET status='cancelled',updated_at=now() WHERE tenant_id=$1 AND id=$2 RETURNING id,status`, [tenantId,id]);
+      await this.audit(m,tenantId,actorId,'overtime.request.cancelled','overtime_request',id,{previousStatus:request.status});
+      return result[0];
+    });
+  }
+
   reviewOvertimeRequest(tenantId: string, actorId: string, id: string, decision: 'approve'|'reject', dto: ReviewOvertimeRequestDto) {
     return this.tenantDb.run(tenantId,async m=>{
       const rows=await m.query('SELECT * FROM overtime_requests WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);

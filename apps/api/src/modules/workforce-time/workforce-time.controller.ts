@@ -104,6 +104,12 @@ export class WorkforceTimeController {
     return this.service.createOvertimeRequest(req.tenant.id, req.tenant.userId, dto);
   }
 
+  @Post('overtime-requests/:id/cancel')
+  @TenantPermissions('attendance.capture')
+  cancelOvertimeRequest(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.cancelOvertimeRequest(req.tenant.id, req.tenant.userId, id);
+  }
+
   @Post('overtime-requests/:id/approve')
   @TenantPermissions('attendance.approve')
   approveOvertimeRequest(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewOvertimeRequestDto) {
