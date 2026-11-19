@@ -5,7 +5,7 @@ import { TenantPermissions } from '../auth/tenant-access.decorator';
 import {
   CreateLeaveRequestDto, CreateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
-  CreateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
+  CreateTimesheetDto, UpdateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
 } from './workforce-time.dto';
 import { WorkforceTimeService } from './workforce-time.service';
 
@@ -126,6 +126,12 @@ export class WorkforceTimeController {
   @TenantPermissions('attendance.capture')
   createTimesheet(@Req() req: TenantRequest, @Body() dto: CreateTimesheetDto) {
     return this.service.createTimesheet(req.tenant.id, req.tenant.userId, dto);
+  }
+
+  @Patch('timesheets/:id')
+  @TenantPermissions('attendance.capture')
+  updateTimesheet(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTimesheetDto) {
+    return this.service.updateTimesheet(req.tenant.id, req.tenant.userId, id, dto);
   }
 
   @Get('timesheets/:id')

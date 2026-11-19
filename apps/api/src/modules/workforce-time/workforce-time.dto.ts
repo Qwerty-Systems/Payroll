@@ -61,6 +61,11 @@ export class CreateTimesheetDto {
   @IsDateString() periodEnd!: string;
   @IsOptional() @IsString() @Length(1, 1000) notes?: string;
 }
+export class UpdateTimesheetDto {
+  @IsOptional() @IsDateString() periodStart?: string;
+  @IsOptional() @IsDateString() periodEnd?: string;
+  @IsOptional() @IsString() @Length(1, 1000) notes?: string | null;
+}
 export class CreateTimesheetLineDto {
   @IsDateString() workDate!: string;
   @IsOptional() @IsUUID() projectId?: string;

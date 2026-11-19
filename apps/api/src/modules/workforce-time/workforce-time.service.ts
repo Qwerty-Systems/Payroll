@@ -4,7 +4,7 @@ import { EntityManager } from 'typeorm';
 import {
   CreateLeaveRequestDto, CreateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
-  CreateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
+  CreateTimesheetDto, UpdateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
 } from './workforce-time.dto';
 
 @Injectable()
@@ -309,6 +309,27 @@ export class WorkforceTimeService {
       `,[tenantId,dto.workerId,dto.periodStart,dto.periodEnd,dto.notes??null]);
       await this.audit(m,tenantId,actorId,'timesheet.created','timesheet',rows[0].id,rows[0]);
       return rows[0];
+    });
+  }
+
+  updateTimesheet(tenantId: string, actorId: string, id: string, dto: UpdateTimesheetDto) {
+    return this.tenantDb.run(tenantId, async m => {
+      const found = await m.query('SELECT * FROM timesheets WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);
+      if (!found.length) throw new NotFoundException('Timesheet not found.');
+      const before=found[0];
+      if (!['draft','rejected'].includes(before.status)) throw new ConflictException('Only draft or rejected timesheets can be edited.');
+      const periodStart=dto.periodStart??String(before.period_start).slice(0,10);
+      const periodEnd=dto.periodEnd??String(before.period_end).slice(0,10);
+      if (periodEnd<periodStart) throw new BadRequestException('Timesheet period end cannot precede its start date.');
+      const outOfRange=await m.query('SELECT id FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2 AND (work_date<$3 OR work_date>$4) LIMIT 1',[tenantId,id,periodStart,periodEnd]);
+      if(outOfRange.length) throw new ConflictException('The new period excludes existing timesheet lines. Move or remove those lines first.');
+      const updated=await m.query(`
+        UPDATE timesheets SET period_start=$3,period_end=$4,notes=$5,updated_at=now()
+        WHERE tenant_id=$1 AND id=$2
+        RETURNING id,worker_id AS "workerId",period_start::text AS "periodStart",period_end::text AS "periodEnd",status,notes
+      `,[tenantId,id,periodStart,periodEnd,dto.notes===undefined?before.notes:dto.notes]);
+      await this.audit(m,tenantId,actorId,'timesheet.updated','timesheet',id,{before,after:updated[0]});
+      return updated[0];
     });
   }
 

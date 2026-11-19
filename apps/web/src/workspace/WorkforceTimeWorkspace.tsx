@@ -25,6 +25,8 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [timesheets, setTimesheets] = useState<Row[]>([]);
   const [selectedTimesheet, setSelectedTimesheet] = useState('');
   const [timesheetDetail, setTimesheetDetail] = useState<Row | null>(null);
+  const [editingTimesheet, setEditingTimesheet] = useState(false);
+  const [timesheetHeader, setTimesheetHeader] = useState({ periodStart: '', periodEnd: '', notes: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -65,6 +67,12 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
     try { await action(); await refresh(); setNotice(message); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'The request could not be completed.'); }
     finally { setBusy(false); }
+  }
+
+  function beginTimesheetEdit() {
+    if (!timesheetDetail) return;
+    setTimesheetHeader({periodStart:String(timesheetDetail.periodStart??'').slice(0,10),periodEnd:String(timesheetDetail.periodEnd??'').slice(0,10),notes:String(timesheetDetail.notes??'')});
+    setEditingTimesheet(true);
   }
 
   async function openTimesheet(id: string) {
@@ -202,9 +210,23 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
           </Table>
           {timesheetDetail && <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
             <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1}>
-              <Box><Typography fontWeight={800}>Timesheet lines</Typography><Typography variant="caption" color="text.secondary">Status: {text(timesheetDetail.status)}</Typography></Box>
+              <Box><Typography fontWeight={800}>Timesheet lines</Typography><Typography variant="caption" color="text.secondary">Period: {text(timesheetDetail.periodStart)} – {text(timesheetDetail.periodEnd)} · Status: {text(timesheetDetail.status)}</Typography>{timesheetDetail.reviewReason && <Typography variant="caption" display="block" color="text.secondary">Review note: {text(timesheetDetail.reviewReason)}</Typography>}</Box>
+              <Stack direction="row" spacing={1}>
+                {['draft','rejected'].includes(String(timesheetDetail.status)) && <Button size="small" variant="outlined" disabled={busy} onClick={beginTimesheetEdit}>Edit details</Button>}
+  
+              </Stack>
               {['draft','rejected'].includes(String(timesheetDetail.status)) && <Button variant="outlined" disabled={busy} onClick={() => void perform(() => request(`tenant/timesheets/${selectedTimesheet}/submit`,json('POST')),'Timesheet submitted for approval.')}>Submit for approval</Button>}
             </Stack>
+            {editingTimesheet && <Stack direction={{xs:'column',md:'row'}} spacing={1} sx={{mt:2}}>
+              <TextField size="small" type="date" label="Period start" value={timesheetHeader.periodStart} onChange={e=>setTimesheetHeader(v=>({...v,periodStart:e.target.value}))} InputLabelProps={{shrink:true}} />
+              <TextField size="small" type="date" label="Period end" value={timesheetHeader.periodEnd} onChange={e=>setTimesheetHeader(v=>({...v,periodEnd:e.target.value}))} InputLabelProps={{shrink:true}} />
+              <TextField size="small" label="Notes" value={timesheetHeader.notes} onChange={e=>setTimesheetHeader(v=>({...v,notes:e.target.value}))} />
+              <Button variant="contained" disabled={busy||!timesheetHeader.periodStart||!timesheetHeader.periodEnd||timesheetHeader.periodEnd<timesheetHeader.periodStart} onClick={()=>void perform(async()=>{
+                await request(`tenant/timesheets/${selectedTimesheet}`,json('PATCH',timesheetHeader));
+                setEditingTimesheet(false); await openTimesheet(selectedTimesheet);
+              },'Timesheet details updated.')}>Save details</Button>
+              <Button color="inherit" disabled={busy} onClick={()=>setEditingTimesheet(false)}>Cancel</Button>
+            </Stack>}
             {['draft','rejected'].includes(String(timesheetDetail.status)) && <Stack spacing={1} sx={{ mt: 2 }}>
               <Typography fontWeight={700}>{editingLineId ? 'Edit timesheet line' : 'Add timesheet line'}</Typography>
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
