@@ -49,6 +49,12 @@ export class SyncController {
     return this.sync.listConflicts(req.tenant.id);
   }
 
+  @Post('conflicts/:id/resolve')
+  @TenantPermissions('attendance.approve')
+  resolveConflict(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ResolveSyncConflictDto) {
+    return this.sync.resolveConflict(req.tenant.id, req.tenant.userId, id, dto.resolution, 'resolved');
+  }
+
   @Post('conflicts/:id/discard')
   @TenantPermissions('attendance.approve')
   discardConflict(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ResolveSyncConflictDto) {
