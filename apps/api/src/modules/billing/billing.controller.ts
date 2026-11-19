@@ -1,1 +1,58 @@
-import {Body,Controller,Get,Param,ParseUUIDPipe,Post,Patch,Query,Req} from '@nestjs/common';import {ApiBearerAuth,ApiTags} from '@nestjs/swagger';import type {Request} from 'express';import {TenantPermissions} from '../auth/tenant-access.decorator';import {BillingService} from './billing.service';import {CreateBillingDocumentDto,RecordBillingPaymentDto,UpdateBillingDocumentStatusDto} from './billing.dto';type TenantRequest=Request & {tenant:{id:string;userId:string}};@ApiTags('billing') @ApiBearerAuth() @Controller('billing') export class BillingController{constructor(private readonly billing:BillingService){} @Get('documents') @TenantPermissions('compliance.read') list(@Req() r:TenantRequest,@Query('type') type?:'quote'|'invoice',@Query('status') status?:string){return this.billing.listDocuments(r.tenant.id,type,status)} @Post('documents') @TenantPermissions('compliance.manage') create(@Req() r:TenantRequest,@Body() d:CreateBillingDocumentDto){return this.billing.createDocument(r.tenant.id,r.tenant.userId,d)} @Patch('documents/:id/status') @TenantPermissions('compliance.manage') status(@Req() r:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() d:UpdateBillingDocumentStatusDto){return this.billing.updateStatus(r.tenant.id,r.tenant.userId,id,d)} @Get('documents/:id/payments') @TenantPermissions('compliance.read') payments(@Req() r:TenantRequest,@Param('id',ParseUUIDPipe) id:string){return this.billing.listPayments(r.tenant.id,id)} @Post('documents/:id/payments') @TenantPermissions('compliance.manage') record(@Req() r:TenantRequest,@Param('id',ParseUUIDPipe) id:string,@Body() d:RecordBillingPaymentDto){return this.billing.recordPayment(r.tenant.id,r.tenant.userId,id,d)}}
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
+import { TenantPermissions } from '../auth/tenant-access.decorator';
+import { BillingService } from './billing.service';
+import { CreateBillingDocumentDto, RecordBillingPaymentDto, UpdateBillingDocumentStatusDto } from './billing.dto';
+import { UpdateBillingDocumentDto } from './billing-update.dto';
+
+type TenantRequest = Request & { tenant: { id: string; userId: string } };
+
+@ApiTags('billing')
+@ApiBearerAuth()
+@Controller('billing')
+export class BillingController {
+  constructor(private readonly billing: BillingService) {}
+
+  @Get('documents')
+  @TenantPermissions('compliance.read')
+  list(@Req() r: TenantRequest, @Query('type') type?: 'quote' | 'invoice', @Query('status') status?: string) {
+    return this.billing.listDocuments(r.tenant.id, type, status);
+  }
+
+  @Post('documents')
+  @TenantPermissions('compliance.manage')
+  create(@Req() r: TenantRequest, @Body() d: CreateBillingDocumentDto) {
+    return this.billing.createDocument(r.tenant.id, r.tenant.userId, d);
+  }
+
+  @Patch('documents/:id')
+  @TenantPermissions('compliance.manage')
+  update(@Req() r: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() d: UpdateBillingDocumentDto) {
+    return this.billing.updateDocument(r.tenant.id, r.tenant.userId, id, d);
+  }
+
+  @Delete('documents/:id')
+  @TenantPermissions('compliance.manage')
+  delete(@Req() r: TenantRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.billing.deleteDocument(r.tenant.id, r.tenant.userId, id);
+  }
+
+  @Patch('documents/:id/status')
+  @TenantPermissions('compliance.manage')
+  status(@Req() r: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() d: UpdateBillingDocumentStatusDto) {
+    return this.billing.updateStatus(r.tenant.id, r.tenant.userId, id, d);
+  }
+
+  @Get('documents/:id/payments')
+  @TenantPermissions('compliance.read')
+  payments(@Req() r: TenantRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.billing.listPayments(r.tenant.id, id);
+  }
+
+  @Post('documents/:id/payments')
+  @TenantPermissions('compliance.manage')
+  record(@Req() r: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() d: RecordBillingPaymentDto) {
+    return this.billing.recordPayment(r.tenant.id, r.tenant.userId, id, d);
+  }
+}
