@@ -69,6 +69,9 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const [selectedPayGrade, setSelectedPayGrade] = useState('');
   const [selectedComponentId, setSelectedComponentId] = useState('');
   const [selectedComponentType, setSelectedComponentType] = useState<'allowance' | 'deduction'>('allowance');
+  const [correctionAttendance, setCorrectionAttendance] = useState<RowData | null>(null);
+  const [correctionRows, setCorrectionRows] = useState<RowData[]>([]);
+  const [correctionForm, setCorrectionForm] = useState({ clockIn: '', clockOut: '', minutesWorked: '', reason: '' });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [employeeStatusFilter, setEmployeeStatusFilter] = useState<'all' | 'active' | 'inactive' | 'suspended' | 'archived'>('all');
@@ -366,6 +369,54 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     } finally { setBusy(false); }
   }
 
+  async function openAttendanceCorrections(record: RowData) {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const result = await request<unknown>(`tenant/attendance/${record.id}/corrections`);
+      setCorrectionAttendance(record);
+      setCorrectionRows(asRows(result));
+      setCorrectionForm({ clockIn: '', clockOut: '', minutesWorked: '', reason: '' });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load attendance corrections.');
+    } finally { setBusy(false); }
+  }
+
+  async function submitAttendanceCorrection() {
+    if (!correctionAttendance) return;
+    const payload: Record<string, unknown> = { reason: correctionForm.reason.trim() };
+    if (correctionForm.clockIn) payload.clockIn = new Date(correctionForm.clockIn).toISOString();
+    if (correctionForm.clockOut) payload.clockOut = new Date(correctionForm.clockOut).toISOString();
+    if (correctionForm.minutesWorked !== '') payload.minutesWorked = Number(correctionForm.minutesWorked);
+    if (Object.keys(payload).length === 1) { setError('Enter at least one value to correct.'); return; }
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await request(`tenant/attendance/${correctionAttendance.id}/corrections`, { method: 'POST', body: JSON.stringify(payload) });
+      const result = await request<unknown>(`tenant/attendance/${correctionAttendance.id}/corrections`);
+      setCorrectionRows(asRows(result));
+      setCorrectionForm({ clockIn: '', clockOut: '', minutesWorked: '', reason: '' });
+      setNotice('Attendance correction submitted for independent review.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Attendance correction could not be submitted.');
+    } finally { setBusy(false); }
+  }
+
+  async function reviewAttendanceCorrection(id: string, action: 'approve' | 'reject') {
+    const reason = window.prompt(action === 'approve' ? 'Enter the verification reason for approval:' : 'Enter the reason for rejection:');
+    if (!reason?.trim()) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await request(`tenant/attendance-corrections/${id}/${action}`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) });
+      if (correctionAttendance) {
+        const result = await request<unknown>(`tenant/attendance/${correctionAttendance.id}/corrections`);
+        setCorrectionRows(asRows(result));
+      }
+      setNotice(action === 'approve' ? 'Attendance correction approved and applied.' : 'Attendance correction rejected.');
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Attendance correction could not be reviewed.');
+    } finally { setBusy(false); }
+  }
+
   async function attendanceAction(id: string, action: 'submit' | 'approve') {
     setBusy(true); setError(''); setNotice('');
     try {
@@ -656,7 +707,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                 {filteredRows.map(row => <TableRow key={String(row.id ?? JSON.stringify(row))} hover>
                   {section === 'workers' && <><TableCell sx={{ minWidth: 260 }}><Stack direction="row" spacing={1.4} alignItems="center"><Avatar sx={{ width: 40, height: 40, bgcolor: selectedWorker === row.id ? '#DCECE1' : '#EFF3EF', color: '#24543D', fontWeight: 850 }}>{`${String(row.firstName ?? '?').charAt(0)}${String(row.lastName ?? '?').charAt(0)}`.toUpperCase()}</Avatar><Box><Typography fontWeight={800}>{label(row.firstName)} {label(row.lastName)}</Typography><Typography variant="caption" color="text.secondary">Employee no. {label(row.workerNumber)}</Typography></Box></Stack></TableCell><TableCell sx={{ minWidth: 220 }}><Typography variant="body2">{label(row.email)}</Typography><Typography variant="caption" color="text.secondary">{label(row.phone)}</Typography></TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} sx={{ fontWeight: 750, textTransform: 'capitalize' }} /></TableCell><TableCell><Stack direction="row" spacing={.5} alignItems="center"><Button size="small" variant={selectedWorker === row.id ? 'contained' : 'outlined'} onClick={() => setSelectedWorker(String(row.id))}>{selectedWorker === row.id ? 'Selected' : 'View profile'}</Button><Button size="small" color="error" disabled={busy} onClick={() => void permanentlyDeleteEmployee(String(row.id))}>Delete</Button></Stack></TableCell></>}
                   {section === 'projects' && <><TableCell>{label(row.projectCode)}</TableCell><TableCell><Typography fontWeight={750}>{label(row.name)}</Typography></TableCell><TableCell>{label(row.clientName)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'active' ? 'success' : 'default'} /></TableCell><TableCell><Button size="small" variant={selectedProject === row.id ? 'contained' : 'text'} onClick={() => setSelectedProject(String(row.id))}>{selectedProject === row.id ? 'Selected' : 'View sites'}</Button></TableCell></>}
-                  {section === 'attendance' && <><TableCell>{label(row.workDate)}</TableCell><TableCell>{label(row.workerId)}</TableCell><TableCell>{label(row.projectId)}</TableCell><TableCell>{label(row.minutesWorked)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'approved' ? 'success' : row.status === 'submitted' ? 'warning' : 'default'} /></TableCell><TableCell>{row.status === 'draft' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'submit')}>Submit</Button> : row.status === 'submitted' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'approve')}>Approve</Button> : '—'}</TableCell></>}
+                  {section === 'attendance' && <><TableCell>{label(row.workDate)}</TableCell><TableCell>{label(row.workerId)}</TableCell><TableCell>{label(row.projectId)}</TableCell><TableCell>{label(row.minutesWorked)}</TableCell><TableCell><Chip size="small" label={label(row.status)} color={row.status === 'approved' ? 'success' : row.status === 'submitted' ? 'warning' : 'default'} /></TableCell><TableCell><Stack direction="row" spacing={.5}>{row.status === 'draft' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'submit')}>Submit</Button> : row.status === 'submitted' ? <Button size="small" disabled={busy} onClick={() => void attendanceAction(String(row.id), 'approve')}>Approve</Button> : null}{row.status === 'approved' && <Button size="small" disabled={busy} onClick={() => void openAttendanceCorrections(row)}>Corrections</Button>}</Stack></TableCell></>}
                 </TableRow>)}
                 {!filteredRows.length && <TableRow><TableCell colSpan={section === 'workers' ? 4 : 6} sx={{ py: 5, textAlign: 'center' }}>
                   <Typography fontWeight={800}>{searchQuery ? 'No matching records' : 'Nothing here yet'}</Typography>
@@ -707,6 +758,35 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     </Box>
 
     <SyncReviewDialog open={reviewOpen} tenantId={tenantId} onClose={() => setReviewOpen(false)} onChanged={() => { void refreshQueueCounts(); void syncOfflineQueue(false); }} />
+    <Dialog open={Boolean(correctionAttendance)} onClose={() => { if (!busy) setCorrectionAttendance(null); }} fullWidth maxWidth="md">
+      <DialogTitle>Attendance corrections</DialogTitle>
+      <DialogContent>
+        {correctionAttendance && <Stack spacing={2} sx={{ pt: 1 }}>
+          <Alert severity="info">Approved attendance can only be changed through a correction request. A different reviewer must approve it before the original record is updated.</Alert>
+          <Typography variant="body2" color="text.secondary">Record date: {label(correctionAttendance.workDate)} · Employee: {label(correctionAttendance.workerId)} · Current minutes: {label(correctionAttendance.minutesWorked)}</Typography>
+          <Typography fontWeight={800}>Correction history</Typography>
+          <Table size="small"><TableHead><TableRow>{['Proposed values','Request reason','Status','Review reason','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
+            <TableBody>{correctionRows.map(item => <TableRow key={String(item.id)}>
+              <TableCell><Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(item.proposedValues, null, 2)}</Typography></TableCell>
+              <TableCell>{label(item.reason)}</TableCell><TableCell><Chip size="small" label={label(item.status)} color={item.status === 'approved' ? 'success' : item.status === 'pending' ? 'warning' : 'default'} /></TableCell><TableCell>{label(item.reviewReason)}</TableCell>
+              <TableCell>{item.status === 'pending' && <Stack direction="row"><Button size="small" disabled={busy} onClick={() => void reviewAttendanceCorrection(String(item.id), 'approve')}>Approve</Button><Button size="small" color="error" disabled={busy} onClick={() => void reviewAttendanceCorrection(String(item.id), 'reject')}>Reject</Button></Stack>}</TableCell>
+            </TableRow>)}{!correctionRows.length && <TableRow><TableCell colSpan={5}>No correction requests for this record.</TableCell></TableRow>}</TableBody>
+          </Table>
+          <Divider />
+          <Typography fontWeight={800}>Request a correction</Typography>
+          <Typography variant="caption" color="text.secondary">Leave fields blank when they do not need changing. At least one value and a reason are required.</Typography>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
+            <TextField fullWidth type="datetime-local" label="Correct clock-in" InputLabelProps={{ shrink: true }} value={correctionForm.clockIn} onChange={e => setCorrectionForm(v => ({ ...v, clockIn: e.target.value }))} />
+            <TextField fullWidth type="datetime-local" label="Correct clock-out" InputLabelProps={{ shrink: true }} value={correctionForm.clockOut} onChange={e => setCorrectionForm(v => ({ ...v, clockOut: e.target.value }))} />
+            <TextField type="number" label="Correct minutes" inputProps={{ min: 0, max: 1440 }} value={correctionForm.minutesWorked} onChange={e => setCorrectionForm(v => ({ ...v, minutesWorked: e.target.value }))} />
+          </Stack>
+          <TextField label="Reason for correction" required multiline minRows={2} inputProps={{ maxLength: 500 }} value={correctionForm.reason} onChange={e => setCorrectionForm(v => ({ ...v, reason: e.target.value }))} />
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}><Button variant="contained" disabled={busy || correctionForm.reason.trim().length < 5 || (!correctionForm.clockIn && !correctionForm.clockOut && correctionForm.minutesWorked === '')} onClick={() => void submitAttendanceCorrection()}>Submit correction</Button></Box>
+        </Stack>}
+      </DialogContent>
+      <DialogActions><Button onClick={() => setCorrectionAttendance(null)} disabled={busy}>Close</Button></DialogActions>
+    </Dialog>
+
     <Dialog open={Boolean(dialog)} onClose={() => { setDialog(''); setSelectedPayGrade(''); setSelectedComponentId(''); }} fullWidth maxWidth="sm">
       <Box component="form" onSubmit={submit}>
         <DialogTitle>{dialog === 'worker' ? 'Add employee' : dialog === 'contract' ? 'Add employee contract' : dialog === 'endContract' ? 'End employee contract' : dialog === 'payGrade' ? (selectedPayGrade ? 'Edit pay grade' : 'Create pay grade') : dialog === 'project' ? 'Create project' : dialog === 'site' ? 'Create site' : dialog === 'attendance' ? 'Capture attendance' : dialog === 'payComponent' ? 'Configure pay component' : 'Create payroll period'}</DialogTitle>
