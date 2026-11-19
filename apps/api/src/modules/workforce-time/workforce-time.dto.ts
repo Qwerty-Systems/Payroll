@@ -24,6 +24,14 @@ export class CreateLeaveTypeDto {
   @IsOptional() @IsBoolean() requiresApproval?: boolean;
   @IsOptional() @IsBoolean() isPaid?: boolean;
 }
+export class UpdateLeaveTypeDto {
+  @IsOptional() @IsString() @Length(2, 120) name?: string;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(366) annualEntitlementDays?: number;
+  @IsOptional() @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(366) carryForwardLimitDays?: number;
+  @IsOptional() @IsBoolean() requiresApproval?: boolean;
+  @IsOptional() @IsBoolean() isPaid?: boolean;
+  @IsOptional() @IsIn(['active','inactive']) status?: string;
+}
 export class SetLeaveBalanceDto {
   @IsUUID() workerId!: string;
   @IsUUID() leaveTypeId!: string;
@@ -60,6 +68,11 @@ export class CreateTimesheetDto {
   @IsDateString() periodStart!: string;
   @IsDateString() periodEnd!: string;
   @IsOptional() @IsString() @Length(1, 1000) notes?: string;
+}
+export class UpdateTimesheetDto {
+  @IsOptional() @IsDateString() periodStart?: string;
+  @IsOptional() @IsDateString() periodEnd?: string;
+  @IsOptional() @IsString() @Length(1, 1000) notes?: string | null;
 }
 export class CreateTimesheetLineDto {
   @IsDateString() workDate!: string;

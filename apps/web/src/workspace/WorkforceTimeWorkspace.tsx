@@ -25,15 +25,19 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [timesheets, setTimesheets] = useState<Row[]>([]);
   const [selectedTimesheet, setSelectedTimesheet] = useState('');
   const [timesheetDetail, setTimesheetDetail] = useState<Row | null>(null);
+  const [editingTimesheet, setEditingTimesheet] = useState(false);
+  const [timesheetHeader, setTimesheetHeader] = useState({ periodStart: '', periodEnd: '', notes: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [shift, setShift] = useState({ code: '', name: '', startTime: '08:00', endTime: '17:00', breakMinutes: '60' });
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [leaveType, setLeaveType] = useState({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0', requiresApproval: true, isPaid: true });
+  const [editingLeaveType, setEditingLeaveType] = useState<string | null>(null);
   const [balance, setBalance] = useState({ workerId: '', leaveTypeId: '', leaveYear: String(new Date().getFullYear()), openingDays: '0', accruedDays: '0', adjustmentDays: '0' });
   const [leave, setLeave] = useState({ workerId: '', leaveTypeId: '', startDate: today(), endDate: today(), requestedDays: '1', reason: '' });
   const [overtime, setOvertime] = useState({ workerId: '', workDate: today(), requestedMinutes: '60', reason: '', projectId: '', siteId: '' });
+  const [editingOvertimeId, setEditingOvertimeId] = useState<string | null>(null);
   const [timesheet, setTimesheet] = useState({ workerId: '', periodStart: today().slice(0, 8) + '01', periodEnd: today(), notes: '' });
   const [line, setLine] = useState({ workDate: today(), minutesWorked: '480', overtimeMinutes: '0', description: '', projectId: '', siteId: '', unitsCompleted: '' });
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
@@ -66,6 +70,12 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
     try { await action(); await refresh(); setNotice(message); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'The request could not be completed.'); }
     finally { setBusy(false); }
+  }
+
+  function beginTimesheetEdit() {
+    if (!timesheetDetail) return;
+    setTimesheetHeader({periodStart:String(timesheetDetail.periodStart??'').slice(0,10),periodEnd:String(timesheetDetail.periodEnd??'').slice(0,10),notes:String(timesheetDetail.notes??'')});
+    setEditingTimesheet(true);
   }
 
   async function openTimesheet(id: string) {
@@ -133,11 +143,21 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
             <TextField size="small" type="number" label="Carry-forward cap" value={leaveType.carryForwardLimitDays} onChange={e => setLeaveType(v => ({ ...v, carryForwardLimitDays: e.target.value }))} />
             <TextField select size="small" label="Approval required" value={String(leaveType.requiresApproval)} onChange={e => setLeaveType(v => ({ ...v, requiresApproval: e.target.value === 'true' }))} sx={{ minWidth: 150 }}><MenuItem value="true">Yes</MenuItem><MenuItem value="false">No</MenuItem></TextField>
             <TextField select size="small" label="Paid leave" value={String(leaveType.isPaid)} onChange={e => setLeaveType(v => ({ ...v, isPaid: e.target.value === 'true' }))} sx={{ minWidth: 130 }}><MenuItem value="true">Paid</MenuItem><MenuItem value="false">Unpaid</MenuItem></TextField>
-            <Button variant="contained" disabled={busy || !leaveType.code || !leaveType.name} onClick={() => void perform(async () => {
-              await request('tenant/leave-types', json('POST', { ...leaveType, annualEntitlementDays: Number(leaveType.annualEntitlementDays), carryForwardLimitDays: Number(leaveType.carryForwardLimitDays) }));
-              setLeaveType({ code: '', name: '', annualEntitlementDays: '21', carryForwardLimitDays: '0', requiresApproval: true, isPaid: true });
-            }, 'Leave type created.')}>Add type</Button>
+            <Button variant="contained" disabled={busy || !leaveType.name.trim() || !Number.isFinite(Number(leaveType.annualEntitlementDays)) || Number(leaveType.annualEntitlementDays)<0 || Number(leaveType.carryForwardLimitDays)<0} onClick={() => void perform(async () => {
+              const payload={name:leaveType.name.trim(),annualEntitlementDays:Number(leaveType.annualEntitlementDays),carryForwardLimitDays:Number(leaveType.carryForwardLimitDays),requiresApproval:leaveType.requiresApproval,isPaid:leaveType.isPaid};
+              if(editingLeaveType) await request(`tenant/leave-types/${editingLeaveType}`,json('PATCH',payload));
+              else await request('tenant/leave-types',json('POST',{...payload,code:leaveType.code.trim().toUpperCase()}));
+              setEditingLeaveType(null);setLeaveType({code:'',name:'',annualEntitlementDays:'21',carryForwardLimitDays:'0',requiresApproval:true,isPaid:true});
+            },editingLeaveType?'Leave type updated.':'Leave type created.')}>{editingLeaveType?'Save changes':'Add type'}</Button>
+            {editingLeaveType&&<Button color="inherit" disabled={busy} onClick={()=>{setEditingLeaveType(null);setLeaveType({code:'',name:'',annualEntitlementDays:'21',carryForwardLimitDays:'0',requiresApproval:true,isPaid:true});}}>Cancel</Button>}
           </Stack>
+          <Table size="small"><TableHead><TableRow>{['Code','Leave type','Annual days','Carry forward','Paid','Approval','Status','Actions'].map(x=><TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead><TableBody>
+            {leaveTypes.map(t=><TableRow key={String(t.id)}><TableCell>{text(t.code)}</TableCell><TableCell>{text(t.name)}</TableCell><TableCell>{text(t.annualEntitlementDays)}</TableCell><TableCell>{text(t.carryForwardLimitDays)}</TableCell><TableCell>{t.isPaid===false?'Unpaid':'Paid'}</TableCell><TableCell>{t.requiresApproval===false?'No':'Yes'}</TableCell><TableCell><Chip size="small" label={text(t.status)}/></TableCell><TableCell><Stack direction="row" spacing={0.5}>
+              <Button size="small" disabled={busy||t.status!=='active'} onClick={()=>{setEditingLeaveType(String(t.id));setLeaveType({code:String(t.code??''),name:String(t.name??''),annualEntitlementDays:String(t.annualEntitlementDays??21),carryForwardLimitDays:String(t.carryForwardLimitDays??0),requiresApproval:t.requiresApproval!==false,isPaid:t.isPaid!==false});}}>Edit</Button>
+              <Button size="small" color={t.status==='active'?'warning':'success'} disabled={busy} onClick={()=>void perform(()=>request(`tenant/leave-types/${t.id}`,json('PATCH',{status:t.status==='active'?'inactive':'active'})),t.status==='active'?'Leave type deactivated.':'Leave type reactivated.')}>{t.status==='active'?'Deactivate':'Reactivate'}</Button>
+            </Stack></TableCell></TableRow>)}
+            {!leaveTypes.length&&<TableRow><TableCell colSpan={8}>No leave types configured.</TableCell></TableRow>}
+          </TableBody></Table>
           <Divider />
           <Typography fontWeight={700}>Set employee leave balance</Typography>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
@@ -166,7 +186,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
             <TextField size="small" type="date" label="To" value={leave.endDate} onChange={e => setLeave(v => ({ ...v, endDate: e.target.value }))} InputLabelProps={{ shrink: true }} />
             <TextField size="small" type="number" label="Days" value={leave.requestedDays} onChange={e => setLeave(v => ({ ...v, requestedDays: e.target.value }))} sx={{ width: 100 }} />
             <TextField size="small" label="Reason" value={leave.reason} onChange={e => setLeave(v => ({ ...v, reason: e.target.value }))} />
-            <Button variant="contained" disabled={busy || !leave.workerId || !leave.leaveTypeId} onClick={() => void perform(async () => {
+            <Button variant="contained" disabled={busy || !leave.workerId || !leave.leaveTypeId || !leave.startDate || !leave.endDate || leave.endDate < leave.startDate || !Number.isFinite(Number(leave.requestedDays)) || Number(leave.requestedDays)<=0} onClick={() => void perform(async () => {
               await request('tenant/leave-requests', json('POST', { ...leave, requestedDays: Number(leave.requestedDays) }));
             }, 'Leave request submitted.')}>Submit</Button>
           </Stack>
@@ -183,10 +203,15 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
             <TextField size="small" type="date" label="Work date" value={overtime.workDate} onChange={e => setOvertime(v => ({ ...v, workDate: e.target.value }))} InputLabelProps={{ shrink: true }} />
             <TextField size="small" type="number" label="Minutes" value={overtime.requestedMinutes} onChange={e => setOvertime(v => ({ ...v, requestedMinutes: e.target.value }))} sx={{ width: 110 }} />
             <TextField size="small" label="Reason" value={overtime.reason} onChange={e => setOvertime(v => ({ ...v, reason: e.target.value }))} />
-            <Button variant="contained" disabled={busy || !overtime.workerId || overtime.reason.length < 5} onClick={() => void perform(() => request('tenant/overtime-requests', json('POST', { ...overtime, requestedMinutes: Number(overtime.requestedMinutes), projectId: overtime.projectId || undefined, siteId: overtime.siteId || undefined })), 'Overtime request submitted.')}>Submit</Button>
+            <Button variant="contained" disabled={busy || !overtime.workerId || !overtime.workDate || !Number.isFinite(Number(overtime.requestedMinutes)) || Number(overtime.requestedMinutes)<1 || Number(overtime.requestedMinutes)>1440 || overtime.reason.trim().length<5} onClick={()=>void perform(async()=>{
+              const payload={...overtime,reason:overtime.reason.trim(),requestedMinutes:Number(overtime.requestedMinutes),projectId:overtime.projectId||undefined,siteId:overtime.siteId||undefined};
+              await request(editingOvertimeId?`tenant/overtime-requests/${editingOvertimeId}`:'tenant/overtime-requests',json(editingOvertimeId?'PATCH':'POST',payload));
+              setEditingOvertimeId(null);setOvertime({workerId:'',workDate:today(),requestedMinutes:'60',reason:'',projectId:'',siteId:''});
+            },editingOvertimeId?'Overtime request updated.':'Overtime request submitted.')}>{editingOvertimeId?'Save changes':'Submit'}</Button>
+            {editingOvertimeId&&<Button color="inherit" disabled={busy} onClick={()=>{setEditingOvertimeId(null);setOvertime({workerId:'',workDate:today(),requestedMinutes:'60',reason:'',projectId:'',siteId:''});}}>Cancel edit</Button>}
           </Stack>
           <Table size="small"><TableHead><TableRow>{['Employee','Date','Requested','Approved','Reason','Status','Review'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
-            <TableBody>{overtimeRequests.map(r => <TableRow key={String(r.id)}><TableCell>{text(r.workerName)}</TableCell><TableCell>{text(r.workDate)}</TableCell><TableCell>{text(r.requestedMinutes)} min</TableCell><TableCell>{text(r.approvedMinutes)}</TableCell><TableCell>{text(r.reason)}</TableCell><TableCell><Chip size="small" label={text(r.status)} /></TableCell><TableCell>{r.status === 'pending' && <Stack direction="row"><Button size="small" disabled={busy} onClick={() => void perform(() => request(`tenant/overtime-requests/${r.id}/approve`, json('POST', { reason: 'Approved after review.' })), 'Overtime approved.')}>Approve</Button><Button size="small" color="error" disabled={busy} onClick={() => void perform(() => request(`tenant/overtime-requests/${r.id}/reject`, json('POST', { reason: 'Not approved.' })), 'Overtime rejected.')}>Reject</Button><Button size="small" color="warning" disabled={busy} onClick={() => void perform(() => request(`tenant/overtime-requests/${r.id}/cancel`, json('POST')), 'Overtime request cancelled.')}>Cancel</Button></Stack>}</TableCell></TableRow>)}
+            <TableBody>{overtimeRequests.map(r => <TableRow key={String(r.id)}><TableCell>{text(r.workerName)}</TableCell><TableCell>{text(r.workDate)}</TableCell><TableCell>{text(r.requestedMinutes)} min</TableCell><TableCell>{text(r.approvedMinutes)}</TableCell><TableCell>{text(r.reason)}</TableCell><TableCell><Chip size="small" label={text(r.status)} /></TableCell><TableCell>{r.status === 'pending' && <Stack direction="row"><Button size="small" disabled={busy} onClick={()=>{setEditingOvertimeId(String(r.id));setOvertime({workerId:String(r.workerId??''),workDate:String(r.workDate??today()).slice(0,10),requestedMinutes:String(r.requestedMinutes??60),reason:String(r.reason??''),projectId:String(r.projectId??''),siteId:String(r.siteId??'')});}}>Edit</Button><Button size="small" disabled={busy} onClick={() => void perform(() => request(`tenant/overtime-requests/${r.id}/approve`, json('POST', { reason: 'Approved after review.' })), 'Overtime approved.')}>Approve</Button><Button size="small" color="error" disabled={busy} onClick={() => void perform(() => request(`tenant/overtime-requests/${r.id}/reject`, json('POST', { reason: 'Not approved.' })), 'Overtime rejected.')}>Reject</Button><Button size="small" color="warning" disabled={busy} onClick={() => void perform(() => request(`tenant/overtime-requests/${r.id}/cancel`, json('POST')), 'Overtime request cancelled.')}>Cancel</Button></Stack>}</TableCell></TableRow>)}
               {!overtimeRequests.length && <TableRow><TableCell colSpan={7}>No overtime requests.</TableCell></TableRow>}</TableBody>
           </Table>
         </Stack>}
@@ -198,7 +223,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
             <TextField size="small" type="date" label="Period start" value={timesheet.periodStart} onChange={e => setTimesheet(v => ({ ...v, periodStart: e.target.value }))} InputLabelProps={{ shrink: true }} />
             <TextField size="small" type="date" label="Period end" value={timesheet.periodEnd} onChange={e => setTimesheet(v => ({ ...v, periodEnd: e.target.value }))} InputLabelProps={{ shrink: true }} />
             <TextField size="small" label="Notes" value={timesheet.notes} onChange={e => setTimesheet(v => ({ ...v, notes: e.target.value }))} />
-            <Button variant="contained" disabled={busy || !timesheet.workerId} onClick={() => void perform(async () => {
+            <Button variant="contained" disabled={busy || !timesheet.workerId || !timesheet.periodStart || !timesheet.periodEnd || timesheet.periodEnd < timesheet.periodStart} onClick={() => void perform(async () => {
               const result=await request<Row>('tenant/timesheets',json('POST',timesheet));
               if(result.id) { setSelectedTimesheet(String(result.id)); setTimesheetDetail({...result,lines:[]}); }
             }, 'Timesheet created.')}>Create</Button>
