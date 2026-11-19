@@ -1,4 +1,4 @@
-import { IsArray, IsDateString, IsEmail, IsNumber, IsOptional, IsString, Length, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsEmail, IsOptional, IsString, Length, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { BillingLineDto } from './billing.dto';
 
