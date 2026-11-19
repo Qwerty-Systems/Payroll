@@ -97,9 +97,11 @@ describe('SyncService', () => {
       .resolves.toMatchObject({ id: 'conflict-1', state: 'discarded' });
 
     expect(query).toHaveBeenCalledTimes(2);
-    expect(query.mock.calls[0][0]).toContain("state='discarded'");
+    expect(query.mock.calls[0][0]).toContain("SET state=$5");
+    expect(query.mock.calls[0][1]).toEqual([tenantId, 'conflict-1', 'Reviewed duplicate capture', userId, 'discarded']);
     expect(query.mock.calls.some(([sql]) => String(sql).includes('UPDATE sync_commands'))).toBe(false);
-    expect(query.mock.calls[1][0]).toContain('sync.conflict.discarded');
+    expect(query.mock.calls[1][0]).toContain('VALUES($1,$2,$5');
+    expect(query.mock.calls[1][1][4]).toBe('sync.conflict.discarded');
   });
 
 
