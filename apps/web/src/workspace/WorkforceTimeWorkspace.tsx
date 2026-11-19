@@ -235,8 +235,27 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
           {timesheetDetail && <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
             <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1}>
               <Box><Typography fontWeight={800}>Timesheet lines</Typography><Typography variant="caption" color="text.secondary">Status: {text(timesheetDetail.status)}</Typography></Box>
-              {['draft','rejected'].includes(String(timesheetDetail.status)) && <Button variant="outlined" disabled={busy} onClick={() => void perform(() => request(`tenant/timesheets/${selectedTimesheet}/submit`,json('POST')),'Timesheet submitted for approval.')}>Submit for approval</Button>}
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                {['draft','rejected'].includes(String(timesheetDetail.status)) && <>
+                  <Button variant="outlined" disabled={busy} onClick={beginTimesheetEdit}>Edit header</Button>
+                  <Button variant="outlined" disabled={busy} onClick={() => void perform(() => request(`tenant/timesheets/${selectedTimesheet}/submit`,json('POST')),'Timesheet submitted for approval.')}>Submit for approval</Button>
+                </>}
+              </Stack>
             </Stack>
+            {editingTimesheet && <Stack spacing={1} sx={{ mt: 2 }}>
+              <Typography fontWeight={700}>Edit timesheet details</Typography>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
+                <TextField size="small" type="date" label="Period start" value={timesheetHeader.periodStart} onChange={e => setTimesheetHeader(v => ({ ...v, periodStart: e.target.value }))} InputLabelProps={{ shrink: true }} />
+                <TextField size="small" type="date" label="Period end" value={timesheetHeader.periodEnd} onChange={e => setTimesheetHeader(v => ({ ...v, periodEnd: e.target.value }))} InputLabelProps={{ shrink: true }} />
+                <TextField size="small" label="Notes" value={timesheetHeader.notes} onChange={e => setTimesheetHeader(v => ({ ...v, notes: e.target.value }))} fullWidth />
+                <Button variant="contained" disabled={busy || !timesheetHeader.periodStart || !timesheetHeader.periodEnd || timesheetHeader.periodEnd < timesheetHeader.periodStart} onClick={() => void perform(async () => {
+                  await request(`tenant/timesheets/${selectedTimesheet}`, json('PATCH', timesheetHeader));
+                  setEditingTimesheet(false);
+                  await openTimesheet(selectedTimesheet);
+                }, 'Timesheet details updated.')}>Save header</Button>
+                <Button color="inherit" disabled={busy} onClick={() => setEditingTimesheet(false)}>Cancel</Button>
+              </Stack>
+            </Stack>}
             {['draft','rejected'].includes(String(timesheetDetail.status)) && <Stack spacing={1} sx={{ mt: 2 }}>
               <Typography fontWeight={700}>{editingLineId ? 'Edit timesheet line' : 'Add timesheet line'}</Typography>
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
