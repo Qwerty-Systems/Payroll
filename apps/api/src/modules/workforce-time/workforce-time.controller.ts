@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
 import {
-  CreateLeaveRequestDto, CreateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
+  CreateLeaveRequestDto, CreateLeaveTypeDto, UpdateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
   CreateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
 } from './workforce-time.dto';
@@ -47,6 +47,12 @@ export class WorkforceTimeController {
   @TenantPermissions('attendance.approve')
   createLeaveType(@Req() req: TenantRequest, @Body() dto: CreateLeaveTypeDto) {
     return this.service.createLeaveType(req.tenant.id, req.tenant.userId, dto);
+  }
+
+  @Patch('leave-types/:id')
+  @TenantPermissions('attendance.approve')
+  updateLeaveType(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateLeaveTypeDto) {
+    return this.service.updateLeaveType(req.tenant.id, req.tenant.userId, id, dto);
   }
 
   @Get('leave-balances')
@@ -110,6 +116,12 @@ export class WorkforceTimeController {
     return this.service.cancelOvertimeRequest(req.tenant.id, req.tenant.userId, id);
   }
 
+  @Patch('overtime-requests/:id')
+  @TenantPermissions('attendance.capture')
+  updateOvertimeRequest(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateOvertimeRequestDto) {
+    return this.service.updateOvertimeRequest(req.tenant.id, req.tenant.userId, id, dto);
+  }
+
   @Post('overtime-requests/:id/approve')
   @TenantPermissions('attendance.approve')
   approveOvertimeRequest(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewOvertimeRequestDto) {
@@ -132,6 +144,12 @@ export class WorkforceTimeController {
   @TenantPermissions('attendance.capture')
   createTimesheet(@Req() req: TenantRequest, @Body() dto: CreateTimesheetDto) {
     return this.service.createTimesheet(req.tenant.id, req.tenant.userId, dto);
+  }
+
+  @Patch('timesheets/:id')
+  @TenantPermissions('attendance.capture')
+  updateTimesheet(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTimesheetDto) {
+    return this.service.updateTimesheet(req.tenant.id, req.tenant.userId, id, dto);
   }
 
   @Get('timesheets/:id')
