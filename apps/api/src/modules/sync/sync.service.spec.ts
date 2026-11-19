@@ -102,6 +102,22 @@ describe('SyncService', () => {
     expect(query.mock.calls[1][0]).toContain('sync.conflict.discarded');
   });
 
+
+  it('marks a conflict reviewed without changing the original sync command', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ id: 'conflict-1', commandId, state: 'resolved', resolution: 'Reviewed and retained existing attendance' }])
+      .mockResolvedValueOnce([]);
+    const { service } = createService(query);
+
+    await expect(service.resolveConflict(tenantId, userId, 'conflict-1', 'Reviewed and retained existing attendance', 'resolved'))
+      .resolves.toMatchObject({ id: 'conflict-1', state: 'resolved' });
+
+    expect(query.mock.calls[0][0]).toContain('SET state=$5');
+    expect(query.mock.calls[0][1]).toEqual([tenantId, 'conflict-1', 'Reviewed and retained existing attendance', userId, 'resolved']);
+    expect(query.mock.calls[1][1][4]).toBe('sync.conflict.resolved');
+    expect(query.mock.calls.some(([sql]) => String(sql).includes('UPDATE sync_commands'))).toBe(false);
+  });
+
   it('does not downgrade an accepted command when its ID is reused with a different payload', async () => {
     const original = createHash('sha256').update(JSON.stringify(attendancePayload)).digest('hex');
     const changed = { ...attendancePayload, minutesWorked: 600 };
