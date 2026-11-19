@@ -177,16 +177,16 @@ export class SyncService {
     ));
   }
 
-  resolveConflict(tenantId: string, actorId: string, id: string, resolution: string) {
+  resolveConflict(tenantId: string, actorId: string, id: string, resolution: string, state: 'resolved' | 'discarded' = 'discarded') {
     return this.tenantDb.run(tenantId, async (m) => {
       const rows = await m.query(
-        "UPDATE sync_conflicts SET state='discarded',resolution=$3,resolved_by=$4,resolved_at=now() WHERE tenant_id=$1 AND id=$2 AND state='open' RETURNING id,command_id AS \"commandId\",state,resolution",
-        [tenantId, id, resolution.trim(), actorId],
+        "UPDATE sync_conflicts SET state=$5,resolution=$3,resolved_by=$4,resolved_at=now() WHERE tenant_id=$1 AND id=$2 AND state='open' RETURNING id,command_id AS \"commandId\",state,resolution",
+        [tenantId, id, resolution.trim(), actorId, state],
       );
       if (!rows.length) throw new NotFoundException('Open sync conflict not found.');
       await m.query(
-        "INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'sync.conflict.discarded','sync_conflict',$3,$4::jsonb)",
-        [tenantId, actorId, id, JSON.stringify({ resolution: resolution.trim(), commandId: rows[0].commandId })],
+        "INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,$5,'sync_conflict',$3,$4::jsonb)",
+        [tenantId, actorId, id, JSON.stringify({ resolution: resolution.trim(), commandId: rows[0].commandId }), state === 'resolved' ? 'sync.conflict.resolved' : 'sync.conflict.discarded'],
       );
       return rows[0];
     });
