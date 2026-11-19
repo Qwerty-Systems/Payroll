@@ -215,7 +215,7 @@ export class WorkforceTimeService {
         concat_ws(' ',w.first_name,w.last_name) AS "workerName",
         o.project_id AS "projectId",o.site_id AS "siteId",o.work_date::text AS "workDate",
         o.requested_minutes AS "requestedMinutes",o.approved_minutes AS "approvedMinutes",
-        o.reason,o.status,o.review_reason AS "reviewReason",o.reviewed_at AS "reviewedAt"
+        o.reason,o.status,o.requested_by AS "requestedBy",o.review_reason AS "reviewReason",o.reviewed_at AS "reviewedAt"
       FROM overtime_requests o JOIN workers w ON w.tenant_id=o.tenant_id AND w.id=o.worker_id
       WHERE o.tenant_id=$1 AND ($2::text IS NULL OR o.status=$2)
       ORDER BY o.work_date DESC,o.created_at DESC
@@ -233,6 +233,29 @@ export class WorkforceTimeService {
           work_date::text AS "workDate",requested_minutes AS "requestedMinutes",status,reason
       `,[tenantId,dto.workerId,dto.projectId??null,dto.siteId??null,dto.workDate,dto.requestedMinutes,dto.reason,actorId]);
       await this.audit(m,tenantId,actorId,'overtime.request.created','overtime_request',rows[0].id,rows[0]);
+      return rows[0];
+    });
+  }
+
+  updateOvertimeRequest(tenantId: string, actorId: string, id: string, dto: CreateOvertimeRequestDto) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const found=await m.query('SELECT * FROM overtime_requests WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);
+      if(!found.length) throw new NotFoundException('Overtime request not found.');
+      const before=found[0];
+      if(before.requested_by!==actorId) throw new BadRequestException('Only the original requester can edit this overtime request.');
+      if(before.status!=='pending') throw new ConflictException('Only pending overtime requests can be edited.');
+      if(dto.workerId!==before.worker_id) throw new BadRequestException('The employee on an overtime request cannot be changed.');
+      const worker=await m.query("SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active'",[tenantId,before.worker_id]);
+      if(!worker.length) throw new NotFoundException('Active worker not found.');
+      const rows=await m.query(`
+        UPDATE overtime_requests SET project_id=$3,site_id=$4,work_date=$5,
+          requested_minutes=$6,reason=$7,updated_at=now()
+        WHERE tenant_id=$1 AND id=$2
+        RETURNING id,worker_id AS "workerId",project_id AS "projectId",site_id AS "siteId",
+          work_date::text AS "workDate",requested_minutes AS "requestedMinutes",
+          approved_minutes AS "approvedMinutes",status,reason
+      `,[tenantId,id,dto.projectId??null,dto.siteId??null,dto.workDate,dto.requestedMinutes,dto.reason.trim()]);
+      await this.audit(m,tenantId,actorId,'overtime.request.updated','overtime_request',id,{before,after:rows[0]});
       return rows[0];
     });
   }

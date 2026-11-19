@@ -33,6 +33,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [balance, setBalance] = useState({ workerId: '', leaveTypeId: '', leaveYear: String(new Date().getFullYear()), openingDays: '0', accruedDays: '0', adjustmentDays: '0' });
   const [leave, setLeave] = useState({ workerId: '', leaveTypeId: '', startDate: today(), endDate: today(), requestedDays: '1', reason: '' });
   const [overtime, setOvertime] = useState({ workerId: '', workDate: today(), requestedMinutes: '60', reason: '', projectId: '', siteId: '' });
+  const [editingOvertimeId, setEditingOvertimeId] = useState<string | null>(null);
   const [timesheet, setTimesheet] = useState({ workerId: '', periodStart: today().slice(0, 8) + '01', periodEnd: today(), notes: '' });
   const [line, setLine] = useState({ workDate: today(), minutesWorked: '480', overtimeMinutes: '0', description: '', projectId: '', siteId: '', unitsCompleted: '' });
 
@@ -175,10 +176,18 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
             <TextField size="small" type="date" label="Work date" value={overtime.workDate} onChange={e => setOvertime(v => ({ ...v, workDate: e.target.value }))} InputLabelProps={{ shrink: true }} />
             <TextField size="small" type="number" label="Minutes" value={overtime.requestedMinutes} onChange={e => setOvertime(v => ({ ...v, requestedMinutes: e.target.value }))} sx={{ width: 110 }} />
             <TextField size="small" label="Reason" value={overtime.reason} onChange={e => setOvertime(v => ({ ...v, reason: e.target.value }))} />
-            <Button variant="contained" disabled={busy || !overtime.workerId || overtime.reason.length < 5} onClick={() => void perform(() => request('tenant/overtime-requests', json('POST', { ...overtime, requestedMinutes: Number(overtime.requestedMinutes), projectId: overtime.projectId || undefined, siteId: overtime.siteId || undefined })), 'Overtime request submitted.')}>Submit</Button>
+            <Button variant="contained" disabled={busy || !overtime.workerId || overtime.reason.length < 5 || Number(overtime.requestedMinutes)<1 || Number(overtime.requestedMinutes)>1440} onClick={() => void perform(async () => {
+              const payload={ ...overtime, requestedMinutes: Number(overtime.requestedMinutes), projectId: overtime.projectId || undefined, siteId: overtime.siteId || undefined };
+              await request(editingOvertimeId ? `tenant/overtime-requests/${editingOvertimeId}` : 'tenant/overtime-requests', json(editingOvertimeId ? 'PATCH' : 'POST', payload));
+              setEditingOvertimeId(null);
+              setOvertime({ workerId: '', workDate: today(), requestedMinutes: '60', reason: '', projectId: '', siteId: '' });
+            }, editingOvertimeId ? 'Overtime request updated.' : 'Overtime request submitted.')}>{editingOvertimeId ? 'Save changes' : 'Submit'}</Button>
+            {editingOvertimeId && <Button color="inherit" disabled={busy} onClick={() => { setEditingOvertimeId(null); setOvertime({ workerId: '', workDate: today(), requestedMinutes: '60', reason: '', projectId: '', siteId: '' }); }}>Cancel edit</Button>}
           </Stack>
           <Table size="small"><TableHead><TableRow>{['Employee','Date','Requested','Approved','Reason','Status','Review'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
-            <TableBody>{overtimeRequests.map(r => <TableRow key={String(r.id)}><TableCell>{text(r.workerName)}</TableCell><TableCell>{text(r.workDate)}</TableCell><TableCell>{text(r.requestedMinutes)} min</TableCell><TableCell>{text(r.approvedMinutes)}</TableCell><TableCell>{text(r.reason)}</TableCell><TableCell><Chip size="small" label={text(r.status)} /></TableCell><TableCell>{r.status === 'pending' && <Stack direction="row"><Button size="small" disabled={busy} onClick={() => void perform(() => request(`tenant/overtime-requests/${r.id}/approve`, json('POST', { reason: 'Approved after review.' })), 'Overtime approved.')}>Approve</Button><Button size="small" color="error" disabled={busy} onClick={() => void perform(() => request(`tenant/overtime-requests/${r.id}/reject`, json('POST', { reason: 'Not approved.' })), 'Overtime rejected.')}>Reject</Button></Stack>}</TableCell></TableRow>)}
+            <TableBody>{overtimeRequests.map(r => <TableRow key={String(r.id)}><TableCell>{text(r.workerName)}</TableCell><TableCell>{text(r.workDate)}</TableCell><TableCell>{text(r.requestedMinutes)} min</TableCell><TableCell>{text(r.approvedMinutes)}</TableCell><TableCell>{text(r.reason)}</TableCell><TableCell><Chip size="small" label={text(r.status)} /></TableCell><TableCell>{r.status === 'pending' && <Stack direction="row">
+                <Button size="small" disabled={busy} onClick={() => { setEditingOvertimeId(String(r.id)); setOvertime({ workerId: String(r.workerId ?? ''), workDate: String(r.workDate ?? today()), requestedMinutes: String(r.requestedMinutes ?? 60), reason: String(r.reason ?? ''), projectId: String(r.projectId ?? ''), siteId: String(r.siteId ?? '') }); }}>Edit</Button>
+                <Button size="small" disabled={busy} onClick={() => void perform(() => request(`tenant/overtime-requests/${r.id}/approve`, json('POST', { reason: 'Approved after review.' })), 'Overtime approved.')}>Approve</Button><Button size="small" color="error" disabled={busy} onClick={() => void perform(() => request(`tenant/overtime-requests/${r.id}/reject`, json('POST', { reason: 'Not approved.' })), 'Overtime rejected.')}>Reject</Button></Stack>}</TableCell></TableRow>)}
               {!overtimeRequests.length && <TableRow><TableCell colSpan={7}>No overtime requests.</TableCell></TableRow>}</TableBody>
           </Table>
         </Stack>}
