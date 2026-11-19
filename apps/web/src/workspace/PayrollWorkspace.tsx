@@ -83,8 +83,16 @@ export default function PayrollWorkspace({request,onRefresh}:Props) {
     setPeriodDialog(true);
   }
   async function savePeriod() {
+    const code=periodForm.code.trim(),name=periodForm.name.trim();
+    if(code.length<2||code.length>40){setError('Period code must be between 2 and 40 characters.');return;}
+    if(name.length<2||name.length>120){setError('Period name must be between 2 and 120 characters.');return;}
+    if(!periodForm.startDate||!periodForm.endDate){setError('Start date and end date are required.');return;}
+    if(periodForm.endDate<periodForm.startDate){setError('Period end date must not precede its start date.');return;}
+    const start=new Date(periodForm.startDate+'T00:00:00Z'),end=new Date(periodForm.endDate+'T00:00:00Z');
+    if(start.getUTCFullYear()!==end.getUTCFullYear()||start.getUTCMonth()!==end.getUTCMonth()){setError('A payroll period must remain within one calendar month.');return;}
+    if(periodForm.paymentDate&&(periodForm.paymentDate<periodForm.startDate||periodForm.paymentDate>periodForm.endDate)){setError('Payment date must fall within the payroll period.');return;}
     await perform(async()=>{
-      const payload={...periodForm,paymentDate:periodForm.paymentDate||null};
+      const payload={...periodForm,code,name,paymentDate:periodForm.paymentDate||null};
       if(periodEditing) await request('payroll/periods/'+periodEditing,body('PATCH',payload));
       else await request('payroll/periods',body('POST',payload));
       setPeriodDialog(false);
