@@ -122,7 +122,7 @@ export class IdentityService {
         for (const [code, name, method] of allowanceSeeds) {
           await manager.query(
             `INSERT INTO tenant_allowance_types(tenant_id,code,name,calculation_method,configuration,tax_treatment,is_enabled,requires_approval,effective_from)
-             VALUES ($1,$2,$3,$4,CASE WHEN $2 IN ('OVERTIME','NIGHT_SHIFT') THEN '{"hoursBasis":"all_approved_hours"}'::jsonb ELSE '{}'::jsonb END,'review_required',true,true,CURRENT_DATE)
+             VALUES ($1,$2::varchar,$3,$4,CASE WHEN $2::varchar IN ('OVERTIME','NIGHT_SHIFT') THEN '{"hoursBasis":"all_approved_hours"}'::jsonb ELSE '{}'::jsonb END,'review_required',true,true,CURRENT_DATE)
              ON CONFLICT(tenant_id,code,effective_from) DO NOTHING`,
             [tenant.id, code, name, method],
           );
