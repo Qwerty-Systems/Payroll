@@ -4,7 +4,7 @@ import { EntityManager } from 'typeorm';
 import {
   CreateLeaveRequestDto, CreateLeaveTypeDto, UpdateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
-  CreateTimesheetDto, UpdateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto, CreateShiftAssignmentDto,
+  CreateTimesheetDto, UpdateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto, CreateShiftAssignmentDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto,
 } from './workforce-time.dto';
 
 @Injectable()
@@ -546,6 +546,94 @@ export class WorkforceTimeService {
         WHERE tenant_id=$1 AND id=$2 RETURNING id,status`,[tenantId,id]);
       await this.audit(m,tenantId,actorId,'attendance.shift.assignment.cancelled','worker_shift_assignment',id,{previousStatus:found[0].status});
       return rows[0];
+    });
+  }
+
+  listAttendanceCorrections(tenantId: string, status?: string, attendanceId?: string) {
+    return this.tenantDb.run(tenantId, m => m.query(`
+      SELECT c.id,c.attendance_id AS "attendanceId",c.proposed_values AS "proposedValues",
+        c.reason,c.status,c.requested_by AS "requestedBy",c.review_reason AS "reviewReason",
+        c.reviewed_by AS "reviewedBy",c.created_at AS "createdAt",c.reviewed_at AS "reviewedAt",
+        a.worker_id AS "workerId",w.worker_number AS "workerNumber",
+        concat_ws(' ',w.first_name,w.last_name) AS "workerName",a.work_date::text AS "workDate",
+        a.clock_in AS "clockIn",a.clock_out AS "clockOut",a.minutes_worked AS "minutesWorked"
+      FROM attendance_correction_requests c
+      JOIN attendance_records a ON a.tenant_id=c.tenant_id AND a.id=c.attendance_id
+      JOIN workers w ON w.tenant_id=a.tenant_id AND w.id=a.worker_id
+      WHERE c.tenant_id=$1 AND ($2::text IS NULL OR c.status=$2)
+        AND ($3::uuid IS NULL OR c.attendance_id=$3)
+      ORDER BY c.created_at DESC
+    `,[tenantId,status??null,attendanceId??null]));
+  }
+
+  createAttendanceCorrection(tenantId: string, actorId: string, attendanceId: string, dto: CreateAttendanceCorrectionDto) {
+    const allowed=['clockIn','clockOut','minutesWorked'];
+    const keys=Object.keys(dto.proposedValues ?? {});
+    if(!keys.length || keys.some(key=>!allowed.includes(key)))
+      throw new BadRequestException('Corrections may only include clockIn, clockOut or minutesWorked.');
+    if('minutesWorked' in dto.proposedValues && dto.proposedValues.minutesWorked!==null &&
+      (!Number.isInteger(dto.proposedValues.minutesWorked) || Number(dto.proposedValues.minutesWorked)<0))
+      throw new BadRequestException('minutesWorked must be a non-negative integer or null.');
+    for(const key of ['clockIn','clockOut']) {
+      if(key in dto.proposedValues && dto.proposedValues[key]!==null &&
+        (typeof dto.proposedValues[key]!=='string' || !Number.isFinite(Date.parse(String(dto.proposedValues[key])))))
+        throw new BadRequestException(key+' must be a valid date-time string or null.');
+    }
+    const proposed=dto.proposedValues;
+    if(proposed.clockIn && proposed.clockOut && Date.parse(String(proposed.clockOut))<Date.parse(String(proposed.clockIn)))
+      throw new BadRequestException('Clock-out cannot precede clock-in.');
+    return this.tenantDb.run(tenantId,async m=>{
+      const record=await m.query('SELECT id,clock_in,clock_out,minutes_worked,status FROM attendance_records WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,attendanceId]);
+      if(!record.length) throw new NotFoundException('Attendance record not found.');
+      const pending=await m.query(`SELECT id FROM attendance_correction_requests WHERE tenant_id=$1 AND attendance_id=$2 AND status='pending'`,[tenantId,attendanceId]);
+      if(pending.length) throw new ConflictException('An attendance correction is already pending review.');
+      const rows=await m.query(`
+        INSERT INTO attendance_correction_requests(tenant_id,attendance_id,proposed_values,reason,requested_by)
+        VALUES($1,$2,$3::jsonb,$4,$5)
+        RETURNING id,attendance_id AS "attendanceId",proposed_values AS "proposedValues",reason,status,created_at AS "createdAt"
+      `,[tenantId,attendanceId,JSON.stringify(proposed),dto.reason.trim(),actorId]);
+      await this.audit(m,tenantId,actorId,'attendance.correction.requested','attendance_correction_request',rows[0].id,{attendanceId,proposedValues:proposed,reason:dto.reason});
+      return rows[0];
+    });
+  }
+
+  reviewAttendanceCorrection(tenantId: string, actorId: string, id: string, decision: 'approve'|'reject', dto: ReviewAttendanceCorrectionDto) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const rows=await m.query('SELECT * FROM attendance_correction_requests WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);
+      if(!rows.length) throw new NotFoundException('Attendance correction request not found.');
+      const request=rows[0];
+      if(request.status!=='pending') throw new ConflictException('Only pending attendance corrections can be reviewed.');
+      if(request.requested_by===actorId) throw new BadRequestException('The requester cannot review their own attendance correction.');
+      if(decision==='approve') {
+        const attendance=await m.query('SELECT * FROM attendance_records WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,request.attendance_id]);
+        if(!attendance.length) throw new NotFoundException('Attendance record not found.');
+        const p=request.proposed_values as Record<string,unknown>,a=attendance[0];
+        const clockIn='clockIn' in p ? p.clockIn : a.clock_in;
+        const clockOut='clockOut' in p ? p.clockOut : a.clock_out;
+        if(clockIn && clockOut && Date.parse(String(clockOut))<Date.parse(String(clockIn)))
+          throw new BadRequestException('Clock-out cannot precede clock-in.');
+        if('minutesWorked' in p && p.minutesWorked!==null && (!Number.isInteger(p.minutesWorked) || Number(p.minutesWorked)<0))
+          throw new BadRequestException('minutesWorked must be a non-negative integer or null.');
+        const updates:string[]=[],values:unknown[]=[tenantId,request.attendance_id];
+        const mapping:{key:string;column:string}[]=[{key:'clockIn',column:'clock_in'},{key:'clockOut',column:'clock_out'},{key:'minutesWorked',column:'minutes_worked'}];
+        for(const item of mapping) if(item.key in p) { values.push(p[item.key]); updates.push(item.column+'=, tenantId: string,
+    actorId: string, action: string, entityType: string, entityId: string, metadata: unknown) {
+    return m.query(`
+      INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
+      VALUES($1,$2,$3,$4,$5,$6::jsonb)
+    `,[tenantId,actorId,action,entityType,entityId,JSON.stringify(metadata)]);
+  }
+}
++values.length); }
+        if(updates.length) await m.query(`UPDATE attendance_records SET ${updates.join(',')},updated_at=now() WHERE tenant_id=$1 AND id=$2`,values);
+      }
+      const updated=await m.query(`
+        UPDATE attendance_correction_requests SET status=$3,reviewed_by=$4,review_reason=$5,reviewed_at=now()
+        WHERE tenant_id=$1 AND id=$2
+        RETURNING id,status,review_reason AS "reviewReason",reviewed_at AS "reviewedAt"
+      `,[tenantId,id,decision==='approve'?'approved':'rejected',actorId,dto.reason.trim()]);
+      await this.audit(m,tenantId,actorId,'attendance.correction.'+decision,'attendance_correction_request',id,{attendanceId:request.attendance_id,reason:dto.reason,proposedValues:request.proposed_values});
+      return updated[0];
     });
   }
 
