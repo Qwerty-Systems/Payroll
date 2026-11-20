@@ -403,6 +403,15 @@ export class WorkforceTimeService {
       const periodStart=dto.periodStart??String(before.period_start).slice(0,10);
       const periodEnd=dto.periodEnd??String(before.period_end).slice(0,10);
       if (periodEnd<periodStart) throw new BadRequestException('Timesheet period end cannot precede its start date.');
+      const worker=await m.query('SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,before.worker_id]);
+      if(!worker.length) throw new NotFoundException('Worker not found.');
+      const overlapping=await m.query(`
+        SELECT id FROM timesheets WHERE tenant_id=$1 AND worker_id=$2 AND id<>$3
+          AND status IN ('draft','submitted','approved')
+          AND daterange(period_start,period_end,'[]') && daterange($4::date,$5::date,'[]')
+        LIMIT 1
+      `,[tenantId,before.worker_id,id,periodStart,periodEnd]);
+      if(overlapping.length) throw new ConflictException('The updated timesheet period overlaps another timesheet for this worker.');
       const outOfRange=await m.query('SELECT id FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2 AND (work_date<$3 OR work_date>$4) LIMIT 1',[tenantId,id,periodStart,periodEnd]);
       if(outOfRange.length) throw new ConflictException('The new period excludes existing timesheet lines. Move or remove those lines first.');
       const updated=await m.query(`
