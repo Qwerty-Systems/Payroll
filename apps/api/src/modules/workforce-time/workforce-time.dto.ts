@@ -93,3 +93,10 @@ export class UpdateTimesheetLineDto {
   @IsOptional() @IsString() @Length(1, 500) description?: string | null;
 }
 export class ReviewTimesheetDto { @IsString() @Length(3, 500) reason!: string; }
+
+export class CreateShiftAssignmentDto {
+  @IsUUID() workerId!: string;
+  @IsUUID() shiftId!: string;
+  @IsDateString() workDate!: string;
+  @IsOptional() @IsString() @Length(1, 500) notes?: string;
+}
