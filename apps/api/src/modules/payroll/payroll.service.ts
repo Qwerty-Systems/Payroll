@@ -482,7 +482,7 @@ export class PayrollService {
       const rows=await m.query("SELECT i.id,i.status,b.status AS batch_status FROM payroll_payment_batch_items i JOIN payroll_payment_batches b ON b.tenant_id=i.tenant_id AND b.id=i.batch_id WHERE i.tenant_id=$1 AND b.id=$2 AND i.id=$3 FOR UPDATE",[tenantId,batchId,itemId]);
       if(!rows.length) throw new NotFoundException('Payment batch item not found.');
       if(rows[0].batch_status!=='approved' && rows[0].batch_status!=='partially_paid') throw new ConflictException('Only an approved payment batch can accept payment confirmations.');
-      if(rows[0].status==='paid') throw new ConflictException('This payment item has already been confirmed as paid.');
+      if(!['pending','processing','failed'].includes(rows[0].status)) throw new ConflictException('Only pending, processing or failed payment items can be confirmed; reversed and paid items are terminal.');
       if(!providerReference.trim()) throw new BadRequestException('A bank or payment provider reference is required.');
       const updated=await m.query("UPDATE payroll_payment_batch_items SET status='paid',provider_reference=$4,paid_at=now() WHERE tenant_id=$1 AND batch_id=$2 AND id=$3 RETURNING id,status,provider_reference AS \"providerReference\",paid_at AS \"paidAt\"",[tenantId,batchId,itemId,providerReference.trim()]);
       const counts=await m.query("SELECT count(*) FILTER (WHERE status='paid')::int AS paid,count(*)::int AS total FROM payroll_payment_batch_items WHERE tenant_id=$1 AND batch_id=$2",[tenantId,batchId]);
