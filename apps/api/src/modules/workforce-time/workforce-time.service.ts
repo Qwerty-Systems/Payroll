@@ -374,8 +374,15 @@ export class WorkforceTimeService {
   createTimesheet(tenantId: string, actorId: string, dto: CreateTimesheetDto) {
     if(dto.periodEnd<dto.periodStart) throw new BadRequestException('Timesheet period end cannot precede its start date.');
     return this.tenantDb.run(tenantId,async m=>{
-      const worker=await m.query("SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active'",[tenantId,dto.workerId]);
+      const worker=await m.query("SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active' FOR UPDATE",[tenantId,dto.workerId]);
       if(!worker.length) throw new NotFoundException('Active worker not found.');
+      const overlapping=await m.query(`
+        SELECT id FROM timesheets WHERE tenant_id=$1 AND worker_id=$2
+          AND status IN ('draft','submitted','approved')
+          AND daterange(period_start,period_end,'[]') && daterange($3::date,$4::date,'[]')
+        LIMIT 1
+      `,[tenantId,dto.workerId,dto.periodStart,dto.periodEnd]);
+      if(overlapping.length) throw new ConflictException('A timesheet already exists for this worker with an overlapping period. Edit the existing timesheet or choose a non-overlapping date range.');
       const rows=await m.query(`
         INSERT INTO timesheets(tenant_id,worker_id,period_start,period_end,notes)
         VALUES($1,$2,$3,$4,$5)
