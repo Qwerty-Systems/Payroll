@@ -61,6 +61,8 @@ export class PayrollService {
 
   async updatePeriod(tenantId: string, actorId: string, periodId: string, dto: UpdatePayrollPeriodDto) {
     return this.tenantDb.run(tenantId, async m => {
+      // Serialize payroll-period date changes within a tenant to prevent concurrent overlap races.
+      await m.query('SELECT pg_advisory_xact_lock(hashtext($1))',[tenantId]);
       const current = await m.query('SELECT * FROM payroll_periods WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,periodId]);
       if (!current.length) throw new NotFoundException('Payroll period not found.');
       if (current[0].status !== 'open') throw new ConflictException('Only open payroll periods can be edited.');
@@ -171,6 +173,8 @@ export class PayrollService {
     const start = new Date(dto.startDate + 'T00:00:00Z'); const end = new Date(dto.endDate + 'T00:00:00Z');
     if (start.getUTCFullYear() !== end.getUTCFullYear() || start.getUTCMonth() !== end.getUTCMonth()) throw new BadRequestException('A payroll period must remain within one calendar month.');
     return this.tenantDb.run(tenantId, async m => {
+      // Use the same tenant-scoped lock as updatePeriod so concurrent creates/edits cannot overlap.
+      await m.query('SELECT pg_advisory_xact_lock(hashtext($1))',[tenantId]);
       const overlap = await m.query("SELECT id FROM payroll_periods WHERE tenant_id=$1 AND status <> 'closed' AND daterange(start_date,end_date,'[]') && daterange($2::date,$3::date,'[]') LIMIT 1",[tenantId,dto.startDate,dto.endDate]);
       if (overlap.length) throw new ConflictException('This payroll period overlaps an existing open or locked period.');
       const rows = await m.query('INSERT INTO payroll_periods (tenant_id,code,name,start_date,end_date,payment_date,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,code,name,start_date AS "startDate",end_date AS "endDate",payment_date AS "paymentDate",status',[tenantId,dto.code.trim(),dto.name.trim(),dto.startDate,dto.endDate,dto.paymentDate ?? null,actorId]);
