@@ -4,7 +4,7 @@ import { TenantAccessGuard, ROLE_PERMISSIONS } from './tenant-access.guard';
 const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const SUBJECT = 'auth0|test-user';
 
-function makeContext(required: string[] | undefined, request: Record<string, any>) {
+function makeContext(request: Record<string, any>) {
   const handler = {};
   const controller = {};
   return {
@@ -24,13 +24,13 @@ function makeGuard(required: string[] | undefined, rows: any[] = [{ membership_i
 describe('TenantAccessGuard', () => {
   it('requires authentication for routes with tenant permissions', async () => {
     const { guard } = makeGuard(['payroll.read']);
-    await expect(guard.canActivate(makeContext(['payroll.read'], { headers: { 'x-tenant-id': TENANT_ID } }))).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(guard.canActivate(makeContext({ headers: { 'x-tenant-id': TENANT_ID } }))).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('requires a valid tenant UUID', async () => {
     const { guard } = makeGuard(['payroll.read']);
     const request: any = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': 'not-a-uuid' } };
-    await expect(guard.canActivate(makeContext(['payroll.read'], request))).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(guard.canActivate(makeContext(request))).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('rejects identities without active membership', async () => {
@@ -56,14 +56,14 @@ describe('TenantAccessGuard', () => {
   it('denies unknown roles rather than granting access', async () => {
     const { guard } = makeGuard(['workers.manage'], [{ membership_id: 'm-1', role: 'unexpected_role', tenant_id: TENANT_ID, user_id: 'u-1' }]);
     const request = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': TENANT_ID } };
-    await expect(guard.canActivate(makeContext(['workers.manage'], request))).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(guard.canActivate(makeContext(request))).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('allows owners the wildcard permission', async () => {
     expect(ROLE_PERMISSIONS.owner).toContain('*');
     const { guard } = makeGuard(['payroll.finalize']);
     const request = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': TENANT_ID } };
-    await expect(guard.canActivate(makeContext(['payroll.finalize'], request))).resolves.toBe(true);
+    await expect(guard.canActivate(makeContext(request))).resolves.toBe(true);
   });
 
   it('defines a permission for every permission used by tenant controllers', () => {
