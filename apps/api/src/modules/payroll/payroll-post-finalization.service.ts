@@ -59,6 +59,12 @@ export class PayrollPostFinalizationService {
       if (type === 'adjustment' && correctionLines.some(x => !x.workerId || !x.code?.trim() || !x.description?.trim())) {
         throw new BadRequestException('Each adjustment line requires a worker, code and description.');
       }
+      if (type === 'adjustment') {
+        const runWorkers = await m.query('SELECT worker_id FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2', [tenantId,runId]);
+        const includedWorkers = new Set(runWorkers.map((item:any) => String(item.worker_id)));
+        const outsideRun = correctionLines.find(line => !includedWorkers.has(String(line.workerId)));
+        if (outsideRun) throw new BadRequestException('Correction lines can only reference workers included in the original finalized payroll run.');
+      }
       const next = await m.query('SELECT COALESCE(MAX(correction_number),0)+1 AS n FROM payroll_corrections WHERE tenant_id=$1 AND original_run_id=$2', [tenantId,runId]);
       const created = await m.query(`
         INSERT INTO payroll_corrections
