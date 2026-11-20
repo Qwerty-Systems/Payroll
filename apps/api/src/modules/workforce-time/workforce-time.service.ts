@@ -12,7 +12,7 @@ export class WorkforceTimeService {
   constructor(private readonly tenantDb: TenantTransactionService) {}
 
   private validateShift(startTime: string, endTime: string, breakMinutes: number, crossesMidnight?: boolean) {
-    const validTime = /^([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d)?$/;
+    const validTime = /^([01]\d|2[0-3]):[0-5]d(:[0-5]d)?$/;
     if (!validTime.test(startTime) || !validTime.test(endTime)) {
       throw new BadRequestException('Shift times must use HH:mm or HH:mm:ss.');
     }
