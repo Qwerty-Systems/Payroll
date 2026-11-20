@@ -5,11 +5,9 @@ const TENANT_ID = '11111111-1111-4111-8111-111111111111';
 const SUBJECT = 'auth0|test-user';
 
 function makeContext(request: Record<string, any>) {
-  const handler = {};
-  const controller = {};
   return {
-    getHandler: () => handler,
-    getClass: () => controller,
+    getHandler: () => ({}),
+    getClass: () => ({}),
     switchToHttp: () => ({ getRequest: () => request }),
   } as any;
 }
@@ -17,8 +15,10 @@ function makeContext(request: Record<string, any>) {
 function makeGuard(required: string[] | undefined, rows: any[] = [{ membership_id: 'membership-1', role: 'owner', tenant_id: TENANT_ID, user_id: 'user-1' }]) {
   const reflector = { getAllAndOverride: jest.fn().mockReturnValue(required) } as any;
   const manager = { query: jest.fn().mockResolvedValue(rows) };
-  const tenantDb = { run: jest.fn(async (_tenantId: string, callback: (manager: any) => Promise<any>) => callback(manager) } as any;
-  return { guard: new TenantAccessGuard(reflector, tenantDb), reflector, tenantDb, manager };
+  const tenantDb = {
+    run: jest.fn(async (_tenantId: string, callback: (manager: any) => Promise<any>) => callback(manager)),
+  } as any;
+  return { guard: new TenantAccessGuard(reflector, tenantDb), tenantDb };
 }
 
 describe('TenantAccessGuard', () => {
@@ -29,7 +29,7 @@ describe('TenantAccessGuard', () => {
 
   it('requires a valid tenant UUID', async () => {
     const { guard } = makeGuard(['payroll.read']);
-    const request: any = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': 'not-a-uuid' } };
+    const request = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': 'not-a-uuid' } };
     await expect(guard.canActivate(makeContext(request))).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -41,8 +41,8 @@ describe('TenantAccessGuard', () => {
 
   it('assigns verified tenant membership to the request on successful authorization', async () => {
     const { guard, tenantDb } = makeGuard(['payroll.read']);
-    const request = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': TENANT_ID } };
-    await expect(guard.canActivate(makeContext(['payroll.read'], request))).resolves.toBe(true);
+    const request: any = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': TENANT_ID } };
+    await expect(guard.canActivate(makeContext(request))).resolves.toBe(true);
     expect(request.tenant).toEqual({ id: TENANT_ID, membershipId: 'membership-1', role: 'owner', userId: 'user-1' });
     expect(tenantDb.run).toHaveBeenCalledWith(TENANT_ID, expect.any(Function));
   });
@@ -50,7 +50,7 @@ describe('TenantAccessGuard', () => {
   it('denies a worker access to payroll read permissions', async () => {
     const { guard } = makeGuard(['payroll.read'], [{ membership_id: 'm-1', role: 'worker', tenant_id: TENANT_ID, user_id: 'u-1' }]);
     const request = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': TENANT_ID } };
-    await expect(guard.canActivate(makeContext(['payroll.read'], request))).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(guard.canActivate(makeContext(request))).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('denies unknown roles rather than granting access', async () => {
@@ -75,8 +75,7 @@ describe('TenantAccessGuard', () => {
       'projects.read', 'users.manage', 'users.read', 'workers.documents.manage',
       'workers.documents.read', 'workers.manage', 'workers.read',
     ];
-    const admin = ROLE_PERMISSIONS.admin;
-    expect(admin).toEqual(expect.arrayContaining(controllerPermissions));
+    expect(ROLE_PERMISSIONS.admin).toEqual(expect.arrayContaining(controllerPermissions));
     expect(ROLE_PERMISSIONS.owner).toContain('*');
     for (const role of ['hr_manager', 'payroll_manager', 'supervisor', 'worker', 'accountant', 'viewer']) {
       expect(Array.isArray(ROLE_PERMISSIONS[role])).toBe(true);
