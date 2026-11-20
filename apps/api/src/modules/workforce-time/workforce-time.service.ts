@@ -4,7 +4,7 @@ import { EntityManager } from 'typeorm';
 import {
   CreateLeaveRequestDto, CreateLeaveTypeDto, UpdateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
-  CreateTimesheetDto, UpdateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
+  CreateTimesheetDto, UpdateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,, CreateShiftAssignmentDto,
 } from './workforce-time.dto';
 
 @Injectable()
