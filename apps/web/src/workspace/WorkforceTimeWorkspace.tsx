@@ -20,6 +20,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [shifts, setShifts] = useState<Row[]>([]);
   const [assignments, setAssignments] = useState<Row[]>([]);
   const [corrections, setCorrections] = useState<Row[]>([]);
+  const [correctionReviewReason, setCorrectionReviewReason] = useState('');
   const [correctionForm, setCorrectionForm] = useState({ attendanceId: '', clockIn: '', clockOut: '', minutesWorked: '', reason: '' });
   const [assignmentDate, setAssignmentDate] = useState(today());
   const [assignmentWorker, setAssignmentWorker] = useState('');
@@ -270,9 +271,10 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
           }, 'Correction request submitted for review.')}>Submit correction</Button>
           <Divider />
           <Typography fontWeight={700}>Pending correction approvals</Typography>
+          <TextField size="small" label="Review note (required for approve/reject)" value={correctionReviewReason} onChange={e => setCorrectionReviewReason(e.target.value)} fullWidth multiline minRows={2} inputProps={{ maxLength: 500 }} helperText={`${correctionReviewReason.length}/500 characters`} />
           <Table size="small"><TableHead><TableRow>{['Employee','Work date','Original clock-in','Original clock-out','Minutes','Requested changes','Reason','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
             <TableBody>{corrections.map(r => <TableRow key={String(r.id)}>
-              <TableCell>{text(r.workerName)} · {text(r.workerNumber)}</TableCell><TableCell>{text(r.workDate)}</TableCell><TableCell>{text(r.clockIn)}</TableCell><TableCell>{text(r.clockOut)}</TableCell><TableCell>{text(r.minutesWorked)}</TableCell><TableCell>{JSON.stringify(r.proposedValues)}</TableCell><TableCell>{text(r.reason)}</TableCell><TableCell><Stack direction="row" spacing={0.5}><Button size="small" disabled={busy} onClick={() => void perform(() => request(`tenant/attendance-corrections/${r.id}/approve`,json('POST',{reason:'Reviewed and approved'})),'Correction approved.')}>Approve</Button><Button size="small" color="error" disabled={busy} onClick={() => void perform(() => request(`tenant/attendance-corrections/${r.id}/reject`,json('POST',{reason:'Reviewed and rejected'})),'Correction rejected.')}>Reject</Button></Stack></TableCell>
+              <TableCell>{text(r.workerName)} · {text(r.workerNumber)}</TableCell><TableCell>{text(r.workDate)}</TableCell><TableCell>{text(r.clockIn)}</TableCell><TableCell>{text(r.clockOut)}</TableCell><TableCell>{text(r.minutesWorked)}</TableCell><TableCell>{JSON.stringify(r.proposedValues)}</TableCell><TableCell>{text(r.reason)}</TableCell><TableCell><Stack direction="row" spacing={0.5}><Button size="small" disabled={busy || correctionReviewReason.trim().length < 3} onClick={() => void perform(async () => { await request(`tenant/attendance-corrections/${r.id}/approve`,json('POST',{reason:correctionReviewReason.trim()})); setCorrectionReviewReason(''); },'Correction approved.')}>Approve</Button><Button size="small" color="error" disabled={busy || correctionReviewReason.trim().length < 3} onClick={() => void perform(async () => { await request(`tenant/attendance-corrections/${r.id}/reject`,json('POST',{reason:correctionReviewReason.trim()})); setCorrectionReviewReason(''); },'Correction rejected.')}>Reject</Button></Stack></TableCell>
             </TableRow>)}
             {!corrections.length && <TableRow><TableCell colSpan={8} sx={{ textAlign: 'center', py: 3 }}>No pending correction requests.</TableCell></TableRow>}</TableBody>
           </Table>
