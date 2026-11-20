@@ -7,7 +7,7 @@ import {
 type Row = Record<string, unknown> & { id?: string };
 type Request = <T,>(path: string, init?: RequestInit) => Promise<T>;
 type Props = { workers: Row[]; request: Request };
-type TabKey = 'shifts' | 'leave' | 'overtime' | 'timesheets';
+type TabKey = 'shifts' | 'assignments' | 'leave' | 'overtime' | 'timesheets';
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value as Row[] : [];
 const text = (value: unknown) => value == null || value === '' ? '—' : String(value);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -18,6 +18,11 @@ const json = (method: string, body?: unknown): RequestInit => ({
 export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [tab, setTab] = useState<TabKey>('shifts');
   const [shifts, setShifts] = useState<Row[]>([]);
+  const [assignments, setAssignments] = useState<Row[]>([]);
+  const [assignmentDate, setAssignmentDate] = useState(today());
+  const [assignmentWorker, setAssignmentWorker] = useState('');
+  const [assignmentShift, setAssignmentShift] = useState('');
+  const [assignmentNotes, setAssignmentNotes] = useState('');
   const [leaveTypes, setLeaveTypes] = useState<Row[]>([]);
   const [balances, setBalances] = useState<Row[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<Row[]>([]);
@@ -48,6 +53,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
       ['shifts', 'tenant/shifts'], ['leaveTypes', 'tenant/leave-types'],
       ['balances', 'tenant/leave-balances'], ['leaveRequests', 'tenant/leave-requests'],
       ['overtimeRequests', 'tenant/overtime-requests'], ['timesheets', 'tenant/timesheets'],
+      ['assignments', `tenant/shift-assignments?from=${assignmentDate}&to=${assignmentDate}`],
     ] as const;
     const results = await Promise.all(endpoints.map(async ([key, path]) => {
       try { return [key, rows(await request<unknown>(path))] as const; }
@@ -60,8 +66,9 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
     setLeaveRequests(results.find(x => x[0] === 'leaveRequests')?.[1] instanceof Array ? results.find(x => x[0] === 'leaveRequests')![1] as Row[] : []);
     setOvertimeRequests(results.find(x => x[0] === 'overtimeRequests')?.[1] instanceof Array ? results.find(x => x[0] === 'overtimeRequests')![1] as Row[] : []);
     setTimesheets(results.find(x => x[0] === 'timesheets')?.[1] instanceof Array ? results.find(x => x[0] === 'timesheets')![1] as Row[] : []);
+    setAssignments(results.find(x => x[0] === 'assignments')?.[1] instanceof Array ? results.find(x => x[0] === 'assignments')![1] as Row[] : []);
     if (failures.length) setError('Some attendance records could not be loaded. Check your role permissions and try refreshing.');
-  }, [request]);
+  }, [request, assignmentDate]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -105,6 +112,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
     <Card variant="outlined">
       <Tabs value={tab} onChange={(_, value: TabKey) => setTab(value)} variant="scrollable" allowScrollButtonsMobile>
         <Tab value="shifts" label="Shifts" />
+        <Tab value="assignments" label="Shift assignments" />
         <Tab value="leave" label="Leave & balances" />
         <Tab value="overtime" label="Overtime" />
         <Tab value="timesheets" label="Timesheets" />
@@ -134,6 +142,27 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
           </Table>
         </Stack>}
 
+        {tab === 'assignments' && <Stack spacing={2}>
+          <Typography fontWeight={700}>Daily shift schedule</Typography>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ md: 'center' }}>
+            <TextField size="small" type="date" label="Schedule date" value={assignmentDate} onChange={e => setAssignmentDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+            {workerSelect(assignmentWorker, setAssignmentWorker, 'Employee')}
+            <TextField select size="small" label="Shift" value={assignmentShift} onChange={e => setAssignmentShift(e.target.value)} sx={{ minWidth: 180 }}>
+              {shifts.filter(s => s.status === 'active').map(s => <MenuItem key={String(s.id)} value={String(s.id)}>{text(s.name)} · {text(s.startTime)}–{text(s.endTime)}</MenuItem>)}
+            </TextField>
+            <TextField size="small" label="Notes (optional)" value={assignmentNotes} onChange={e => setAssignmentNotes(e.target.value)} />
+            <Button variant="contained" disabled={busy || !assignmentWorker || !assignmentShift || !assignmentDate} onClick={() => void perform(async () => {
+              await request('tenant/shift-assignments', json('POST', { workerId: assignmentWorker, shiftId: assignmentShift, workDate: assignmentDate, notes: assignmentNotes.trim() || undefined }));
+              setAssignmentWorker(''); setAssignmentShift(''); setAssignmentNotes('');
+            }, 'Shift assigned.')}>Assign shift</Button>
+          </Stack>
+          <Table size="small"><TableHead><TableRow>{['Employee','Shift','Hours','Date','Notes','Status','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
+            <TableBody>{assignments.map(a => <TableRow key={String(a.id)}>
+              <TableCell>{text(a.workerName)} · {text(a.workerNumber)}</TableCell><TableCell>{text(a.shiftName)} ({text(a.shiftCode)})</TableCell><TableCell>{text(a.startTime)}–{text(a.endTime)}</TableCell><TableCell>{text(a.workDate)}</TableCell><TableCell>{text(a.notes)}</TableCell><TableCell><Chip size="small" label={text(a.status)} color={a.status === 'scheduled' ? 'success' : 'default'} /></TableCell><TableCell>{a.status === 'scheduled' && <Button size="small" color="error" disabled={busy} onClick={() => void perform(() => request(`tenant/shift-assignments/${a.id}/cancel`, json('POST')), 'Shift assignment cancelled.')}>Cancel</Button>}</TableCell>
+            </TableRow>)}
+            {!assignments.length && <TableRow><TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>No shift assignments for this date.</TableCell></TableRow>}</TableBody>
+          </Table>
+        </Stack>}
         {tab === 'leave' && <Stack spacing={2}>
           <Typography fontWeight={700}>Leave types</Typography>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
