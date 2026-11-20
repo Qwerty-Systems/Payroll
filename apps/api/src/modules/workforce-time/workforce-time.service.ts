@@ -572,8 +572,8 @@ export class WorkforceTimeService {
     if(!keys.length || keys.some(key=>!allowed.includes(key)))
       throw new BadRequestException('Corrections may only include clockIn, clockOut or minutesWorked.');
     if('minutesWorked' in dto.proposedValues && dto.proposedValues.minutesWorked!==null &&
-      (!Number.isInteger(dto.proposedValues.minutesWorked) || Number(dto.proposedValues.minutesWorked)<0))
-      throw new BadRequestException('minutesWorked must be a non-negative integer or null.');
+      (!Number.isInteger(dto.proposedValues.minutesWorked) || Number(dto.proposedValues.minutesWorked)<0 || Number(dto.proposedValues.minutesWorked)>1440))
+      throw new BadRequestException('minutesWorked must be an integer between 0 and 1440, or null.');
     for(const key of ['clockIn','clockOut']) {
       if(key in dto.proposedValues && dto.proposedValues[key]!==null &&
         (typeof dto.proposedValues[key]!=='string' || !Number.isFinite(Date.parse(String(dto.proposedValues[key])))))
@@ -612,7 +612,7 @@ export class WorkforceTimeService {
         const clockOut='clockOut' in p ? p.clockOut : a.clock_out;
         if(clockIn && clockOut && Date.parse(String(clockOut))<Date.parse(String(clockIn)))
           throw new BadRequestException('Clock-out cannot precede clock-in.');
-        if('minutesWorked' in p && p.minutesWorked!==null && (!Number.isInteger(p.minutesWorked) || Number(p.minutesWorked)<0))
+        if('minutesWorked' in p && p.minutesWorked!==null && (!Number.isInteger(p.minutesWorked) || Number(p.minutesWorked)<0 || Number(p.minutesWorked)>1440))
           throw new BadRequestException('minutesWorked must be a non-negative integer or null.');
         const updates:string[]=[],values:unknown[]=[tenantId,request.attendance_id];
         const mapping:{key:string;column:string}[]=[{key:'clockIn',column:'clock_in'},{key:'clockOut',column:'clock_out'},{key:'minutesWorked',column:'minutes_worked'}];
