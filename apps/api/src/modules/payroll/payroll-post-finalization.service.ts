@@ -167,6 +167,21 @@ export class PayrollPostFinalizationService {
           current.total+=amount; totals.set(code,current);
         }
       }
+      // Applied post-finalization corrections must be included in remittance totals.
+      const correctionLines = await m.query(`
+        SELECT i.code,i.employee_deduction_delta,i.employer_contribution_delta
+        FROM payroll_correction_items i
+        JOIN payroll_corrections c ON c.tenant_id=i.tenant_id AND c.id=i.correction_id
+        WHERE i.tenant_id=$1 AND c.original_run_id=$2 AND c.status='applied'
+      `,[tenantId,runId]);
+      for (const line of correctionLines) {
+        const code=String(line.code??'CORRECTION');
+        const current=totals.get(code)??{employee:0,employer:0,total:0};
+        const employee=Number(line.employee_deduction_delta??0);
+        const employer=Number(line.employer_contribution_delta??0);
+        current.employee+=employee; current.employer+=employer; current.total+=employee+employer;
+        totals.set(code,current);
+      }
       return {periodCode:runs[0].period_code,startDate:runs[0].start_date,endDate:runs[0].end_date,currency:'KES',
         items:[...totals.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([code,v])=>({code,employee:v.employee,employer:v.employer,total:v.total}))};
     });
@@ -189,6 +204,22 @@ export class PayrollPostFinalizationService {
         employeeDeductions+=Number(s.statutory?.employeeStatutoryDeductions??0)+Number(s.otherDeductions?.total??0);
         employerContributions+=Number(s.statutory?.employerContributions??0);
         netPay+=Number(s.netPay??0);
+      }
+      // Applied corrections alter the accounting totals without mutating finalized run snapshots.
+      const corrections = await m.query(`
+        SELECT COALESCE(sum(i.earnings_delta),0)::numeric AS earnings_delta,
+          COALESCE(sum(i.employee_deduction_delta),0)::numeric AS employee_deductions_delta,
+          COALESCE(sum(i.employer_contribution_delta),0)::numeric AS employer_contributions_delta,
+          COALESCE(sum(i.net_pay_delta),0)::numeric AS net_pay_delta
+        FROM payroll_correction_items i
+        JOIN payroll_corrections c ON c.tenant_id=i.tenant_id AND c.id=i.correction_id
+        WHERE i.tenant_id=$1 AND c.original_run_id=$2 AND c.status='applied'
+      `,[tenantId,runId]);
+      if (corrections.length) {
+        gross+=Number(corrections[0].earnings_delta??0);
+        employeeDeductions+=Number(corrections[0].employee_deductions_delta??0);
+        employerContributions+=Number(corrections[0].employer_contributions_delta??0);
+        netPay+=Number(corrections[0].net_pay_delta??0);
       }
       const journal=[
         {account:'Payroll expense',debit:gross,credit:0},
