@@ -7,7 +7,7 @@ import {
 type Row = Record<string, unknown> & { id?: string };
 type Request = <T,>(path: string, init?: RequestInit) => Promise<T>;
 type Props = { workers: Row[]; request: Request };
-type TabKey = 'shifts' | 'assignments' | 'leave' | 'overtime' | 'timesheets';
+type TabKey = 'shifts' | 'assignments' | 'leave' | 'overtime' | 'timesheets' | 'corrections';
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value as Row[] : [];
 const text = (value: unknown) => value == null || value === '' ? '—' : String(value);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -19,6 +19,9 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [tab, setTab] = useState<TabKey>('shifts');
   const [shifts, setShifts] = useState<Row[]>([]);
   const [assignments, setAssignments] = useState<Row[]>([]);
+  const [corrections, setCorrections] = useState<Row[]>([]);
+  const [correctionReviewReason, setCorrectionReviewReason] = useState('');
+  const [correctionForm, setCorrectionForm] = useState({ attendanceId: '', clockIn: '', clockOut: '', minutesWorked: '', reason: '' });
   const [assignmentDate, setAssignmentDate] = useState(today());
   const [assignmentWorker, setAssignmentWorker] = useState('');
   const [assignmentShift, setAssignmentShift] = useState('');
@@ -54,6 +57,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
       ['balances', 'tenant/leave-balances'], ['leaveRequests', 'tenant/leave-requests'],
       ['overtimeRequests', 'tenant/overtime-requests'], ['timesheets', 'tenant/timesheets'],
       ['assignments', `tenant/shift-assignments?from=${assignmentDate}&to=${assignmentDate}`],
+      ['corrections', 'tenant/attendance-corrections?status=pending'],
     ] as const;
     const results = await Promise.all(endpoints.map(async ([key, path]) => {
       try { return [key, rows(await request<unknown>(path))] as const; }
@@ -67,6 +71,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
     setOvertimeRequests(results.find(x => x[0] === 'overtimeRequests')?.[1] instanceof Array ? results.find(x => x[0] === 'overtimeRequests')![1] as Row[] : []);
     setTimesheets(results.find(x => x[0] === 'timesheets')?.[1] instanceof Array ? results.find(x => x[0] === 'timesheets')![1] as Row[] : []);
     setAssignments(results.find(x => x[0] === 'assignments')?.[1] instanceof Array ? results.find(x => x[0] === 'assignments')![1] as Row[] : []);
+    setCorrections(results.find(x => x[0] === 'corrections')?.[1] instanceof Array ? results.find(x => x[0] === 'corrections')![1] as Row[] : []);
     if (failures.length) setError('Some attendance records could not be loaded. Check your role permissions and try refreshing.');
   }, [request, assignmentDate]);
 
@@ -116,6 +121,7 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
         <Tab value="leave" label="Leave & balances" />
         <Tab value="overtime" label="Overtime" />
         <Tab value="timesheets" label="Timesheets" />
+        <Tab value="corrections" label="Attendance corrections" />
       </Tabs>
       <Divider />
       <CardContent>
@@ -245,6 +251,34 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
           </Table>
         </Stack>}
 
+        {tab === 'corrections' && <Stack spacing={2}>
+          <Typography fontWeight={700}>Request an attendance correction</Typography>
+          <Alert severity="info">Enter the attendance record ID from your attendance record. Only clock-in, clock-out and minutes worked can be corrected. Requests require a separate reviewer.</Alert>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ md: 'center' }}>
+            <TextField size="small" label="Attendance record ID" value={correctionForm.attendanceId} onChange={e => setCorrectionForm(v => ({ ...v, attendanceId: e.target.value }))} sx={{ minWidth: 260 }} />
+            <TextField size="small" type="datetime-local" label="Correct clock-in (optional)" value={correctionForm.clockIn} onChange={e => setCorrectionForm(v => ({ ...v, clockIn: e.target.value }))} InputLabelProps={{ shrink: true }} />
+            <TextField size="small" type="datetime-local" label="Correct clock-out (optional)" value={correctionForm.clockOut} onChange={e => setCorrectionForm(v => ({ ...v, clockOut: e.target.value }))} InputLabelProps={{ shrink: true }} />
+            <TextField size="small" type="number" label="Minutes worked (optional)" value={correctionForm.minutesWorked} onChange={e => setCorrectionForm(v => ({ ...v, minutesWorked: e.target.value }))} inputProps={{ min: 0 }} sx={{ width: 160 }} />
+          </Stack>
+          <TextField size="small" label="Reason for correction" value={correctionForm.reason} onChange={e => setCorrectionForm(v => ({ ...v, reason: e.target.value }))} fullWidth multiline minRows={2} />
+          <Button variant="contained" disabled={busy || !correctionForm.attendanceId.trim() || correctionForm.reason.trim().length < 3 || (!correctionForm.clockIn && !correctionForm.clockOut && correctionForm.minutesWorked === '') || (correctionForm.minutesWorked !== '' && Number(correctionForm.minutesWorked) < 0)} onClick={() => void perform(async () => {
+            const proposedValues: Record<string, string | number | null> = {};
+            if (correctionForm.clockIn) proposedValues.clockIn = new Date(correctionForm.clockIn).toISOString();
+            if (correctionForm.clockOut) proposedValues.clockOut = new Date(correctionForm.clockOut).toISOString();
+            if (correctionForm.minutesWorked !== '') proposedValues.minutesWorked = Number(correctionForm.minutesWorked);
+            await request(`tenant/attendance/${correctionForm.attendanceId.trim()}/corrections`, json('POST', { proposedValues, reason: correctionForm.reason.trim() }));
+            setCorrectionForm({ attendanceId: '', clockIn: '', clockOut: '', minutesWorked: '', reason: '' });
+          }, 'Correction request submitted for review.')}>Submit correction</Button>
+          <Divider />
+          <Typography fontWeight={700}>Pending correction approvals</Typography>
+          <TextField size="small" label="Review note (required for approve/reject)" value={correctionReviewReason} onChange={e => setCorrectionReviewReason(e.target.value)} fullWidth multiline minRows={2} inputProps={{ maxLength: 500 }} helperText={`${correctionReviewReason.length}/500 characters`} />
+          <Table size="small"><TableHead><TableRow>{['Employee','Work date','Original clock-in','Original clock-out','Minutes','Requested changes','Reason','Actions'].map(x => <TableCell key={x}>{x}</TableCell>)}</TableRow></TableHead>
+            <TableBody>{corrections.map(r => <TableRow key={String(r.id)}>
+              <TableCell>{text(r.workerName)} · {text(r.workerNumber)}</TableCell><TableCell>{text(r.workDate)}</TableCell><TableCell>{text(r.clockIn)}</TableCell><TableCell>{text(r.clockOut)}</TableCell><TableCell>{text(r.minutesWorked)}</TableCell><TableCell>{JSON.stringify(r.proposedValues)}</TableCell><TableCell>{text(r.reason)}</TableCell><TableCell><Stack direction="row" spacing={0.5}><Button size="small" disabled={busy || correctionReviewReason.trim().length < 3} onClick={() => void perform(async () => { await request(`tenant/attendance-corrections/${r.id}/approve`,json('POST',{reason:correctionReviewReason.trim()})); setCorrectionReviewReason(''); },'Correction approved.')}>Approve</Button><Button size="small" color="error" disabled={busy || correctionReviewReason.trim().length < 3} onClick={() => void perform(async () => { await request(`tenant/attendance-corrections/${r.id}/reject`,json('POST',{reason:correctionReviewReason.trim()})); setCorrectionReviewReason(''); },'Correction rejected.')}>Reject</Button></Stack></TableCell>
+            </TableRow>)}
+            {!corrections.length && <TableRow><TableCell colSpan={8} sx={{ textAlign: 'center', py: 3 }}>No pending correction requests.</TableCell></TableRow>}</TableBody>
+          </Table>
+        </Stack>}
         {tab === 'timesheets' && <Stack spacing={2}>
           <Typography fontWeight={700}>Create timesheet</Typography>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
