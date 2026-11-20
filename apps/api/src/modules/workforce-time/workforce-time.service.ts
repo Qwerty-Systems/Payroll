@@ -613,7 +613,7 @@ export class WorkforceTimeService {
         if(clockIn && clockOut && Date.parse(String(clockOut))<Date.parse(String(clockIn)))
           throw new BadRequestException('Clock-out cannot precede clock-in.');
         if('minutesWorked' in p && p.minutesWorked!==null && (!Number.isInteger(p.minutesWorked) || Number(p.minutesWorked)<0 || Number(p.minutesWorked)>1440))
-          throw new BadRequestException('minutesWorked must be a non-negative integer or null.');
+          throw new BadRequestException('minutesWorked must be an integer between 0 and 1440, or null.');
         const updates:string[]=[],values:unknown[]=[tenantId,request.attendance_id];
         const mapping:{key:string;column:string}[]=[{key:'clockIn',column:'clock_in'},{key:'clockOut',column:'clock_out'},{key:'minutesWorked',column:'minutes_worked'}];
         for(const item of mapping) {
