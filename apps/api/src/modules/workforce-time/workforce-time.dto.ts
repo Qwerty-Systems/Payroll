@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsObject, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 
 export class CreateShiftDto {
   @IsString() @Length(1, 40) code!: string;
@@ -99,4 +99,12 @@ export class CreateShiftAssignmentDto {
   @IsUUID() shiftId!: string;
   @IsDateString() workDate!: string;
   @IsOptional() @IsString() @Length(1, 500) notes?: string;
+}
+
+export class CreateAttendanceCorrectionDto {
+  @IsObject() proposedValues!: Record<string, string | number | null>;
+  @IsString() @Length(3, 500) reason!: string;
+}
+export class ReviewAttendanceCorrectionDto {
+  @IsString() @Length(3, 500) reason!: string;
 }
