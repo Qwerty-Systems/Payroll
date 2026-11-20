@@ -34,13 +34,6 @@ export class AttendanceCorrectionWorkflow1794831500000 implements MigrationInter
       CREATE POLICY tenant_isolation ON attendance_correction_requests
         USING (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
         WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
-      DO $roles$ DECLARE role_name text; BEGIN
-        FOREACH role_name IN ARRAY ARRAY['jengaflow_app','jf_app'] LOOP
-          IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname=role_name) THEN
-            EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON attendance_correction_requests TO %I', role_name);
-          END IF;
-        END LOOP;
-      END $roles$;
     `);
   }
 
