@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
 import {
-  CreateLeaveRequestDto, CreateLeaveTypeDto, UpdateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto, CreateShiftAssignmentDto,
+  CreateLeaveRequestDto, CreateLeaveTypeDto, UpdateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto, CreateShiftAssignmentDto, CreateAttendanceCorrectionDto, ReviewAttendanceCorrectionDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
   CreateTimesheetDto, UpdateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
 } from './workforce-time.dto';
@@ -192,6 +192,30 @@ export class WorkforceTimeController {
   @TenantPermissions('attendance.approve')
   rejectTimesheet(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewTimesheetDto) {
     return this.service.reviewTimesheet(req.tenant.id, req.tenant.userId, id, 'reject', dto);
+  }
+
+  @Get('attendance-corrections')
+  @TenantPermissions('attendance.read')
+  listAttendanceCorrections(@Req() req: TenantRequest, @Query('status') status?: string, @Query('attendanceId') attendanceId?: string) {
+    return this.service.listAttendanceCorrections(req.tenant.id, status, attendanceId);
+  }
+
+  @Post('attendance/:id/corrections')
+  @TenantPermissions('attendance.capture')
+  createAttendanceCorrection(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateAttendanceCorrectionDto) {
+    return this.service.createAttendanceCorrection(req.tenant.id, req.tenant.userId, id, dto);
+  }
+
+  @Post('attendance-corrections/:id/approve')
+  @TenantPermissions('attendance.approve')
+  approveAttendanceCorrection(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewAttendanceCorrectionDto) {
+    return this.service.reviewAttendanceCorrection(req.tenant.id, req.tenant.userId, id, 'approve', dto);
+  }
+
+  @Post('attendance-corrections/:id/reject')
+  @TenantPermissions('attendance.approve')
+  rejectAttendanceCorrection(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewAttendanceCorrectionDto) {
+    return this.service.reviewAttendanceCorrection(req.tenant.id, req.tenant.userId, id, 'reject', dto);
   }
 
   @Get('shift-assignments')
