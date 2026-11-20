@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantPermissions } from '../auth/tenant-access.decorator';
 import {
-  CreateLeaveRequestDto, CreateLeaveTypeDto, UpdateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto,
+  CreateLeaveRequestDto, CreateLeaveTypeDto, UpdateLeaveTypeDto, CreateOvertimeRequestDto, CreateShiftDto, CreateShiftAssignmentDto,
   ReviewLeaveRequestDto, ReviewOvertimeRequestDto, SetLeaveBalanceDto, UpdateShiftDto,
   CreateTimesheetDto, UpdateTimesheetDto, CreateTimesheetLineDto, UpdateTimesheetLineDto, ReviewTimesheetDto,
 } from './workforce-time.dto';
@@ -194,4 +194,21 @@ export class WorkforceTimeController {
     return this.service.reviewTimesheet(req.tenant.id, req.tenant.userId, id, 'reject', dto);
   }
 
+  @Get('shift-assignments')
+  @TenantPermissions('attendance.read')
+  listShiftAssignments(@Req() req: TenantRequest, @Query('from') from?: string, @Query('to') to?: string, @Query('workerId') workerId?: string) {
+    return this.service.listShiftAssignments(req.tenant.id, from, to, workerId);
+  }
+
+  @Post('shift-assignments')
+  @TenantPermissions('attendance.approve')
+  createShiftAssignment(@Req() req: TenantRequest, @Body() dto: CreateShiftAssignmentDto) {
+    return this.service.createShiftAssignment(req.tenant.id, req.tenant.userId, dto);
+  }
+
+  @Post('shift-assignments/:id/cancel')
+  @TenantPermissions('attendance.approve')
+  cancelShiftAssignment(@Req() req: TenantRequest, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.cancelShiftAssignment(req.tenant.id, req.tenant.userId, id);
+  }
 }
