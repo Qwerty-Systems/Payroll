@@ -11,6 +11,28 @@ import {
 export class WorkforceTimeService {
   constructor(private readonly tenantDb: TenantTransactionService) {}
 
+  private validateShift(startTime: string, endTime: string, breakMinutes: number, crossesMidnight?: boolean) {
+    const validTime = /^([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d)?$/;
+    if (!validTime.test(startTime) || !validTime.test(endTime)) {
+      throw new BadRequestException('Shift times must use HH:mm or HH:mm:ss.');
+    }
+    if (startTime === endTime) throw new BadRequestException('Shift start and end times cannot be identical.');
+    const toMinutes = (value: string) => {
+      const [h, m] = value.split(':').map(Number);
+      return h * 60 + m;
+    };
+    const start = toMinutes(startTime), end = toMinutes(endTime);
+    const overnight = end <= start;
+    const duration = overnight ? 1440 - start + end : end - start;
+    if (!Number.isInteger(breakMinutes) || breakMinutes < 0 || breakMinutes >= duration) {
+      throw new BadRequestException('Break minutes must be non-negative and shorter than the shift duration.');
+    }
+    if (crossesMidnight !== undefined && crossesMidnight !== overnight) {
+      throw new BadRequestException('Crosses-midnight must match the shift start and end times.');
+    }
+    return overnight;
+  }
+
   listShifts(tenantId: string) {
     return this.tenantDb.run(tenantId, m => m.query(`
       SELECT id,code,name,start_time::text AS "startTime",end_time::text AS "endTime",
@@ -21,17 +43,14 @@ export class WorkforceTimeService {
   }
 
   createShift(tenantId: string, actorId: string, dto: CreateShiftDto) {
-    if (!/^([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d)?$/.test(dto.startTime) ||
-        !/^([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d)?$/.test(dto.endTime)) {
-      throw new BadRequestException('Shift times must use HH:mm or HH:mm:ss.');
-    }
+    const crossesMidnight = this.validateShift(dto.startTime, dto.endTime, dto.breakMinutes ?? 0, dto.crossesMidnight);
     return this.tenantDb.run(tenantId, async m => {
       const rows=await m.query(`
         INSERT INTO work_shifts(tenant_id,code,name,start_time,end_time,break_minutes,crosses_midnight)
         VALUES($1,$2,$3,$4,$5,$6,$7)
         RETURNING id,code,name,start_time::text AS "startTime",end_time::text AS "endTime",
           break_minutes AS "breakMinutes",crosses_midnight AS "crossesMidnight",status
-      `,[tenantId,dto.code.trim().toUpperCase(),dto.name.trim(),dto.startTime,dto.endTime,dto.breakMinutes??0,dto.crossesMidnight??false]);
+      `,[tenantId,dto.code.trim().toUpperCase(),dto.name.trim(),dto.startTime,dto.endTime,dto.breakMinutes??0,crossesMidnight]);
       await this.audit(m,tenantId,actorId,'attendance.shift.created','work_shift',rows[0].id,rows[0]);
       return rows[0];
     });
@@ -42,18 +61,18 @@ export class WorkforceTimeService {
       const found=await m.query('SELECT * FROM work_shifts WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);
       if(!found.length) throw new NotFoundException('Shift not found.');
       const before=found[0];
-      const startTime=dto.startTime??before.start_time;
-      const endTime=dto.endTime??before.end_time;
-      if (dto.startTime && !/^([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d)?$/.test(dto.startTime)) throw new BadRequestException('Invalid shift start time.');
-      if (dto.endTime && !/^([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d)?$/.test(dto.endTime)) throw new BadRequestException('Invalid shift end time.');
+      const startTime=dto.startTime??String(before.start_time).slice(0,8);
+      const endTime=dto.endTime??String(before.end_time).slice(0,8);
+      const breakMinutes=dto.breakMinutes??before.break_minutes;
+      const crossesMidnight=this.validateShift(startTime,endTime,breakMinutes,dto.crossesMidnight);
       const rows=await m.query(`
         UPDATE work_shifts SET name=$3,start_time=$4,end_time=$5,break_minutes=$6,
           crosses_midnight=$7,status=$8,updated_at=now()
         WHERE tenant_id=$1 AND id=$2
         RETURNING id,code,name,start_time::text AS "startTime",end_time::text AS "endTime",
           break_minutes AS "breakMinutes",crosses_midnight AS "crossesMidnight",status
-      `,[tenantId,id,dto.name?.trim()??before.name,startTime,endTime,dto.breakMinutes??before.break_minutes,
-        dto.crossesMidnight??before.crosses_midnight,dto.status??before.status]);
+      `,[tenantId,id,dto.name?.trim()??before.name,startTime,endTime,breakMinutes,
+        crossesMidnight,dto.status??before.status]);
       await this.audit(m,tenantId,actorId,'attendance.shift.updated','work_shift',id,{before,after:rows[0]});
       return rows[0];
     });
