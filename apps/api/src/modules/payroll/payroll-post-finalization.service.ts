@@ -227,12 +227,17 @@ export class PayrollPostFinalizationService {
         employerContributions+=Number(corrections[0].employer_contributions_delta??0);
         netPay+=Number(corrections[0].net_pay_delta??0);
       }
+      // Signed post-finalization corrections can turn a payroll account balance negative.
+      // Normalize each signed account balance to the correct debit/credit side so
+      // reversal and adjustment journals never emit negative accounting amounts.
+      const debitBalance=(account:string,amount:number)=>({account,debit:Math.max(0,amount),credit:Math.max(0,-amount)});
+      const creditBalance=(account:string,amount:number)=>({account,debit:Math.max(0,-amount),credit:Math.max(0,amount)});
       const journal=[
-        {account:'Payroll expense',debit:gross,credit:0},
-        {account:'Employer statutory contributions expense',debit:Math.max(0,employerContributions),credit:Math.max(0,-employerContributions)},
-        {account:'Net salaries payable',debit:Math.max(0,-netPay),credit:Math.max(0,netPay)},
-        {account:'Employee statutory and other deductions payable',debit:Math.max(0,-employeeDeductions),credit:Math.max(0,employeeDeductions)},
-        {account:'Employer statutory contributions payable',debit:Math.max(0,-employerContributions),credit:Math.max(0,employerContributions)},
+        debitBalance('Payroll expense',gross),
+        debitBalance('Employer statutory contributions expense',employerContributions),
+        creditBalance('Net salaries payable',netPay),
+        creditBalance('Employee statutory and other deductions payable',employeeDeductions),
+        creditBalance('Employer statutory contributions payable',employerContributions),
       ].filter(x=>x.debit!==0||x.credit!==0);
       return {periodCode:run[0].period_code,currency:'KES',journal,totals:{debit:journal.reduce((n,x)=>n+x.debit,0),credit:journal.reduce((n,x)=>n+x.credit,0)}};
     });
