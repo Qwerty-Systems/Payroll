@@ -29,7 +29,7 @@ describe('TenantAccessGuard', () => {
 
   it('requires a valid tenant UUID', async () => {
     const { guard } = makeGuard(['payroll.read']);
-    const request = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': 'not-a-uuid' } };
+    const request: any = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': 'not-a-uuid' } };
     await expect(guard.canActivate(makeContext(['payroll.read'], request))).rejects.toBeInstanceOf(ForbiddenException);
   });
 
