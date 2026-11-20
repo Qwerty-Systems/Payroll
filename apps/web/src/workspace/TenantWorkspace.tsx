@@ -35,13 +35,14 @@ import WorkforceTimeWorkspace from './WorkforceTimeWorkspace';
 import PayrollWorkspace from './PayrollWorkspace';
 import IntegrationsWorkspace from './IntegrationsWorkspace';
 import BillingWorkspace from './BillingWorkspace';
+import ReportsWorkspace from './ReportsWorkspace';
 
 type Membership = {
   tenantId: string; slug: string; displayName: string; legalName: string;
   tenantStatus: string; membershipId: string; role: string;
 };
 type RowData = Record<string, unknown> & { id?: string };
-type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'time-management' | 'payroll' | 'billing' | 'compliance' | 'organization' | 'people' | 'integrations';
+type Section = 'overview' | 'workers' | 'pay-grades' | 'projects' | 'attendance' | 'time-management' | 'payroll' | 'reports' | 'billing' | 'compliance' | 'organization' | 'people' | 'integrations';
 type Props = {
   memberships: Membership[];
   userName?: string;
@@ -446,6 +447,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     { value: 'attendance' as Section, label: 'Attendance', icon: <EventAvailableRounded />, group: 'WORKSPACE' },
     { value: 'time-management' as Section, label: 'Time management', icon: <CalendarMonthRounded />, group: 'WORKSPACE' },
     { value: 'payroll' as Section, label: 'Payroll', icon: <PaymentsRounded />, group: 'FINANCE' },
+    { value: 'reports' as Section, label: 'Reports', icon: <PaymentsRounded />, group: 'FINANCE' },
     { value: 'billing' as Section, label: 'Billing', icon: <PaymentsRounded />, group: 'FINANCE' },
     { value: 'compliance' as Section, label: 'Compliance', icon: <AssignmentTurnedInRounded />, group: 'COMPLIANCE' },
     { value: 'organization' as Section, label: 'Organization', icon: <SettingsRounded />, group: 'ADMINISTRATION' },
@@ -457,7 +459,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const navGroups = ['WORKSPACE','FINANCE','COMPLIANCE','ADMINISTRATION'].filter(group => visibleNavItems.some(item => item.group === group));
   const pageTitle: Record<Section, string> = {
     overview: 'Overview', workers: 'Employees', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
-    attendance: 'Attendance', 'time-management': 'Time management', payroll: 'Payroll', billing: 'Billing', compliance: 'Compliance', organization: 'Organization', people: 'Team access', integrations: 'Integrations',
+    attendance: 'Attendance', 'time-management': 'Time management', payroll: 'Payroll', reports: 'Payroll reports', billing: 'Billing', compliance: 'Compliance', organization: 'Organization', people: 'Team access', integrations: 'Integrations',
   };
   const pageDescription: Record<Section, string> = {
     overview: 'A clear picture of your workforce and operations.',
@@ -467,6 +469,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     attendance: 'Capture work activity and review submitted records.',
     'time-management': 'Manage shifts, leave balances, overtime requests and employee timesheets.',
     payroll: 'Manage pay periods and review payroll calculation previews.',
+    reports: 'Review payroll summaries, run details, employee totals and export reports.',
     billing: 'Create quotes and invoices, record payments and monitor outstanding balances.',
     compliance: 'Review statutory rules, approve effective-dated changes and track statutory filings.',
     organization: 'Structure your company and assign people to teams.',
@@ -700,7 +703,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
                 {!(data.deductionTypes ?? []).length && <TableRow><TableCell colSpan={7}>No deduction types have been seeded for this company yet.</TableCell></TableRow>}
               </TableBody></Table></TableContainer>
             </Box>
-          </Paper></Stack> : section === 'time-management' ? <WorkforceTimeWorkspace workers={(data.workers ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} request={request} /> : section === 'compliance' ? <ComplianceWorkspace role={membership?.role ?? 'viewer'} periods={data.periods ?? []} request={request} /> : section === 'organization' ? <OrganizationWorkspace request={request} workers={(data.workers ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} projects={(data.projects ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} sites={(data.sites ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} /> : section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> : section === 'integrations' ? <IntegrationsWorkspace request={request} /> : section === 'billing' ? <BillingWorkspace request={request} /> :
+          </Paper></Stack> : section === 'time-management' ? <WorkforceTimeWorkspace workers={(data.workers ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} request={request} /> : section === 'compliance' ? <ComplianceWorkspace role={membership?.role ?? 'viewer'} periods={data.periods ?? []} request={request} /> : section === 'organization' ? <OrganizationWorkspace request={request} workers={(data.workers ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} projects={(data.projects ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} sites={(data.sites ?? []).filter((row): row is RowData & { id: string } => typeof row.id === 'string')} /> : section === 'people' ? <TenantAdministration section={section} role={membership?.role ?? 'viewer'} data={data} request={request} refresh={refresh} /> : section === 'integrations' ? <IntegrationsWorkspace request={request} /> : section === 'reports' ? <ReportsWorkspace request={request} /> : section === 'billing' ? <BillingWorkspace request={request} /> :
             <Paper variant="outlined" sx={{ borderColor: '#E6EBE5', borderRadius: 3, overflow: 'hidden', bgcolor: '#FFFFFF' }}>
               {section === 'payroll' ? <PayrollWorkspace request={request} onRefresh={refresh} /> : <TableContainer sx={{ overflowX: 'auto' }}><Table size="medium"><TableHead><TableRow>
                 {(section === 'workers' ? ['Employee','Contact','Status','Actions'] :
