@@ -56,4 +56,19 @@ describe('Attendance correction workflow', () => {
     expect(query.mock.calls[1][0]).toContain('UPDATE attendance_records SET');
     expect(query.mock.calls[3][1][2]).toBe('attendance.correction.approve');
   });
+  it('rejects corrected minutes worked greater than the corrected clock span', async () => {
+    const query = jest.fn().mockResolvedValueOnce([{
+      id: recordId, status: 'approved', created_by: actorId,
+      clock_in: '2026-11-20T08:00:00.000Z', clock_out: '2026-11-20T16:00:00.000Z',
+    }]);
+    const service = serviceWithQuery(query);
+    await expect(service.requestAttendanceCorrection(tenantId, actorId, recordId, {
+      clockIn: '2026-11-20T08:00:00.000Z',
+      clockOut: '2026-11-20T16:00:00.000Z',
+      minutesWorked: 600,
+      reason: 'Correct attendance duration',
+    })).rejects.toThrow('Corrected minutes worked cannot exceed the elapsed time');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
 });

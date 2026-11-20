@@ -422,6 +422,12 @@ export class OperationsService {
       if (proposedClockIn && proposedClockOut && proposedClockOut <= proposedClockIn) {
         throw new BadRequestException('The corrected clock-out must be after the effective clock-in.');
       }
+      if (input.minutesWorked !== undefined && proposedClockIn && proposedClockOut) {
+        const elapsedMinutes = Math.floor((proposedClockOut.getTime() - proposedClockIn.getTime()) / 60000);
+        if (input.minutesWorked > elapsedMinutes) {
+          throw new BadRequestException('Corrected minutes worked cannot exceed the elapsed time between clock-in and clock-out.');
+        }
+      }
       const pending = await m.query("SELECT id FROM attendance_correction_requests WHERE tenant_id=$1 AND attendance_id=$2 AND status='pending' LIMIT 1",
         [tenantId, attendanceId]);
       if (pending.length) throw new ConflictException('A correction request is already pending for this attendance record.');
