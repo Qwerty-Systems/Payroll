@@ -459,7 +459,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
   const navGroups = ['WORKSPACE','FINANCE','COMPLIANCE','ADMINISTRATION'].filter(group => visibleNavItems.some(item => item.group === group));
   const pageTitle: Record<Section, string> = {
     overview: 'Overview', workers: 'Employees', 'pay-grades': 'Pay grades', projects: 'Projects & sites',
-    attendance: 'Attendance', 'time-management': 'Time management', payroll: 'Payroll', billing: 'Billing', compliance: 'Compliance', organization: 'Organization', people: 'Team access', integrations: 'Integrations',
+    attendance: 'Attendance', 'time-management': 'Time management', payroll: 'Payroll', reports: 'Payroll reports', billing: 'Billing', compliance: 'Compliance', organization: 'Organization', people: 'Team access', integrations: 'Integrations',
   };
   const pageDescription: Record<Section, string> = {
     overview: 'A clear picture of your workforce and operations.',
@@ -469,6 +469,7 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     attendance: 'Capture work activity and review submitted records.',
     'time-management': 'Manage shifts, leave balances, overtime requests and employee timesheets.',
     payroll: 'Manage pay periods and review payroll calculation previews.',
+    reports: 'Review payroll summaries, run details, employee totals and export reports.',
     billing: 'Create quotes and invoices, record payments and monitor outstanding balances.',
     compliance: 'Review statutory rules, approve effective-dated changes and track statutory filings.',
     organization: 'Structure your company and assign people to teams.',
