@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
 
 @Injectable()
@@ -45,9 +45,9 @@ export class ReportsService {
           ON p.tenant_id=r.tenant_id AND p.id=r.period_id
         WHERE r.tenant_id=$1 AND r.id=$2
       `,[tenantId,runId]);
-      if (!runs.length) return null;
+      if (!runs.length) throw new NotFoundException('Payroll run not found.');
       const workers = await m.query(`
-        SELECT i.worker_id AS "workerId",w.employee_number AS "employeeNumber",
+        SELECT i.worker_id AS "workerId",w.worker_number AS "workerNumber",
           w.first_name AS "firstName",w.last_name AS "lastName",
           i.earnings,i.employee_deductions AS "employeeDeductions",
           i.employer_contributions AS "employerContributions",i.net_pay AS "netPay"
