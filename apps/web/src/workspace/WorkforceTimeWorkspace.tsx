@@ -18,7 +18,9 @@ const json = (method: string, body?: unknown): RequestInit => ({
 export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [tab, setTab] = useState<TabKey>('shifts');
   const [shifts, setShifts] = useState<Row[]>([]);
-  const [assignments, setAssignments] = useState<Row[]>([]);\n  const [corrections, setCorrections] = useState<Row[]>([]);\n  const [correctionForm, setCorrectionForm] = useState({ attendanceId: '', clockIn: '', clockOut: '', minutesWorked: '', reason: '' });
+  const [assignments, setAssignments] = useState<Row[]>([]);
+  const [corrections, setCorrections] = useState<Row[]>([]);
+  const [correctionForm, setCorrectionForm] = useState({ attendanceId: '', clockIn: '', clockOut: '', minutesWorked: '', reason: '' });
   const [assignmentDate, setAssignmentDate] = useState(today());
   const [assignmentWorker, setAssignmentWorker] = useState('');
   const [assignmentShift, setAssignmentShift] = useState('');
@@ -53,7 +55,8 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
       ['shifts', 'tenant/shifts'], ['leaveTypes', 'tenant/leave-types'],
       ['balances', 'tenant/leave-balances'], ['leaveRequests', 'tenant/leave-requests'],
       ['overtimeRequests', 'tenant/overtime-requests'], ['timesheets', 'tenant/timesheets'],
-      ['assignments', `tenant/shift-assignments?from=${assignmentDate}&to=${assignmentDate}`],\n      ['corrections', 'tenant/attendance-corrections?status=pending'],
+      ['assignments', `tenant/shift-assignments?from=${assignmentDate}&to=${assignmentDate}`],
+      ['corrections', 'tenant/attendance-corrections?status=pending'],
     ] as const;
     const results = await Promise.all(endpoints.map(async ([key, path]) => {
       try { return [key, rows(await request<unknown>(path))] as const; }
@@ -66,7 +69,8 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
     setLeaveRequests(results.find(x => x[0] === 'leaveRequests')?.[1] instanceof Array ? results.find(x => x[0] === 'leaveRequests')![1] as Row[] : []);
     setOvertimeRequests(results.find(x => x[0] === 'overtimeRequests')?.[1] instanceof Array ? results.find(x => x[0] === 'overtimeRequests')![1] as Row[] : []);
     setTimesheets(results.find(x => x[0] === 'timesheets')?.[1] instanceof Array ? results.find(x => x[0] === 'timesheets')![1] as Row[] : []);
-    setAssignments(results.find(x => x[0] === 'assignments')?.[1] instanceof Array ? results.find(x => x[0] === 'assignments')![1] as Row[] : []);\n    setCorrections(results.find(x => x[0] === 'corrections')?.[1] instanceof Array ? results.find(x => x[0] === 'corrections')![1] as Row[] : []);
+    setAssignments(results.find(x => x[0] === 'assignments')?.[1] instanceof Array ? results.find(x => x[0] === 'assignments')![1] as Row[] : []);
+    setCorrections(results.find(x => x[0] === 'corrections')?.[1] instanceof Array ? results.find(x => x[0] === 'corrections')![1] as Row[] : []);
     if (failures.length) setError('Some attendance records could not be loaded. Check your role permissions and try refreshing.');
   }, [request, assignmentDate]);
 
@@ -115,7 +119,8 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
         <Tab value="assignments" label="Shift assignments" />
         <Tab value="leave" label="Leave & balances" />
         <Tab value="overtime" label="Overtime" />
-        <Tab value="timesheets" label="Timesheets" />\n        <Tab value="corrections" label="Attendance corrections" />
+        <Tab value="timesheets" label="Timesheets" />
+        <Tab value="corrections" label="Attendance corrections" />
       </Tabs>
       <Divider />
       <CardContent>
