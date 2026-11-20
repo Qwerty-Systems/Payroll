@@ -19,7 +19,7 @@ export class WorkforceTimeService {
     if (startTime === endTime) throw new BadRequestException('Shift start and end times cannot be identical.');
     const toMinutes = (value: string) => {
       const [h, m] = value.split(':').map(Number);
-      return h * 60 + m;
+      return (h ?? 0) * 60 + (m ?? 0);
     };
     const start = toMinutes(startTime), end = toMinutes(endTime);
     const overnight = end <= start;
