@@ -49,6 +49,9 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
   const [timesheet, setTimesheet] = useState({ workerId: '', periodStart: today().slice(0, 8) + '01', periodEnd: today(), notes: '' });
   const [line, setLine] = useState({ workDate: today(), minutesWorked: '480', overtimeMinutes: '0', description: '', projectId: '', siteId: '', unitsCompleted: '' });
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
+  const dailyExistingMinutes = rows(timesheetDetail?.lines).filter(r => String(r.workDate).slice(0,10) === line.workDate && String(r.id) !== editingLineId).reduce((sum,r) => sum + Number(r.minutesWorked||0) + Number(r.overtimeMinutes||0), 0);
+  const dailyProposedMinutes = dailyExistingMinutes + Number(line.minutesWorked||0) + Number(line.overtimeMinutes||0);
+  const dailyMinutesExceeded = dailyProposedMinutes > 1440;
 
   const refresh = useCallback(async () => {
     setError('');
@@ -330,8 +333,9 @@ export default function WorkforceTimeWorkspace({ workers, request }: Props) {
                 <TextField size="small" label="Site ID" value={line.siteId} onChange={e => setLine(v => ({ ...v, siteId: e.target.value }))} />
               </Stack>
               <TextField size="small" label="Description" value={line.description} onChange={e => setLine(v => ({ ...v, description: e.target.value }))} />
+              <Alert severity={dailyMinutesExceeded ? 'error' : 'info'}>{`Daily total preview: ${dailyProposedMinutes} / 1,440 minutes (${(dailyProposedMinutes/60).toFixed(2)} hours) including this entry.`}</Alert>
               <Stack direction="row" spacing={1}>
-                <Button variant="contained" disabled={busy || !line.workDate || Number(line.minutesWorked)<0 || Number(line.minutesWorked)>1440 || Number(line.overtimeMinutes)<0 || Number(line.overtimeMinutes)>1440} onClick={() => void perform(async () => {
+                <Button variant="contained" disabled={busy || dailyMinutesExceeded || !line.workDate || Number(line.minutesWorked)<0 || Number(line.minutesWorked)>1440 || Number(line.overtimeMinutes)<0 || Number(line.overtimeMinutes)>1440} onClick={() => void perform(async () => {
                   const payload={...line,minutesWorked:Number(line.minutesWorked),overtimeMinutes:Number(line.overtimeMinutes),projectId:line.projectId||null,siteId:line.siteId||null,unitsCompleted:line.unitsCompleted===''?null:Number(line.unitsCompleted)};
                   await request(editingLineId ? `tenant/timesheets/${selectedTimesheet}/lines/${editingLineId}` : `tenant/timesheets/${selectedTimesheet}/lines`,json(editingLineId?'PATCH':'POST',payload));
                   setEditingLineId(null);
