@@ -616,16 +616,13 @@ export class WorkforceTimeService {
           throw new BadRequestException('minutesWorked must be a non-negative integer or null.');
         const updates:string[]=[],values:unknown[]=[tenantId,request.attendance_id];
         const mapping:{key:string;column:string}[]=[{key:'clockIn',column:'clock_in'},{key:'clockOut',column:'clock_out'},{key:'minutesWorked',column:'minutes_worked'}];
-        for(const item of mapping) if(item.key in p) { values.push(p[item.key]); updates.push(item.column+'=, tenantId: string,
-    actorId: string, action: string, entityType: string, entityId: string, metadata: unknown) {
-    return m.query(`
-      INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata)
-      VALUES($1,$2,$3,$4,$5,$6::jsonb)
-    `,[tenantId,actorId,action,entityType,entityId,JSON.stringify(metadata)]);
-  }
-}
-+values.length); }
-        if(updates.length) await m.query(`UPDATE attendance_records SET ${updates.join(',')},updated_at=now() WHERE tenant_id=$1 AND id=$2`,values);
+        for(const item of mapping) {
+          if(item.key in p) {
+            values.push(p[item.key]);
+            updates.push(item.column+'=$'+values.length);
+          }
+        }
+        if(updates.length) await m.query('UPDATE attendance_records SET '+updates.join(',')+',updated_at=now() WHERE tenant_id=$1 AND id=$2',values);
       }
       const updated=await m.query(`
         UPDATE attendance_correction_requests SET status=$3,reviewed_by=$4,review_reason=$5,reviewed_at=now()
