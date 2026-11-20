@@ -36,7 +36,7 @@ describe('TenantAccessGuard', () => {
   it('rejects identities without active membership', async () => {
     const { guard } = makeGuard(['payroll.read'], []);
     const request = { user: { sub: SUBJECT }, headers: { 'x-tenant-id': TENANT_ID } };
-    await expect(guard.canActivate(makeContext(['payroll.read'], request))).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(guard.canActivate(makeContext(request))).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('assigns verified tenant membership to the request on successful authorization', async () => {
