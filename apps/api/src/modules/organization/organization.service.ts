@@ -1,20 +1,68 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { TenantTransactionService } from '../../database/tenant-transaction.service';
+import type { EntityManager } from 'typeorm';
 import { CreateBranchDto, CreateCostCentreDto, CreateDepartmentDto, CreateWorkerAssignmentDto, UpdateBranchDto, UpdateCostCentreDto, UpdateDepartmentDto, UpdateWorkerAssignmentDto } from './organization.dto';
 
 @Injectable()
 export class OrganizationService {
+
   constructor(private readonly tenantDb: TenantTransactionService) {}
+
+  private async validateAssignmentReferences(manager: EntityManager, tenantId: string, assignment: {
+    workerId: string; branchId?: string | null; departmentId?: string | null;
+    costCentreId?: string | null; projectId?: string | null; siteId?: string | null;
+  }): Promise<void> {
+    const worker = await manager.query("SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active'", [tenantId, assignment.workerId]);
+    if (!worker.length) throw new BadRequestException('The selected worker is not active in this workspace.');
+
+    if (assignment.branchId) {
+      const branch = await manager.query("SELECT id FROM tenant_branches WHERE tenant_id=$1 AND id=$2 AND status='active'", [tenantId, assignment.branchId]);
+      if (!branch.length) throw new BadRequestException('The selected branch is not active in this workspace.');
+    }
+
+    if (assignment.departmentId) {
+      const department = await manager.query("SELECT branch_id FROM tenant_departments WHERE tenant_id=$1 AND id=$2 AND status='active'", [tenantId, assignment.departmentId]);
+      if (!department.length) throw new BadRequestException('The selected department is not active in this workspace.');
+      if (assignment.branchId && department[0].branch_id && department[0].branch_id !== assignment.branchId) {
+        throw new BadRequestException('The selected department does not belong to the selected branch.');
+      }
+    }
+
+    if (assignment.costCentreId) {
+      const costCentre = await manager.query("SELECT id FROM tenant_cost_centres WHERE tenant_id=$1 AND id=$2 AND status='active'", [tenantId, assignment.costCentreId]);
+      if (!costCentre.length) throw new BadRequestException('The selected cost centre is not active in this workspace.');
+    }
+
+    if (assignment.projectId) {
+      const project = await manager.query("SELECT id FROM projects WHERE tenant_id=$1 AND id=$2 AND status='active'", [tenantId, assignment.projectId]);
+      if (!project.length) throw new BadRequestException('The selected project is not active in this workspace.');
+    }
+
+    if (assignment.siteId) {
+      const site = await manager.query("SELECT s.project_id FROM sites s JOIN projects p ON p.tenant_id=s.tenant_id AND p.id=s.project_id WHERE s.tenant_id=$1 AND s.id=$2 AND s.status='active' AND p.status='active'", [tenantId, assignment.siteId]);
+      if (!site.length) throw new BadRequestException('The selected site is not active in this workspace.');
+      if (assignment.projectId && site[0].project_id !== assignment.projectId) {
+        throw new BadRequestException('The selected site does not belong to the selected project.');
+      }
+    }
+  }
+
   listBranches(tenantId: string) { return this.tenantDb.run(tenantId, m => m.query('SELECT id,code,name,address,status FROM tenant_branches WHERE tenant_id=$1 ORDER BY name',[tenantId])); }
   createBranch(tenantId: string, actorId: string, dto: CreateBranchDto) { return this.tenantDb.run(tenantId, async m => { const row=(await m.query('INSERT INTO tenant_branches(tenant_id,code,name,address) VALUES($1,$2,$3,$4) RETURNING id,code,name,address,status',[tenantId,dto.code.trim(),dto.name.trim(),dto.address?.trim()||null]))[0]; await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'organization.branch.created','tenant_branch',$3,$4::jsonb)",[tenantId,actorId,row.id,JSON.stringify(row)]); return row; }); }
   listDepartments(tenantId: string) { return this.tenantDb.run(tenantId, m => m.query('SELECT id,branch_id AS "branchId",code,name,status FROM tenant_departments WHERE tenant_id=$1 ORDER BY name',[tenantId])); }
-  createDepartment(tenantId: string, actorId: string, dto: CreateDepartmentDto) { return this.tenantDb.run(tenantId, async m => { const row=(await m.query('INSERT INTO tenant_departments(tenant_id,branch_id,code,name) VALUES($1,$2,$3,$4) RETURNING id,branch_id AS "branchId",code,name,status',[tenantId,dto.branchId??null,dto.code.trim(),dto.name.trim()]))[0]; await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'organization.department.created','tenant_department',$3,$4::jsonb)",[tenantId,actorId,row.id,JSON.stringify(row)]); return row; }); }
+  createDepartment(tenantId: string, actorId: string, dto: CreateDepartmentDto) { return this.tenantDb.run(tenantId, async m => {
+    if (dto.branchId) {
+      const branch = await m.query("SELECT id FROM tenant_branches WHERE tenant_id=$1 AND id=$2 AND status='active'", [tenantId, dto.branchId]);
+      if (!branch.length) throw new BadRequestException('The selected branch is not active in this workspace.');
+    }
+    const row=(await m.query('INSERT INTO tenant_departments(tenant_id,branch_id,code,name) VALUES($1,$2,$3,$4) RETURNING id,branch_id AS "branchId",code,name,status',[tenantId,dto.branchId??null,dto.code.trim(),dto.name.trim()]))[0]; await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'organization.department.created','tenant_department',$3,$4::jsonb)",[tenantId,actorId,row.id,JSON.stringify(row)]); return row; }); }
   listCostCentres(tenantId: string) { return this.tenantDb.run(tenantId, m => m.query('SELECT id,code,name,status FROM tenant_cost_centres WHERE tenant_id=$1 ORDER BY name',[tenantId])); }
   createCostCentre(tenantId: string, actorId: string, dto: CreateCostCentreDto) { return this.tenantDb.run(tenantId, async m => { const row=(await m.query('INSERT INTO tenant_cost_centres(tenant_id,code,name) VALUES($1,$2,$3) RETURNING id,code,name,status',[tenantId,dto.code.trim(),dto.name.trim()]))[0]; await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'organization.cost_centre.created','tenant_cost_centre',$3,$4::jsonb)",[tenantId,actorId,row.id,JSON.stringify(row)]); return row; }); }
   listWorkerAssignments(tenantId: string, workerId?: string) { return this.tenantDb.run(tenantId, m => m.query('SELECT id,worker_id AS "workerId",branch_id AS "branchId",department_id AS "departmentId",cost_centre_id AS "costCentreId",project_id AS "projectId",site_id AS "siteId",effective_from AS "effectiveFrom",effective_to AS "effectiveTo",status FROM worker_assignments WHERE tenant_id=$1 AND ($2::uuid IS NULL OR worker_id=$2) ORDER BY effective_from DESC LIMIT 1000',[tenantId,workerId??null])); }
   createWorkerAssignment(tenantId: string, actorId: string, dto: CreateWorkerAssignmentDto) {
     if (dto.effectiveTo && dto.effectiveTo < dto.effectiveFrom) throw new BadRequestException('Assignment end date must not precede its start date.');
     return this.tenantDb.run(tenantId, async m => {
+      await this.validateAssignmentReferences(m, tenantId, dto);
       const rows = await m.query('INSERT INTO worker_assignments(tenant_id,worker_id,branch_id,department_id,cost_centre_id,project_id,site_id,effective_from,effective_to,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id,worker_id AS "workerId",branch_id AS "branchId",department_id AS "departmentId",cost_centre_id AS "costCentreId",project_id AS "projectId",site_id AS "siteId",effective_from AS "effectiveFrom",effective_to AS "effectiveTo",status',[tenantId,dto.workerId,dto.branchId??null,dto.departmentId??null,dto.costCentreId??null,dto.projectId??null,dto.siteId??null,dto.effectiveFrom,dto.effectiveTo??null,actorId]);
       await m.query("INSERT INTO audit_events(tenant_id,actor_user_id,action,entity_type,entity_id,metadata) VALUES($1,$2,'worker.assignment.created','worker_assignment',$3,$4::jsonb)",[tenantId,actorId,rows[0].id,JSON.stringify({workerId:dto.workerId,effectiveFrom:dto.effectiveFrom,effectiveTo:dto.effectiveTo??null})]);
       return rows[0];
@@ -122,6 +170,7 @@ export class OrganizationService {
         effectiveTo:dto.effectiveTo===undefined?before.effectiveTo:dto.effectiveTo,
       };
       if(after.effectiveTo && after.effectiveTo < after.effectiveFrom) throw new BadRequestException('Assignment end date must not precede its start date.');
+      await this.validateAssignmentReferences(m, tenantId, after);
       const rows=await m.query(`UPDATE worker_assignments SET worker_id=$3,branch_id=$4,department_id=$5,cost_centre_id=$6,
         project_id=$7,site_id=$8,effective_from=$9,effective_to=$10,
         status=CASE WHEN $10::date IS NOT NULL THEN 'ended' ELSE 'active' END
