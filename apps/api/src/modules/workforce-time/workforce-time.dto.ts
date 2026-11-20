@@ -100,3 +100,11 @@ export class CreateShiftAssignmentDto {
   @IsDateString() workDate!: string;
   @IsOptional() @IsString() @Length(1, 500) notes?: string;
 }
+
+export class CreateAttendanceCorrectionDto {
+  @IsObject() proposedValues!: Record<string, string | number | null>;
+  @IsString() @Length(3, 500) reason!: string;
+}
+export class ReviewAttendanceCorrectionDto {
+  @IsString() @Length(3, 500) reason!: string;
+}
