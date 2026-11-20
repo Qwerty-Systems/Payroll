@@ -415,6 +415,8 @@ export class WorkforceTimeService {
       if(!['draft','rejected'].includes(headers[0].status)) throw new ConflictException('Only draft or rejected timesheets can be edited.');
       const from=String(headers[0].period_start).slice(0,10),to=String(headers[0].period_end).slice(0,10);
       if(dto.workDate<from || dto.workDate>to) throw new BadRequestException('Work date is outside the timesheet period.');
+      const daily=await m.query(`SELECT COALESCE(SUM(minutes_worked+overtime_minutes),0)::int AS total FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2 AND work_date=$3`,[tenantId,timesheetId,dto.workDate]);
+      if(Number(daily[0].total)+dto.minutesWorked+(dto.overtimeMinutes??0)>1440) throw new BadRequestException('Daily timesheet total cannot exceed 1440 minutes.');
       const rows=await m.query(`
         INSERT INTO timesheet_lines(tenant_id,timesheet_id,work_date,project_id,site_id,minutes_worked,overtime_minutes,units_completed,description)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -437,6 +439,10 @@ export class WorkforceTimeService {
       const before=found[0],workDate=dto.workDate??String(before.work_date).slice(0,10);
       const from=String(headers[0].period_start).slice(0,10),to=String(headers[0].period_end).slice(0,10);
       if(workDate<from || workDate>to) throw new BadRequestException('Work date is outside the timesheet period.');
+      const daily=await m.query(`SELECT COALESCE(SUM(minutes_worked+overtime_minutes),0)::int AS total FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2 AND work_date=$3 AND id<>$4`,[tenantId,timesheetId,workDate,lineId]);
+      const nextMinutes=dto.minutesWorked===undefined?Number(before.minutes_worked):dto.minutesWorked;
+      const nextOvertime=dto.overtimeMinutes===undefined?Number(before.overtime_minutes??0):dto.overtimeMinutes;
+      if(Number(daily[0].total)+nextMinutes+nextOvertime>1440) throw new BadRequestException('Daily timesheet total cannot exceed 1440 minutes.');
       const rows=await m.query(`
         UPDATE timesheet_lines SET work_date=$4,project_id=$5,site_id=$6,minutes_worked=$7,
           overtime_minutes=$8,units_completed=$9,description=$10,updated_at=now()
@@ -572,8 +578,8 @@ export class WorkforceTimeService {
     if(!keys.length || keys.some(key=>!allowed.includes(key)))
       throw new BadRequestException('Corrections may only include clockIn, clockOut or minutesWorked.');
     if('minutesWorked' in dto.proposedValues && dto.proposedValues.minutesWorked!==null &&
-      (!Number.isInteger(dto.proposedValues.minutesWorked) || Number(dto.proposedValues.minutesWorked)<0))
-      throw new BadRequestException('minutesWorked must be a non-negative integer or null.');
+      (!Number.isInteger(dto.proposedValues.minutesWorked) || Number(dto.proposedValues.minutesWorked)<0 || Number(dto.proposedValues.minutesWorked)>1440))
+      throw new BadRequestException('minutesWorked must be an integer between 0 and 1440, or null.');
     for(const key of ['clockIn','clockOut']) {
       if(key in dto.proposedValues && dto.proposedValues[key]!==null &&
         (typeof dto.proposedValues[key]!=='string' || !Number.isFinite(Date.parse(String(dto.proposedValues[key])))))
@@ -612,7 +618,7 @@ export class WorkforceTimeService {
         const clockOut='clockOut' in p ? p.clockOut : a.clock_out;
         if(clockIn && clockOut && Date.parse(String(clockOut))<Date.parse(String(clockIn)))
           throw new BadRequestException('Clock-out cannot precede clock-in.');
-        if('minutesWorked' in p && p.minutesWorked!==null && (!Number.isInteger(p.minutesWorked) || Number(p.minutesWorked)<0))
+        if('minutesWorked' in p && p.minutesWorked!==null && (!Number.isInteger(p.minutesWorked) || Number(p.minutesWorked)<0 || Number(p.minutesWorked)>1440))
           throw new BadRequestException('minutesWorked must be a non-negative integer or null.');
         const updates:string[]=[],values:unknown[]=[tenantId,request.attendance_id];
         const mapping:{key:string;column:string}[]=[{key:'clockIn',column:'clock_in'},{key:'clockOut',column:'clock_out'},{key:'minutesWorked',column:'minutes_worked'}];
