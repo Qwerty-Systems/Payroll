@@ -517,7 +517,9 @@ export class WorkforceTimeService {
 
   createShiftAssignment(tenantId: string, actorId: string, dto: CreateShiftAssignmentDto) {
     return this.tenantDb.run(tenantId,async m=>{
-      const worker=await m.query(`SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active'`,[tenantId,dto.workerId]);
+      // Lock the worker row to serialize assignment creation for this worker.
+      // The partial unique index is the final guard if requests race.
+      const worker=await m.query(`SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active' FOR UPDATE`,[tenantId,dto.workerId]);
       if(!worker.length) throw new NotFoundException('Active worker not found.');
       const shift=await m.query(`SELECT id FROM work_shifts WHERE tenant_id=$1 AND id=$2 AND status='active'`,[tenantId,dto.shiftId]);
       if(!shift.length) throw new NotFoundException('Active shift not found.');
