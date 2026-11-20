@@ -497,6 +497,58 @@ export class WorkforceTimeService {
     });
   }
 
+  listShiftAssignments(tenantId: string, from?: string, to?: string, workerId?: string) {
+    return this.tenantDb.run(tenantId, m => m.query(`
+      SELECT a.id,a.worker_id AS "workerId",w.worker_number AS "workerNumber",
+        concat_ws(' ',w.first_name,w.last_name) AS "workerName",
+        a.shift_id AS "shiftId",s.code AS "shiftCode",s.name AS "shiftName",
+        s.start_time::text AS "startTime",s.end_time::text AS "endTime",
+        a.work_date::text AS "workDate",a.notes,a.status,a.assigned_by AS "assignedBy",
+        a.created_at AS "createdAt"
+      FROM worker_shift_assignments a
+      JOIN workers w ON w.tenant_id=a.tenant_id AND w.id=a.worker_id
+      JOIN work_shifts s ON s.tenant_id=a.tenant_id AND s.id=a.shift_id
+      WHERE a.tenant_id=$1 AND ($2::date IS NULL OR a.work_date >= $2)
+        AND ($3::date IS NULL OR a.work_date <= $3)
+        AND ($4::uuid IS NULL OR a.worker_id=$4)
+      ORDER BY a.work_date,s.start_time,w.worker_number
+    `,[tenantId,from??null,to??null,workerId??null]));
+  }
+
+  createShiftAssignment(tenantId: string, actorId: string, dto: CreateShiftAssignmentDto) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const worker=await m.query(`SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active'`,[tenantId,dto.workerId]);
+      if(!worker.length) throw new NotFoundException('Active worker not found.');
+      const shift=await m.query(`SELECT id FROM work_shifts WHERE tenant_id=$1 AND id=$2 AND status='active'`,[tenantId,dto.shiftId]);
+      if(!shift.length) throw new NotFoundException('Active shift not found.');
+      const overlap=await m.query(`
+        SELECT id FROM worker_shift_assignments
+        WHERE tenant_id=$1 AND worker_id=$2 AND work_date=$3 AND status='scheduled'
+        LIMIT 1
+      `,[tenantId,dto.workerId,dto.workDate]);
+      if(overlap.length) throw new ConflictException('Worker already has a scheduled shift on this date.');
+      const rows=await m.query(`
+        INSERT INTO worker_shift_assignments(tenant_id,worker_id,shift_id,work_date,notes,assigned_by)
+        VALUES($1,$2,$3,$4,$5,$6)
+        RETURNING id,worker_id AS "workerId",shift_id AS "shiftId",work_date::text AS "workDate",notes,status
+      `,[tenantId,dto.workerId,dto.shiftId,dto.workDate,dto.notes??null,actorId]);
+      await this.audit(m,tenantId,actorId,'attendance.shift.assigned','worker_shift_assignment',rows[0].id,rows[0]);
+      return rows[0];
+    });
+  }
+
+  cancelShiftAssignment(tenantId: string, actorId: string, id: string) {
+    return this.tenantDb.run(tenantId,async m=>{
+      const found=await m.query('SELECT * FROM worker_shift_assignments WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,id]);
+      if(!found.length) throw new NotFoundException('Shift assignment not found.');
+      if(found[0].status!=='scheduled') throw new ConflictException('Only scheduled assignments can be cancelled.');
+      const rows=await m.query(`UPDATE worker_shift_assignments SET status='cancelled',updated_at=now()
+        WHERE tenant_id=$1 AND id=$2 RETURNING id,status`,[tenantId,id]);
+      await this.audit(m,tenantId,actorId,'attendance.shift.assignment.cancelled','worker_shift_assignment',id,{previousStatus:found[0].status});
+      return rows[0];
+    });
+  }
+
   private audit(m: EntityManager, tenantId: string,
     actorId: string, action: string, entityType: string, entityId: string, metadata: unknown) {
     return m.query(`
