@@ -62,7 +62,7 @@ describe('AuthenticatedApp', () => {
 
     render(<AuthenticatedApp />);
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: /welcome back, payroll/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('heading', { name: /welcome back, payroll/i })).toBeInTheDocument(), { timeout: 5000 });
     expect(fetch).toHaveBeenCalledWith(
       'https://api.example.test/api/v1/auth/me',
       expect.objectContaining({

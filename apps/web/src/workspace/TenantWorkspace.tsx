@@ -15,6 +15,7 @@ import EventAvailableRounded from '@mui/icons-material/EventAvailableRounded';
 import PaymentsRounded from '@mui/icons-material/PaymentsRounded';
 import SettingsRounded from '@mui/icons-material/SettingsRounded';
 import MenuRounded from '@mui/icons-material/MenuRounded';
+import CloseRounded from '@mui/icons-material/CloseRounded';
 import SearchRounded from '@mui/icons-material/SearchRounded';
 import RefreshRounded from '@mui/icons-material/RefreshRounded';
 import AddRounded from '@mui/icons-material/AddRounded';
@@ -419,20 +420,25 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
     people: 'Control who can access this company workspace.', integrations: 'Configure sandbox provider settings and validate integration readiness.',
   };
   const navContent = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#17372B', color: '#F7F5EF' }}>
+    <Box sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', bgcolor: '#17372B', color: '#F7F5EF' }}>
       <Box sx={{ px: 2.5, py: 2.5 }}>
-        <Stack direction="row" spacing={1.4} alignItems="center">
-          <Avatar variant="rounded" sx={{ width: 40, height: 40, bgcolor: '#D6A84F', color: '#17372B', borderRadius: 2 }}>
-            <ConstructionRounded />
-          </Avatar>
-          <Box>
-            <Typography fontWeight={900} letterSpacing="-.035em" fontSize="1.12rem">JengaFlow</Typography>
-            <Typography sx={{ color: 'rgba(255,255,255,.5)', fontSize: '.62rem', letterSpacing: '.13em' }}>BY QWERTY SYSTEMS</Typography>
-          </Box>
+        <Stack direction="row" spacing={1.4} alignItems="center" justifyContent="space-between">
+          <Stack direction="row" spacing={1.4} alignItems="center">
+            <Avatar variant="rounded" sx={{ width: 40, height: 40, bgcolor: '#D6A84F', color: '#17372B', borderRadius: 2 }}>
+              <ConstructionRounded />
+            </Avatar>
+            <Box>
+              <Typography fontWeight={900} letterSpacing="-.035em" fontSize="1.12rem">JengaFlow</Typography>
+              <Typography sx={{ color: 'rgba(255,255,255,.5)', fontSize: '.62rem', letterSpacing: '.13em' }}>BY QWERTY SYSTEMS</Typography>
+            </Box>
+          </Stack>
+          {isMobile && <IconButton size="small" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} sx={{ color: 'inherit' }}>
+            <CloseRounded />
+          </IconButton>}
         </Stack>
       </Box>
       <Divider sx={{ borderColor: 'rgba(255,255,255,.1)' }} />
-      <Box sx={{ px: 1.5, py: 2, flex: 1 }}>
+      <Box sx={{ px: 1.5, py: 2, flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
         {navGroups.map(group => (
           <Box key={group} sx={{ mb: 2 }}>
             <Typography sx={{ px: 1.5, mb: .8, color: 'rgba(255,255,255,.42)', fontSize: '.65rem', fontWeight: 800, letterSpacing: '.12em' }}>{group}</Typography>
@@ -467,35 +473,41 @@ export default function TenantWorkspace({ memberships, userName, userPicture, ap
 
   return <Box sx={{ minHeight: '100vh', bgcolor: '#F5F7F4', color: '#17372B' }}>
     <AppBar position="sticky" elevation={0} sx={{ zIndex: theme => theme.zIndex.drawer + 1, bgcolor: '#FFFFFF', color: '#17372B', borderBottom: '1px solid #E7EBE6' }}>
-      <Toolbar sx={{ minHeight: '72px !important', px: { xs: 1.5, md: 3 }, gap: 1.5 }}>
-        {isMobile && <IconButton aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><MenuRounded /></IconButton>}
+      <Toolbar sx={{ minHeight: '72px !important', px: { xs: 1, md: 3 }, gap: { xs: 0.5, md: 1.5 }, flexWrap: 'nowrap' }}>
+        {isMobile && <IconButton size="small" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><MenuRounded /></IconButton>}
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography fontWeight={850} sx={{ fontSize: '.9rem' }}>{membership?.displayName ?? 'Company workspace'}</Typography>
-          <Typography variant="caption" color="text.secondary">{membership?.slug ?? 'JengaFlow'} · {membership?.role ?? 'Member'}</Typography>
+          <Typography noWrap fontWeight={850} sx={{ fontSize: '.9rem' }}>{membership?.displayName ?? 'Company workspace'}</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', md: 'block' } }}>{membership?.slug ?? 'JengaFlow'} · {membership?.role ?? 'Member'}</Typography>
         </Box>
-        <Button size="small" variant="outlined" startIcon={<CloudSyncRounded />} onClick={() => void syncOfflineQueue(true)} disabled={syncing || !tenantId} sx={{ whiteSpace: 'nowrap' }}>{syncing ? 'Syncing…' : queueCounts.pending + queueCounts.failed + queueCounts.syncing ? `Sync (${queueCounts.pending + queueCounts.failed + queueCounts.syncing})` : 'Sync offline'}</Button>
-        {queueCounts.conflict + queueCounts.rejected + queueCounts.failed > 0 && <Button size="small" color="warning" variant="contained" onClick={() => setReviewOpen(true)} sx={{ whiteSpace: 'nowrap' }}>Review ({queueCounts.conflict + queueCounts.rejected + queueCounts.failed})</Button>}
+        <Button size="small" aria-label={syncing ? 'Syncing offline data' : 'Sync offline data'} variant="outlined" startIcon={<CloudSyncRounded />} onClick={() => void syncOfflineQueue(true)} disabled={syncing || !tenantId}
+          sx={{ whiteSpace: 'nowrap', minWidth: { xs: 40, md: 'auto' }, px: { xs: 1, md: 2 }, '& .MuiButton-startIcon': { mr: { xs: 0, md: 1 } } }}>
+          <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>{syncing ? 'Syncing…' : queueCounts.pending + queueCounts.failed + queueCounts.syncing ? `Sync (${queueCounts.pending + queueCounts.failed + queueCounts.syncing})` : 'Sync offline'}</Box>
+        </Button>
+        {queueCounts.conflict + queueCounts.rejected + queueCounts.failed > 0 && <Button size="small" aria-label={`Review ${queueCounts.conflict + queueCounts.rejected + queueCounts.failed} offline changes`} color="warning" variant="contained" startIcon={<AssignmentTurnedInRounded />} onClick={() => setReviewOpen(true)}
+          sx={{ whiteSpace: 'nowrap', minWidth: { xs: 40, md: 'auto' }, px: { xs: 1, md: 2 }, '& .MuiButton-startIcon': { mr: { xs: 0, md: 1 } } }}>
+          <Box component="span" sx={{ display: { xs: 'none', md: 'inline' } }}>Review ({queueCounts.conflict + queueCounts.rejected + queueCounts.failed})</Box>
+        </Button>}
         <TextField select size="small" value={tenantId} onChange={event => { setTenantId(event.target.value); setSection('overview'); }}
-          sx={{ minWidth: { xs: 128, sm: 190 }, maxWidth: 220, '& .MuiOutlinedInput-root': { bgcolor: '#F7F8F6', borderRadius: 2 } }}
+          sx={{ display: { xs: memberships.length > 1 ? 'block' : 'none', md: 'block' }, minWidth: { xs: 104, md: 190 }, maxWidth: { xs: 128, md: 220 }, '& .MuiOutlinedInput-root': { bgcolor: '#F7F8F6', borderRadius: 2 } }}
           aria-label="Company workspace">
           {memberships.map(item => <MenuItem key={item.tenantId} value={item.tenantId}>{item.displayName}</MenuItem>)}
         </TextField>
         <Tooltip title={userName ?? 'Account'}>
-          <Avatar src={userPicture} alt={userName ?? 'User'} sx={{ width: 36, height: 36, bgcolor: '#E7F0E9', color: '#2F6B4F', fontWeight: 800 }}>
+          <Avatar src={userPicture} alt={userName ?? 'User'} sx={{ display: { xs: 'none', md: 'flex' }, width: 36, height: 36, bgcolor: '#E7F0E9', color: '#2F6B4F', fontWeight: 800 }}>
             {userName?.charAt(0) ?? 'U'}
           </Avatar>
         </Tooltip>
         <Tooltip title="Sign out">
-          <IconButton aria-label="Sign out" onClick={onSignOut} sx={{ color: 'text.secondary' }}><LogoutRounded /></IconButton>
+          <IconButton size={isMobile ? 'small' : 'medium'} aria-label="Sign out" onClick={onSignOut} sx={{ color: 'text.secondary' }}><LogoutRounded /></IconButton>
         </Tooltip>
       </Toolbar>
     </AppBar>
     <Drawer variant="permanent" open={!isMobile} sx={{
       display: { xs: 'none', lg: 'block' }, width: 252, flexShrink: 0,
-      '& .MuiDrawer-paper': { width: 252, boxSizing: 'border-box', top: 72, height: 'calc(100% - 72px)', border: 0, boxShadow: '5px 0 24px rgba(23,55,43,.04)' },
+      '& .MuiDrawer-paper': { width: 252, boxSizing: 'border-box', top: 72, height: 'calc(100vh - 72px)', bgcolor: '#17372B', border: 0, boxShadow: '5px 0 24px rgba(23,55,43,.04)' },
     }}>{navContent}</Drawer>
     <Drawer variant="temporary" open={mobileNavOpen} onClose={() => setMobileNavOpen(false)}
-      ModalProps={{ keepMounted: true }} sx={{ display: { xs: 'block', lg: 'none' }, '& .MuiDrawer-paper': { width: 280, border: 0 } }}>
+      ModalProps={{ keepMounted: true }} sx={{ display: { xs: 'block', lg: 'none' }, '& .MuiDrawer-paper': { width: 'min(280px, calc(100vw - 24px))', boxSizing: 'border-box', bgcolor: '#17372B', border: 0 } }}>
       {navContent}
     </Drawer>
 
