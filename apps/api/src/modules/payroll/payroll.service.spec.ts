@@ -41,4 +41,12 @@ describe('PayrollService payment batch safeguards', () => {
       .resolves.toMatchObject({ id: 'new-batch', status: 'draft' });
     expect(query).toHaveBeenCalledTimes(7);
   });
+  it('does not allow a reversed payment item to be confirmed again', async () => {
+    const query = jest.fn().mockResolvedValueOnce([{ id: 'item-1', status: 'reversed', batch_status: 'partially_paid' }]);
+    const { service } = serviceWithQuery(query);
+    await expect(service.confirmPayment(tenantId, actorId, 'batch-1', 'item-1', 'PROVIDER-REF'))
+      .rejects.toThrow('Only pending, processing or failed payment items can be confirmed; reversed and paid items are terminal.');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
 });
