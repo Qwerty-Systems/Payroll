@@ -49,4 +49,17 @@ describe('Payroll post-finalization controls', () => {
     expect(insert).toBeDefined();
     expect(insert?.[1]).toEqual([tenantId, '123e4567-e89b-42d3-a456-426614174003', actorId, 'FULL_PAYROLL_REVERSAL', 'Reversal of finalized payroll run', -1000, -250, -100, -750]);
   });
+  it('normalizes signed correction balances into a non-negative balanced journal', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce([{ id: runId, status: 'finalized', totals: {}, period_code: '2026-11' }])
+      .mockResolvedValueOnce([{ calculation_snapshot: { earnings: { grossPay: 1000 }, statutory: { employeeStatutoryDeductions: 250, employerContributions: 100 }, netPay: 750 } }])
+      .mockResolvedValueOnce([{ earnings_delta: '-100', employee_deductions_delta: '-20', employer_contributions_delta: '-10', net_pay_delta: '-80' }]);
+    const service = serviceFor(query);
+    const result = await service.generalLedgerExport(tenantId, runId);
+    expect(result.totals).toEqual({ debit: 990, credit: 990 });
+    expect(result.journal.every(line => line.debit >= 0 && line.credit >= 0)).toBe(true);
+    expect(result.journal.find(line => line.account === 'Payroll expense')).toEqual({ account: 'Payroll expense', debit: 900, credit: 0 });
+    expect(result.journal.find(line => line.account === 'Net salaries payable')).toEqual({ account: 'Net salaries payable', debit: 0, credit: 670 });
+  });
+
 });

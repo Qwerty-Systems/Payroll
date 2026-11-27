@@ -5,7 +5,7 @@ import { TENANT_PERMISSIONS_KEY } from './tenant-access.decorator';
 
 type RequestWithIdentity = { headers: Record<string, string | string[] | undefined>; user?: { sub?: string }; tenant?: { id: string; membershipId: string; role: string; userId: string } };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ROLE_PERMISSIONS: Record<string, string[]> = {
+export const ROLE_PERMISSIONS: Record<string, string[]> = {
   owner: ['*'],
   admin: ['company.read','company.manage','users.read','users.manage','projects.read','projects.manage','workers.read','workers.manage','workers.documents.read','workers.documents.manage','attendance.read','attendance.capture','attendance.approve','payroll.read','payroll.calculate','payroll.approve','payroll.finalize','payslips.read','reports.read','audit.read','compliance.read','compliance.manage','compliance.submit','compliance.review'],
   hr_manager: ['company.read','users.read','workers.read','workers.manage','workers.documents.read','workers.documents.manage','attendance.read','attendance.approve','payroll.read','payroll.calculate','payslips.read','reports.read','audit.read','compliance.read','compliance.manage','compliance.submit'],

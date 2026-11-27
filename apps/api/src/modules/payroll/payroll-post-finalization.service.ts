@@ -59,6 +59,12 @@ export class PayrollPostFinalizationService {
       if (type === 'adjustment' && correctionLines.some(x => !x.workerId || !x.code?.trim() || !x.description?.trim())) {
         throw new BadRequestException('Each adjustment line requires a worker, code and description.');
       }
+      if (type === 'adjustment') {
+        const runWorkers = await m.query('SELECT worker_id FROM payroll_run_items WHERE tenant_id=$1 AND payroll_run_id=$2', [tenantId,runId]);
+        const includedWorkers = new Set(runWorkers.map((item:any) => String(item.worker_id)));
+        const outsideRun = correctionLines.find(line => !includedWorkers.has(String(line.workerId)));
+        if (outsideRun) throw new BadRequestException('Correction lines can only reference workers included in the original finalized payroll run.');
+      }
       const next = await m.query('SELECT COALESCE(MAX(correction_number),0)+1 AS n FROM payroll_corrections WHERE tenant_id=$1 AND original_run_id=$2', [tenantId,runId]);
       const created = await m.query(`
         INSERT INTO payroll_corrections
@@ -167,6 +173,21 @@ export class PayrollPostFinalizationService {
           current.total+=amount; totals.set(code,current);
         }
       }
+      // Applied post-finalization corrections must be included in remittance totals.
+      const correctionLines = await m.query(`
+        SELECT i.code,i.employee_deduction_delta,i.employer_contribution_delta
+        FROM payroll_correction_items i
+        JOIN payroll_corrections c ON c.tenant_id=i.tenant_id AND c.id=i.correction_id
+        WHERE i.tenant_id=$1 AND c.original_run_id=$2 AND c.status='applied'
+      `,[tenantId,runId]);
+      for (const line of correctionLines) {
+        const code=String(line.code??'CORRECTION');
+        const current=totals.get(code)??{employee:0,employer:0,total:0};
+        const employee=Number(line.employee_deduction_delta??0);
+        const employer=Number(line.employer_contribution_delta??0);
+        current.employee+=employee; current.employer+=employer; current.total+=employee+employer;
+        totals.set(code,current);
+      }
       return {periodCode:runs[0].period_code,startDate:runs[0].start_date,endDate:runs[0].end_date,currency:'KES',
         items:[...totals.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([code,v])=>({code,employee:v.employee,employer:v.employer,total:v.total}))};
     });
@@ -190,12 +211,33 @@ export class PayrollPostFinalizationService {
         employerContributions+=Number(s.statutory?.employerContributions??0);
         netPay+=Number(s.netPay??0);
       }
+      // Applied corrections alter the accounting totals without mutating finalized run snapshots.
+      const corrections = await m.query(`
+        SELECT COALESCE(sum(i.earnings_delta),0)::numeric AS earnings_delta,
+          COALESCE(sum(i.employee_deduction_delta),0)::numeric AS employee_deductions_delta,
+          COALESCE(sum(i.employer_contribution_delta),0)::numeric AS employer_contributions_delta,
+          COALESCE(sum(i.net_pay_delta),0)::numeric AS net_pay_delta
+        FROM payroll_correction_items i
+        JOIN payroll_corrections c ON c.tenant_id=i.tenant_id AND c.id=i.correction_id
+        WHERE i.tenant_id=$1 AND c.original_run_id=$2 AND c.status='applied'
+      `,[tenantId,runId]);
+      if (corrections.length) {
+        gross+=Number(corrections[0].earnings_delta??0);
+        employeeDeductions+=Number(corrections[0].employee_deductions_delta??0);
+        employerContributions+=Number(corrections[0].employer_contributions_delta??0);
+        netPay+=Number(corrections[0].net_pay_delta??0);
+      }
+      // Signed post-finalization corrections can turn a payroll account balance negative.
+      // Normalize each signed account balance to the correct debit/credit side so
+      // reversal and adjustment journals never emit negative accounting amounts.
+      const debitBalance=(account:string,amount:number)=>({account,debit:Math.max(0,amount),credit:Math.max(0,-amount)});
+      const creditBalance=(account:string,amount:number)=>({account,debit:Math.max(0,-amount),credit:Math.max(0,amount)});
       const journal=[
-        {account:'Payroll expense',debit:gross,credit:0},
-        {account:'Employer statutory contributions expense',debit:Math.max(0,employerContributions),credit:Math.max(0,-employerContributions)},
-        {account:'Net salaries payable',debit:Math.max(0,-netPay),credit:Math.max(0,netPay)},
-        {account:'Employee statutory and other deductions payable',debit:Math.max(0,-employeeDeductions),credit:Math.max(0,employeeDeductions)},
-        {account:'Employer statutory contributions payable',debit:Math.max(0,-employerContributions),credit:Math.max(0,employerContributions)},
+        debitBalance('Payroll expense',gross),
+        debitBalance('Employer statutory contributions expense',employerContributions),
+        creditBalance('Net salaries payable',netPay),
+        creditBalance('Employee statutory and other deductions payable',employeeDeductions),
+        creditBalance('Employer statutory contributions payable',employerContributions),
       ].filter(x=>x.debit!==0||x.credit!==0);
       return {periodCode:run[0].period_code,currency:'KES',journal,totals:{debit:journal.reduce((n,x)=>n+x.debit,0),credit:journal.reduce((n,x)=>n+x.credit,0)}};
     });

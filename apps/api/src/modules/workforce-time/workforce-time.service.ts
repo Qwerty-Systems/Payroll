@@ -374,8 +374,15 @@ export class WorkforceTimeService {
   createTimesheet(tenantId: string, actorId: string, dto: CreateTimesheetDto) {
     if(dto.periodEnd<dto.periodStart) throw new BadRequestException('Timesheet period end cannot precede its start date.');
     return this.tenantDb.run(tenantId,async m=>{
-      const worker=await m.query("SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active'",[tenantId,dto.workerId]);
+      const worker=await m.query("SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active' FOR UPDATE",[tenantId,dto.workerId]);
       if(!worker.length) throw new NotFoundException('Active worker not found.');
+      const overlapping=await m.query(`
+        SELECT id FROM timesheets WHERE tenant_id=$1 AND worker_id=$2
+          AND status IN ('draft','submitted','approved')
+          AND daterange(period_start,period_end,'[]') && daterange($3::date,$4::date,'[]')
+        LIMIT 1
+      `,[tenantId,dto.workerId,dto.periodStart,dto.periodEnd]);
+      if(overlapping.length) throw new ConflictException('A timesheet already exists for this worker with an overlapping period. Edit the existing timesheet or choose a non-overlapping date range.');
       const rows=await m.query(`
         INSERT INTO timesheets(tenant_id,worker_id,period_start,period_end,notes)
         VALUES($1,$2,$3,$4,$5)
@@ -396,6 +403,15 @@ export class WorkforceTimeService {
       const periodStart=dto.periodStart??String(before.period_start).slice(0,10);
       const periodEnd=dto.periodEnd??String(before.period_end).slice(0,10);
       if (periodEnd<periodStart) throw new BadRequestException('Timesheet period end cannot precede its start date.');
+      const worker=await m.query('SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 FOR UPDATE',[tenantId,before.worker_id]);
+      if(!worker.length) throw new NotFoundException('Worker not found.');
+      const overlapping=await m.query(`
+        SELECT id FROM timesheets WHERE tenant_id=$1 AND worker_id=$2 AND id<>$3
+          AND status IN ('draft','submitted','approved')
+          AND daterange(period_start,period_end,'[]') && daterange($4::date,$5::date,'[]')
+        LIMIT 1
+      `,[tenantId,before.worker_id,id,periodStart,periodEnd]);
+      if(overlapping.length) throw new ConflictException('The updated timesheet period overlaps another timesheet for this worker.');
       const outOfRange=await m.query('SELECT id FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2 AND (work_date<$3 OR work_date>$4) LIMIT 1',[tenantId,id,periodStart,periodEnd]);
       if(outOfRange.length) throw new ConflictException('The new period excludes existing timesheet lines. Move or remove those lines first.');
       const updated=await m.query(`
@@ -415,6 +431,8 @@ export class WorkforceTimeService {
       if(!['draft','rejected'].includes(headers[0].status)) throw new ConflictException('Only draft or rejected timesheets can be edited.');
       const from=String(headers[0].period_start).slice(0,10),to=String(headers[0].period_end).slice(0,10);
       if(dto.workDate<from || dto.workDate>to) throw new BadRequestException('Work date is outside the timesheet period.');
+      const daily=await m.query(`SELECT COALESCE(SUM(minutes_worked+overtime_minutes),0)::int AS total FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2 AND work_date=$3`,[tenantId,timesheetId,dto.workDate]);
+      if(Number(daily[0].total)+dto.minutesWorked+(dto.overtimeMinutes??0)>1440) throw new BadRequestException('Daily timesheet total cannot exceed 1440 minutes.');
       const rows=await m.query(`
         INSERT INTO timesheet_lines(tenant_id,timesheet_id,work_date,project_id,site_id,minutes_worked,overtime_minutes,units_completed,description)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -437,6 +455,10 @@ export class WorkforceTimeService {
       const before=found[0],workDate=dto.workDate??String(before.work_date).slice(0,10);
       const from=String(headers[0].period_start).slice(0,10),to=String(headers[0].period_end).slice(0,10);
       if(workDate<from || workDate>to) throw new BadRequestException('Work date is outside the timesheet period.');
+      const daily=await m.query(`SELECT COALESCE(SUM(minutes_worked+overtime_minutes),0)::int AS total FROM timesheet_lines WHERE tenant_id=$1 AND timesheet_id=$2 AND work_date=$3 AND id<>$4`,[tenantId,timesheetId,workDate,lineId]);
+      const nextMinutes=dto.minutesWorked===undefined?Number(before.minutes_worked):dto.minutesWorked;
+      const nextOvertime=dto.overtimeMinutes===undefined?Number(before.overtime_minutes??0):dto.overtimeMinutes;
+      if(Number(daily[0].total)+nextMinutes+nextOvertime>1440) throw new BadRequestException('Daily timesheet total cannot exceed 1440 minutes.');
       const rows=await m.query(`
         UPDATE timesheet_lines SET work_date=$4,project_id=$5,site_id=$6,minutes_worked=$7,
           overtime_minutes=$8,units_completed=$9,description=$10,updated_at=now()
@@ -517,7 +539,9 @@ export class WorkforceTimeService {
 
   createShiftAssignment(tenantId: string, actorId: string, dto: CreateShiftAssignmentDto) {
     return this.tenantDb.run(tenantId,async m=>{
-      const worker=await m.query(`SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active'`,[tenantId,dto.workerId]);
+      // Lock the worker row to serialize assignment creation for this worker.
+      // The partial unique index is the final guard if requests race.
+      const worker=await m.query(`SELECT id FROM workers WHERE tenant_id=$1 AND id=$2 AND status='active' FOR UPDATE`,[tenantId,dto.workerId]);
       if(!worker.length) throw new NotFoundException('Active worker not found.');
       const shift=await m.query(`SELECT id FROM work_shifts WHERE tenant_id=$1 AND id=$2 AND status='active'`,[tenantId,dto.shiftId]);
       if(!shift.length) throw new NotFoundException('Active shift not found.');
@@ -613,7 +637,7 @@ export class WorkforceTimeService {
         if(clockIn && clockOut && Date.parse(String(clockOut))<Date.parse(String(clockIn)))
           throw new BadRequestException('Clock-out cannot precede clock-in.');
         if('minutesWorked' in p && p.minutesWorked!==null && (!Number.isInteger(p.minutesWorked) || Number(p.minutesWorked)<0 || Number(p.minutesWorked)>1440))
-          throw new BadRequestException('minutesWorked must be an integer between 0 and 1440, or null.');
+          throw new BadRequestException('minutesWorked must be a non-negative integer or null.');
         const updates:string[]=[],values:unknown[]=[tenantId,request.attendance_id];
         const mapping:{key:string;column:string}[]=[{key:'clockIn',column:'clock_in'},{key:'clockOut',column:'clock_out'},{key:'minutesWorked',column:'minutes_worked'}];
         for(const item of mapping) {
